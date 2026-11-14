@@ -1,40 +1,37 @@
 {
-  "_note": "PLACEHOLDER measurements. Replace with the real rig. Units: mm and degrees. Table frame: origin at the front-left corner of the table top's footprint, x along the width (to the right), y along the depth (away from the front edge), z up from the floor. Angles are counter-clockwise seen from above, 0 = +x.",
+  "_note": "PLACEHOLDER measurements. Replace with the real rig. Units: mm and degrees. Table frame: origin at the front-left corner of the table top's footprint, x along the width (to the right), y along the depth (away from the front edge), z up from the floor. Angles are counter-clockwise seen from above, 0 = +x. Zones and bags give the centre (x, y) and size of a rectangle.",
 
   "table": {
     "width": 240,
     "depth": 170,
-    "height": 40,
-    "goal_edge": "front",
-    "_goal_edge_values": "front (y = 0) | back (y = depth) | left (x = 0) | right (x = width)"
+    "height": 40
   },
 
   "arm": {
-    "pivot_x": 205,
-    "pivot_y": 145,
-    "length": 95,
+    "pivot_x": 120,
+    "pivot_y": 150,
+    "length": 90,
     "height": 18,
     "rest_angle": 0,
-    "heading_at_zero": 180,
-    "direction": 1,
-    "_angles": "arm.angle is the servo angle. Heading of the stick in the table frame = heading_at_zero + direction * angle. height is the stick's height above the table top."
+    "heading_at_zero": 0,
+    "direction": -1,
+    "_angles": "arm.angle is the servo angle: 0 points right, 180 points left, sweeping across the front. Heading of the stick in the table frame = heading_at_zero + direction * angle. height is the stick's height above the table top."
   },
 
-  "box": {
-    "width": 50,
-    "depth": 35,
-    "height": 20,
-    "mass_g": 25,
-    "colour": "red",
-    "default_pose": {"x": 110, "y": 85, "theta": 0}
+  "zones": {
+    "pick": {"x": 120, "y": 105, "width": 80, "depth": 50},
+    "scan": {"x": 120, "y": 28, "width": 80, "depth": 40}
   },
 
-  "obstacle": {
-    "enabled": true,
-    "width": 30,
-    "depth": 30,
-    "height": 25,
-    "colour": "blue",
-    "pose": {"x": 45, "y": 120, "theta": 20}
-  }
+  "bags": {
+    "left":  {"x": -35, "y": 100, "width": 60, "depth": 90, "height": 32},
+    "right": {"x": 275, "y": 100, "width": 60, "depth": 90, "height": 32}
+  },
+
+  "colour_to_bag": {"red": "left", "blue": "right"},
+
+  "parcels": [
+    {"id": "p1", "width": 50, "depth": 35, "height": 20, "mass_g": 25},
+    {"id": "p2", "width": 45, "depth": 35, "height": 22, "mass_g": 22}
+  ]
 }

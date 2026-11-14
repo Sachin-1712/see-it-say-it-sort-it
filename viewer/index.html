@@ -5,58 +5,103 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Dry Run Viewer</title>
 <style>
-  :root { --panel: rgba(18,20,24,.82); --line: rgba(255,255,255,.08); --text: #c9ccd1; --dim: #7d828b;
-          --ok: #3ddc84; --warn: #ff9f43; }
-  html, body { margin: 0; height: 100%; background: #1b1d21; overflow: hidden; color: var(--text);
+  :root {
+    --bg: #d9dbde; --charcoal: #232529; --charcoal-2: #2c2f34; --line: #3a3e45;
+    --text: #e8e9eb; --dim: #9ba0a8; --yellow: #f5c400; --yellow-ink: #1d1d1d;
+    --green: #3ddc84; --red: #e5484d;
+  }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); color: var(--text);
                font: 13px/1.4 ui-sans-serif, system-ui, -apple-system, sans-serif; }
-  .card { position: fixed; background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
-          backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); font-variant-numeric: tabular-nums; }
-  button { font: inherit; color: #e8eaed; background: #2c3036; border: 1px solid #3a3f46; border-radius: 5px;
-           padding: 4px 10px; cursor: pointer; }
-  button:hover:not(:disabled) { background: #363b42; }
+  canvas { display: block; }
+  .panel { background: var(--charcoal); border: 1px solid var(--line); border-radius: 8px;
+           box-shadow: 0 6px 20px rgba(0,0,0,.18); font-variant-numeric: tabular-nums; }
+  button { font: inherit; color: var(--text); background: var(--charcoal-2); border: 1px solid var(--line);
+           border-radius: 5px; padding: 4px 10px; cursor: pointer; }
+  button:hover:not(:disabled) { border-color: var(--yellow); }
   button:disabled { opacity: .4; cursor: default; }
-  button.on { background: #5a3d1a; border-color: var(--warn); color: #ffd9b0; }
+  button:focus-visible { outline: 2px solid var(--yellow); outline-offset: 1px; }
 
   /* top bar */
-  #top { top: 12px; left: 12px; display: flex; align-items: center; gap: 14px; padding: 8px 12px; }
+  #top { position: fixed; top: 12px; left: 12px; display: flex; align-items: center; gap: 12px; padding: 7px 10px; }
+  #phase { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+           padding: 2px 8px; border: 1px solid var(--yellow); color: var(--yellow); border-radius: 4px; }
   #top .label { color: var(--dim); }
-  #phase { font-weight: 600; color: #fff; text-transform: uppercase; letter-spacing: .04em; font-size: 12px;
-           padding: 2px 8px; border-radius: 4px; background: #33373e; }
-  #phase.searching { background: #26405f; color: #b9d6ff; }
-  #phase.executing { background: #5a3d1a; color: #ffd9b0; }
-  #phase.done { background: #1f4d34; color: #b6f2cf; }
-  #best { color: #fff; font-weight: 600; }
-  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #c0392b; }
-  .dot.on { background: #2ecc71; }
+  #best { font-weight: 600; }
+  #silence.on { background: var(--yellow); border-color: var(--yellow); color: var(--yellow-ink); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: #5a5e66; }
+  .dot.on { background: var(--yellow); }
+  #orbit { display: none; font-size: 11px; color: var(--yellow); }
+  #orbit.on { display: inline; }
 
-  /* agent panel */
-  #agents { top: 12px; right: 12px; width: 300px; padding: 6px 0; }
-  #agents h2 { margin: 2px 12px 6px; font-size: 11px; font-weight: 600; color: var(--dim);
-               text-transform: uppercase; letter-spacing: .06em; }
-  .row { display: grid; grid-template-columns: 12px 22px 66px 40px 1fr 44px; align-items: center; gap: 8px;
-         padding: 5px 12px; border-top: 1px solid var(--line); }
-  .row.dead { opacity: .35; filter: grayscale(1); }
+  /* right column */
+  #side { position: fixed; top: 12px; right: 12px; width: 340px; max-height: calc(100vh - 24px);
+          display: flex; flex-direction: column; gap: 10px; }
+  #main { display: flex; flex-direction: column; min-height: 0; flex: 0 1 auto; overflow: hidden; }
+  .tabs { display: flex; align-items: center; gap: 4px; padding: 6px; border-bottom: 1px solid var(--line); }
+  .tab { background: transparent; border-color: transparent; color: var(--dim); font-weight: 600; }
+  .tab[aria-selected="true"] { background: var(--yellow); border-color: var(--yellow); color: var(--yellow-ink); }
+  .tabs .spacer { flex: 1; }
+  #min { width: 28px; padding: 2px 0; }
+  #main.min .body { display: none; }
+  #main.min .tabs { border-bottom: none; }
+  .body { overflow-y: auto; min-height: 0; }
+  .view[hidden] { display: none; }
+
+  .row { display: grid; grid-template-columns: 10px 22px 72px 44px 1fr 46px; align-items: center; gap: 8px;
+         padding: 6px 12px; border-top: 1px solid var(--line); }
+  .row:first-child { border-top: none; }
   .row .sw { width: 10px; height: 10px; border-radius: 50%; }
-  .row .id { color: #fff; }
-  .row .role { color: var(--dim); font-size: 12px; }
+  .row .id { font-weight: 600; }
+  .row .role { color: var(--dim); font-size: 12px; white-space: nowrap; }
   .row .tries { text-align: right; font-size: 12px; }
-  .bar { position: relative; height: 6px; background: #2c3036; border-radius: 3px; overflow: hidden; }
+  .row.dead > :not(button):not(.role):not(.sw) { opacity: .35; }
+  .row.dead .role { color: var(--red); }
+  .row.dead .sw { background: var(--red) !important; }
+  .bar { position: relative; height: 6px; background: #3a3e45; border-radius: 3px; overflow: hidden; }
   .bar i { position: absolute; inset: 0 auto 0 0; border-radius: 3px; }
   .score { display: flex; flex-direction: column; gap: 2px; font-size: 11px; color: var(--dim); }
-  .mute { width: 13px; height: 13px; vertical-align: -2px; margin-left: 4px; color: var(--warn); }
-  .row button { padding: 2px 0; font-size: 12px; }
-  @media (max-width: 900px) { #agents { top: 64px; } }
-  @media (max-width: 480px) { #top { right: 12px; flex-wrap: wrap; } #agents { left: 12px; width: auto; top: 100px; } }
+  .mute { width: 13px; height: 13px; vertical-align: -2px; margin-left: 4px; color: var(--yellow); }
+  .kill { padding: 2px 0; font-size: 12px; color: var(--red); border-color: rgba(229,72,77,.5); }
+  .kill:hover:not(:disabled) { border-color: var(--red); background: rgba(229,72,77,.12); }
+  .row.dead .kill { visibility: hidden; }
 
-  /* result */
-  #result { left: 50%; bottom: 16px; transform: translateX(-50%); padding: 10px 16px; display: none; }
-  #result.show { display: block; }
-  #result table { border-collapse: collapse; }
-  #result td, #result th { padding: 2px 10px; text-align: right; }
-  #result th { color: var(--dim); font-weight: 500; }
-  #result td:first-child { text-align: left; }
-  #result .err { margin-top: 6px; text-align: center; font-size: 15px; color: #fff; }
+  .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--line); }
+  .stat { background: var(--charcoal); padding: 10px 12px; }
+  .stat .k { color: var(--dim); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
+  .stat .v { font-size: 22px; font-weight: 600; }
+  .stat .s { color: var(--dim); font-size: 11px; }
+  .outcome { padding: 10px 12px; border-top: 1px solid var(--line); }
+  .outcome .empty { color: var(--dim); }
+  .outcome table { width: 100%; border-collapse: collapse; margin: 6px 0; }
+  .outcome th, .outcome td { padding: 2px 4px; text-align: right; }
+  .outcome th { color: var(--dim); font-weight: 500; font-size: 11px; }
+  .outcome td:first-child { text-align: left; }
+  .landed { font-weight: 600; }
+  .landed.ok { color: var(--green); }
+  .err { font-size: 15px; }
   .key { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 6px; }
+
+  #items h3 { margin: 0; padding: 8px 12px; font-size: 11px; font-weight: 600; color: var(--dim);
+              text-transform: uppercase; letter-spacing: .06em; border-bottom: 1px solid var(--line); }
+  .item { display: grid; grid-template-columns: 12px 24px 1fr auto; gap: 8px; align-items: center; padding: 6px 12px;
+          border-top: 1px solid var(--line); }
+  .item:nth-child(2) { border-top: none; }
+  .item .sw { width: 12px; height: 12px; border-radius: 3px; }
+  .item .pos { color: var(--dim); font-size: 12px; }
+  .item .chip { font-size: 11px; padding: 1px 7px; border-radius: 10px; border: 1px solid var(--line); color: var(--dim); }
+  .item .chip.ready { border-color: var(--yellow); color: var(--yellow); }
+  .item .chip.sorted { border-color: var(--green); color: var(--green); }
+
+  #send { flex: none; background: var(--yellow); border: none; color: var(--yellow-ink); border-radius: 8px;
+          padding: 14px; font-size: 17px; font-weight: 700; letter-spacing: .01em; }
+  #send small { display: block; font-size: 11px; font-weight: 500; opacity: .75; }
+  #send:hover:not(:disabled) { filter: brightness(1.06); }
+  #send:disabled { background: #4a4d52; color: #a3a7ae; opacity: 1; }
+
+  @media (max-width: 760px) {
+    #side { top: auto; bottom: 12px; left: 12px; width: auto; max-height: 48vh; }
+    #top { right: 12px; flex-wrap: wrap; }
+  }
 </style>
 <script type="importmap">
 {
@@ -68,28 +113,49 @@
 </script>
 </head>
 <body>
-<div id="top" class="card">
-  <span class="dot" id="dot" title="observer connection"></span>
-  <span id="phase">–</span>
+<div id="top" class="panel">
+  <span class="dot" id="dot" title="observer offline"></span>
+  <span id="phase">offline</span>
   <span><span class="label">best</span> <span id="best">–</span></span>
   <button id="silence" disabled>Silence all</button>
   <button id="replan" disabled>Replan</button>
+  <span id="orbit">orbit on · O</span>
 </div>
-<div id="agents" class="card"><h2>Agents</h2><div id="rows"></div></div>
-<div id="result" class="card">
-  <table>
-    <tr><th></th><th>x mm</th><th>y mm</th><th>θ°</th></tr>
-    <tr><td><span class="key" style="background:#3ddc84"></span>predicted</td><td id="px"></td><td id="py"></td><td id="pt"></td></tr>
-    <tr><td><span class="key" style="background:#ff9f43"></span>actual</td><td id="ax"></td><td id="ay"></td><td id="at"></td></tr>
-  </table>
-  <div class="err">error <b id="dist"></b> mm</div>
+
+<div id="side">
+  <section id="main" class="panel">
+    <div class="tabs" role="tablist">
+      <button class="tab" role="tab" id="tab-agents" aria-selected="true" aria-controls="view-agents">Agents</button>
+      <button class="tab" role="tab" id="tab-outcomes" aria-selected="false" aria-controls="view-outcomes">Outcomes</button>
+      <span class="spacer"></span>
+      <button id="min" title="Minimise" aria-label="Minimise panel">–</button>
+    </div>
+    <div class="body">
+      <div class="view" id="view-agents" role="tabpanel"><div id="rows"></div></div>
+      <div class="view" id="view-outcomes" role="tabpanel" hidden>
+        <div class="stats">
+          <div class="stat"><div class="k">Attempts tested</div><div class="v" id="attempts">0</div>
+            <div class="s">all agents, this parcel</div></div>
+          <div class="stat"><div class="k">Successes found</div><div class="v" id="successes">0</div>
+            <div class="s" id="successes-of">of 0 attempts drawn</div></div>
+        </div>
+        <div class="outcome" id="outcome"><div class="empty">Predicted against actual appears after a real push.</div></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="items" class="panel"><h3>Items</h3></section>
+
+  <button id="send" disabled>Send to Arduino<small id="send-sub">needs a push scoring 0.80+</small></button>
 </div>
+
 <script type="module">
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 
 const WS_URL = "ws://localhost:8765";
 const DEG = Math.PI / 180;
+const EXECUTE_MIN = 0.8;
 
 // ---------------------------------------------------------------------------
 // The ONLY place the simulation's z-up table frame becomes three.js y-up.
@@ -101,42 +167,23 @@ function toThree({ x = 0, y = 0, z = 0, theta = 0 }) {
 // ---------------------------------------------------------------------------
 
 const rig = await (await fetch("../config/rig.json")).json();
-const { table, arm, box } = rig;
+const { table, arm } = rig;
+const zones = rig.zones ?? {};
+const bags = rig.bags ?? {};
+const parcelSize = id => rig.parcels?.find(p => p.id === id) ?? rig.parcels?.[0] ?? { width: 50, depth: 35, height: 20 };
 
-// ---- renderer, scene, camera ---------------------------------------------
+// ---- renderer, scene -------------------------------------------------------
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.setSize(innerWidth, innerHeight);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-document.body.appendChild(renderer.domElement);
+document.body.prepend(renderer.domElement);
 
+const BG = 0xd9dbde;
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x1b1d21);
-
-const centre = toThree({ x: table.width / 2, y: table.depth / 2, z: table.height }).pos;
-const span = Math.max(table.width, table.depth);
-const camera = new THREE.PerspectiveCamera(40, innerWidth / innerHeight, 1, span * 40);
-camera.position.copy(centre).add(new THREE.Vector3(0, span * 1.1, span * 1.4));
-const controls = new OrbitControls(camera, renderer.domElement);
-controls.target.copy(centre);
-controls.enableDamping = true;
-controls.maxPolarAngle = Math.PI * 0.49;
-
-// ---- soft lighting ---------------------------------------------------------
-scene.add(new THREE.HemisphereLight(0xdfe6f0, 0x2a2724, 1.1));
-const sun = new THREE.DirectionalLight(0xffffff, 1.6);
-sun.position.copy(centre).add(new THREE.Vector3(-span * 0.8, span * 2, span));
-sun.target.position.copy(centre);
-sun.castShadow = true;
-sun.shadow.mapSize.set(2048, 2048);
-sun.shadow.radius = 6;
-sun.shadow.bias = -0.0005;
-const sc = sun.shadow.camera;
-sc.left = sc.bottom = -span * 1.2; sc.right = sc.top = span * 1.2;
-sc.near = 1; sc.far = span * 6;
-scene.add(sun, sun.target);
+scene.background = new THREE.Color(BG);
 
 // ---- helpers ---------------------------------------------------------------
 const mat = (color, rough = 0.8) => new THREE.MeshStandardMaterial({ color, roughness: rough });
@@ -151,49 +198,132 @@ function place(obj, pose) {
   obj.rotation.y = t.yaw;
 }
 const onTable = (x, y) => x >= 0 && x <= table.width && y >= 0 && y <= table.depth;
-// z of the box centre for a 2D pose: on the table top, or on the floor if it went over an edge
-const boxZ = p => onTable(p.x, p.y) ? table.height + box.height / 2 : box.height / 2;
+// z of a parcel's centre for a 2D pose: on the table top, otherwise on the floor (bags sit on the floor)
+const parcelZ = (pose, h) => (onTable(pose.x, pose.y) ? table.height : 0) + h / 2;
 
-// ---- floor -----------------------------------------------------------------
-const floor = new THREE.Mesh(new THREE.PlaneGeometry(span * 20, span * 20), mat(0x24272c, 1));
-floor.rotation.x = -Math.PI / 2;
-floor.receiveShadow = true;
-scene.add(floor);
+function textPlane(text, widthMM, color = "#2b2d31", opacity = 0.75) {
+  const c = document.createElement("canvas");
+  const ctx = c.getContext("2d");
+  const px = 64;
+  ctx.font = `700 ${px}px ui-sans-serif, system-ui, sans-serif`;
+  c.width = Math.ceil(ctx.measureText(text).width) + 16; c.height = px + 16;
+  ctx.font = `700 ${px}px ui-sans-serif, system-ui, sans-serif`;
+  ctx.fillStyle = color; ctx.textBaseline = "middle"; ctx.fillText(text, 8, c.height / 2);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 8;
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(widthMM, widthMM * c.height / c.width),
+    new THREE.MeshBasicMaterial({ map: tex, transparent: true, opacity, depthWrite: false }));
+  m.rotation.x = -Math.PI / 2;                 // lies flat, readable from the front
+  return m;
+}
+
+// ---- workshop room: floor and two back walls with white gridlines ---------
+const ROOM = { left: -100, back: table.depth + 60, right: table.width + 700, front: -700, height: 520, step: 40 };
+function gridLines(w, h, step, opacity) {    // in the XY plane, from (0,0) to (w,h)
+  const pts = [];
+  for (let x = 0; x <= w + 1e-6; x += step) pts.push(x, 0, 0, x, h, 0);
+  for (let y = 0; y <= h + 1e-6; y += step) pts.push(0, y, 0, w, y, 0);
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.Float32BufferAttribute(pts, 3));
+  return new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity }));
+}
+{
+  const fw = ROOM.right - ROOM.left, fd = ROOM.back - ROOM.front;
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(fw, fd), mat(0xcfd2d6, 1));
+  floor.rotation.x = -Math.PI / 2;
+  floor.position.copy(toThree({ x: ROOM.left + fw / 2, y: ROOM.front + fd / 2 }).pos);
+  floor.receiveShadow = true;
+  scene.add(floor);
+  const fg = gridLines(fw, fd, ROOM.step, 0.9);
+  fg.rotation.x = -Math.PI / 2;                // local +Y -> world -Z (= table +y)
+  fg.position.copy(toThree({ x: ROOM.left, y: ROOM.front, z: 0.3 }).pos);
+  scene.add(fg);
+
+  // back wall (faces the front)
+  const back = new THREE.Mesh(new THREE.PlaneGeometry(fw, ROOM.height), mat(0xe2e4e7, 1));
+  back.position.copy(toThree({ x: ROOM.left + fw / 2, y: ROOM.back, z: ROOM.height / 2 }).pos);
+  back.receiveShadow = true;
+  scene.add(back);
+  const bg = gridLines(fw, ROOM.height, ROOM.step, 0.9);
+  bg.position.copy(toThree({ x: ROOM.left, y: ROOM.back - 0.3, z: 0 }).pos);
+  scene.add(bg);
+
+  // left wall (faces right)
+  const left = new THREE.Mesh(new THREE.PlaneGeometry(fd, ROOM.height), mat(0xdcdfe2, 1));
+  left.rotation.y = Math.PI / 2;
+  left.position.copy(toThree({ x: ROOM.left, y: ROOM.front + fd / 2, z: ROOM.height / 2 }).pos);
+  left.receiveShadow = true;
+  scene.add(left);
+  const lg = gridLines(fd, ROOM.height, ROOM.step, 0.9);
+  lg.rotation.y = Math.PI / 2;                 // local +X -> world -Z (= table +y)
+  lg.position.copy(toThree({ x: ROOM.left + 0.3, y: ROOM.front, z: 0 }).pos);
+  scene.add(lg);
+}
+
+// ---- lighting ----------------------------------------------------------------
+const centre = toThree({ x: table.width / 2, y: table.depth / 2, z: table.height }).pos;
+const span = Math.max(table.width, table.depth);
+scene.add(new THREE.HemisphereLight(0xffffff, 0xb9bcc2, 1.6));
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.copy(centre).add(new THREE.Vector3(span * 0.9, span * 2.2, span * 1.1));
+sun.target.position.copy(centre);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.radius = 8;
+sun.shadow.bias = -0.0005;
+const sc = sun.shadow.camera;
+sc.left = sc.bottom = -span * 2; sc.right = sc.top = span * 2;
+sc.near = 1; sc.far = span * 8;
+scene.add(sun, sun.target);
 
 // ---- table -----------------------------------------------------------------
-const tableMesh = block(table.width, table.depth, table.height, mat(0x8a7a66, 0.9));
+const tableMesh = block(table.width, table.depth, table.height, mat(0xa8906f, 0.9));
 place(tableMesh, { x: table.width / 2, y: table.depth / 2, z: table.height / 2 });
 scene.add(tableMesh);
 
-// goal edge: a thin strip along it
-{
-  const e = table.goal_edge, s = 4;
-  const alongX = e === "front" || e === "back";
-  const strip = block(alongX ? table.width : s, alongX ? s : table.depth, 0.6,
-                      new THREE.MeshStandardMaterial({ color: 0x3ddc84, emissive: 0x1a6b3f, roughness: 0.5 }));
-  const p = { front: { x: table.width / 2, y: s / 2 }, back: { x: table.width / 2, y: table.depth - s / 2 },
-              left: { x: s / 2, y: table.depth / 2 }, right: { x: table.width - s / 2, y: table.depth / 2 } }[e];
-  place(strip, { ...p, z: table.height + 0.3 });
-  strip.castShadow = false;
-  scene.add(strip);
+// ---- zones: tape outlines on the table top ---------------------------------
+for (const [name, z] of Object.entries(zones)) {
+  const tape = mat(0x2b2d31, 0.7), t = 2, top = table.height + 0.3;
+  const sides = [
+    [z.width, t, 0, z.depth / 2 - t / 2], [z.width, t, 0, -z.depth / 2 + t / 2],
+    [t, z.depth, z.width / 2 - t / 2, 0], [t, z.depth, -z.width / 2 + t / 2, 0],
+  ];
+  for (const [w, d, dx, dy] of sides) {
+    const s = block(w, d, 0.6, tape);
+    s.castShadow = false;
+    place(s, { x: z.x + dx, y: z.y + dy, z: top });
+    scene.add(s);
+  }
+  // label sits just left of the zone so parcels never cover it
+  const lw = 34, label = textPlane(name.toUpperCase(), lw, "#2b2d31", 0.6);
+  place(label, { x: z.x - z.width / 2 - 4 - lw / 2, y: z.y, z: top + 0.2 });
+  label.rotation.set(-Math.PI / 2, 0, 0);
+  scene.add(label);
 }
 
-// ---- obstacle --------------------------------------------------------------
-if (rig.obstacle?.enabled) {
-  const o = rig.obstacle;
-  const m = block(o.width, o.depth, o.height, mat(0x3b6fd8, 0.6));
-  place(m, { ...o.pose, z: table.height + o.height / 2 });
-  scene.add(m);
+// ---- bags: open boxes on the floor beside the table ------------------------
+for (const [side, b] of Object.entries(bags)) {
+  const m = mat(0x4a4d52, 0.95), t = 2;
+  const g = new THREE.Group();
+  const parts = [
+    [b.width, b.depth, t, 0, 0, t / 2],
+    [b.width, t, b.height, 0, b.depth / 2 - t / 2, b.height / 2], [b.width, t, b.height, 0, -b.depth / 2 + t / 2, b.height / 2],
+    [t, b.depth, b.height, b.width / 2 - t / 2, 0, b.height / 2], [t, b.depth, b.height, -b.width / 2 + t / 2, 0, b.height / 2],
+  ];
+  for (const [w, d, h, dx, dy, dz] of parts) {
+    const p = block(w, d, h, m);
+    place(p, { x: b.x + dx, y: b.y + dy, z: dz });
+    g.add(p);
+  }
+  scene.add(g);
+  const label = textPlane(`${side.toUpperCase()} BAG`, 40);
+  place(label, { x: b.x, y: b.y - b.depth / 2 - 12, z: 0.6 });
+  label.rotation.set(-Math.PI / 2, 0, 0);
+  scene.add(label);
 }
-
-// ---- box -------------------------------------------------------------------
-const boxMesh = block(box.width, box.depth, box.height, mat(0xd8452f, 0.55));
-scene.add(boxMesh);
-function setBoxPose(pose) { place(boxMesh, { ...pose, z: table.height + box.height / 2 }); }
-setBoxPose(box.default_pose);
 
 // ---- arm -------------------------------------------------------------------
-// Group sits at the pivot on the table top and yaws with the stick heading.
 const armGroup = new THREE.Group();
 const servo = block(23, 12, 22, mat(0x2b2e33, 0.5));      // FS90-ish body, stays put
 place(servo, { x: arm.pivot_x, y: arm.pivot_y, z: table.height + 11 });
@@ -211,9 +341,26 @@ function setArmAngle(angle) {
 }
 setArmAngle(arm.rest_angle);
 
+// ---- parcels (items) -------------------------------------------------------
+const COLOURS = { red: "#d8452f", blue: "#3b6fd8", green: "#2fae66", yellow: "#e8c547", orange: "#e8862f",
+                  purple: "#8a55d8", white: "#f2f2f2", black: "#2a2a2a", pink: "#e86aa6" };
+const colourOf = name => COLOURS[name] ?? name ?? "#999";
+const itemMeshes = new Map();
+function renderItems3D(items = []) {
+  const ids = new Set(items.map(i => i.id));
+  for (const [id, m] of itemMeshes) if (!ids.has(id)) { scene.remove(m); itemMeshes.delete(id); }
+  for (const it of items) {
+    const s = parcelSize(it.id);
+    let m = itemMeshes.get(it.id);
+    if (!m) { m = block(s.width, s.depth, s.height, mat(0xffffff, 0.55)); scene.add(m); itemMeshes.set(it.id, m); }
+    m.material.color.set(colourOf(it.color));
+    if (it.pose) place(m, { ...it.pose, z: parcelZ(it.pose, s.height) });
+  }
+}
+
 // ---- agent colours ---------------------------------------------------------
-// Avoids green (success) and red (the real box).
-const PALETTE = ["#4e9cff", "#ff9f43", "#b07cff", "#ffd32a", "#18dcff", "#ff6bb5", "#e8e8e8", "#c08457"];
+// Avoids yellow (accent), green (success) and red (kill / dead).
+const PALETTE = ["#3b7ddd", "#8e5cf0", "#13a3c2", "#e0559f", "#6b7280", "#b0703a", "#4f5bd5", "#9c6b98"];
 function agentColour(id) {
   const n = parseInt(String(id).replace(/\D/g, ""), 10);
   if (!Number.isNaN(n)) return PALETTE[(n - 1 + PALETTE.length) % PALETTE.length];
@@ -226,24 +373,28 @@ const GHOST_CAP = 60;
 const GHOST_TRAVEL = 1.2;     // s to slide along its path
 const GHOST_HOLD = 2.0;       // s a success stays green
 const GHOST_FADE = 0.6;       // s to fade out
-const GHOST_OPACITY = 0.16;
-const SUCCESS_OPACITY = 0.5;
-const ghostGeom = new THREE.BoxGeometry(box.width, box.height, box.depth);
+const GHOST_OPACITY = 0.24;
+const SUCCESS_OPACITY = 0.55;
+const ghostGeoms = new Map();
+const ghostGeom = id => {
+  if (!ghostGeoms.has(id)) { const s = parcelSize(id); ghostGeoms.set(id, new THREE.BoxGeometry(s.width, s.height, s.depth)); }
+  return ghostGeoms.get(id);
+};
 const ghostGroup = new THREE.Group();
 scene.add(ghostGroup);
 let ghosts = [];              // {mesh, path, success, born}
 let seenKeys = new Set();     // ghost keys in the previous frame
+let drawn = 0, drawnSuccess = 0;
 
-const ghostKey = g => `${g.agent}|${g.path.length}|${g.path[1]}|${g.path.at(-1)}`;
+const ghostKey = g => `${g.agent}|${g.parcel}|${g.path.length}|${g.path[1]}|${g.path.at(-1)}`;
 
 function spawnGhost(g) {
   if (!g.path?.length) return;
   while (ghosts.length >= GHOST_CAP) removeGhost(ghosts[0]);
   const material = new THREE.MeshStandardMaterial({
-    color: agentColour(g.agent), transparent: true, opacity: GHOST_OPACITY,
-    depthWrite: false, roughness: 0.6,
+    color: agentColour(g.agent), transparent: true, opacity: GHOST_OPACITY, depthWrite: false, roughness: 0.6,
   });
-  const mesh = new THREE.Mesh(ghostGeom, material);
+  const mesh = new THREE.Mesh(ghostGeom(g.parcel), material);
   ghostGroup.add(mesh);
   const ghost = { mesh, path: g.path, success: !!g.success, born: performance.now() / 1000, green: false };
   setGhostAt(ghost, 0);
@@ -257,7 +408,7 @@ function removeGhost(g) {
 function clearGhosts() { [...ghosts].forEach(removeGhost); }
 
 function setGhostAt(g, s) {   // s in [0, 1] along the path
-  const p = g.path, f = s * (p.length - 1), i = Math.min(Math.floor(f), p.length - 2), t = f - i;
+  const p = g.path, f = s * (p.length - 1), i = Math.min(Math.floor(f), Math.max(0, p.length - 2)), t = f - i;
   const a = p[i], b = p[Math.min(i + 1, p.length - 1)];
   const lerp = (u, v) => u + (v - u) * t;
   place(g.mesh, { x: lerp(a[0], b[0]), y: lerp(a[1], b[1]), z: lerp(a[2], b[2]), theta: lerp(a[3], b[3]) });
@@ -287,27 +438,133 @@ function ingestGhosts(list = [], searching = true) {
   for (const g of list) {
     const k = ghostKey(g);
     keys.add(k);
-    if (searching && !seenKeys.has(k)) spawnGhost(g);   // don't replay old attempts after a reconnect
+    if (searching && !seenKeys.has(k)) {   // don't replay old attempts after a reconnect
+      spawnGhost(g);
+      drawn++; if (g.success) drawnSuccess++;
+    }
   }
   seenKeys = keys;
 }
 
 // ---- predicted vs actual markers ---------------------------------------------
 function marker(color) {
-  const m = new THREE.Mesh(ghostGeom, new THREE.MeshBasicMaterial({ color, wireframe: true }));
+  const m = new THREE.Mesh(ghostGeom(rig.parcels?.[0]?.id), new THREE.MeshBasicMaterial({ color, wireframe: true }));
   m.visible = false;
   scene.add(m);
   return m;
 }
-const predictedMarker = marker(0x3ddc84);
-const actualMarker = marker(0xff9f43);
+const predictedMarker = marker(0x1f9d57);
+const actualMarker = marker(0xb8860b);
+
+// ---- camera: fixed three-quarter view, framed in the space the panels leave ----
+const camera = new THREE.PerspectiveCamera(30, innerWidth / innerHeight, 5, 20000);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.maxPolarAngle = Math.PI * 0.49;
+controls.enabled = false;                      // "O" toggles orbit for debugging
+
+const VIEW_AZIMUTH = 36 * DEG;                 // from the front, towards the right
+const VIEW_ELEVATION = 30 * DEG;
+const VIEW_DIR = new THREE.Vector3(Math.cos(VIEW_ELEVATION) * Math.sin(VIEW_AZIMUTH), Math.sin(VIEW_ELEVATION),
+                                   Math.cos(VIEW_ELEVATION) * Math.cos(VIEW_AZIMUTH));
+const FREE_FOV = 30 * DEG;                     // vertical field of view across the free area
+const FIT_MARGIN = 40;                         // px
+
+// Everything that must be visible: table, bags, arm reach, and the corner where the walls meet.
+const fitPoints = [];
+{
+  const add = (x, y, z) => fitPoints.push(toThree({ x, y, z }).pos);
+  for (const x of [0, table.width]) for (const y of [0, table.depth]) for (const z of [0, table.height]) add(x, y, z);
+  for (const b of Object.values(bags))
+    for (const sx of [-1, 1]) for (const sy of [-1, 1]) for (const z of [0, b.height]) add(b.x + sx * b.width / 2, b.y + sy * b.depth / 2, z);
+  for (let a = 0; a <= 180; a += 30) {
+    const h = (arm.heading_at_zero + arm.direction * a) * DEG;
+    add(arm.pivot_x + Math.cos(h) * arm.length, arm.pivot_y + Math.sin(h) * arm.length, table.height + arm.height);
+  }
+  add(ROOM.left, ROOM.back, 0);                 // the corner where the walls meet
+}
+
+function freeRect() {
+  const W = innerWidth, H = innerHeight, gap = 10;
+  const side = document.getElementById("side").getBoundingClientRect();
+  const top = document.getElementById("top").getBoundingClientRect();
+  const r = { x0: 0, y0: top.bottom + gap, x1: W, y1: H };
+  if (side.left > W / 2) r.x1 = side.left - gap;   // column on the right
+  else r.y1 = side.top - gap;                      // column along the bottom (narrow screens)
+  if (r.x1 - r.x0 < 100 || r.y1 - r.y0 < 100) return { x0: 0, y0: 0, x1: W, y1: H };
+  return r;
+}
+
+function fitCamera() {
+  const W = innerWidth, H = innerHeight, r = freeRect();
+  const fw = r.x1 - r.x0, fh = r.y1 - r.y0, cx = (r.x0 + r.x1) / 2, cy = (r.y0 + r.y1) / 2;
+  const f = (fh / 2) / Math.tan(FREE_FOV / 2);   // focal length in px
+
+  // Shift the projection centre to the middle of the free area.
+  const VW = 2 * Math.max(cx, W - cx), VH = 2 * Math.max(cy, H - cy);
+  camera.aspect = VW / VH;
+  camera.fov = 2 * Math.atan((VH / 2) / f) / DEG;
+  camera.setViewOffset(VW, VH, VW / 2 - cx, VH / 2 - cy, W, H);
+  camera.updateProjectionMatrix();
+
+  const fwd = VIEW_DIR.clone().negate();
+  const right = new THREE.Vector3().crossVectors(fwd, new THREE.Vector3(0, 1, 0)).normalize();
+  const up = new THREE.Vector3().crossVectors(right, fwd);
+  const box = new THREE.Box3().setFromPoints(fitPoints);
+  const target = box.getCenter(new THREE.Vector3());
+  const limX = fw / 2 - FIT_MARGIN, limY = fh / 2 - FIT_MARGIN;
+
+  const project = (d) => {
+    const eye = target.clone().addScaledVector(VIEW_DIR, d);
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    for (const p of fitPoints) {
+      const v = p.clone().sub(eye), depth = v.dot(fwd);
+      const sx = f * v.dot(right) / depth, sy = f * v.dot(up) / depth;
+      minX = Math.min(minX, sx); maxX = Math.max(maxX, sx); minY = Math.min(minY, sy); maxY = Math.max(maxY, sy);
+    }
+    return { minX, maxX, minY, maxY };
+  };
+  const fits = d => { const b = project(d); return (b.maxX - b.minX) / 2 <= limX && (b.maxY - b.minY) / 2 <= limY; };
+
+  let d = 0;
+  for (let pass = 0; pass < 3; pass++) {
+    let lo = 50, hi = 50000;
+    for (let i = 0; i < 40; i++) { const mid = (lo + hi) / 2; fits(mid) ? (hi = mid) : (lo = mid); }
+    d = hi;
+    // re-centre: move the target so the projected content sits in the middle of the free area
+    const b = project(d);
+    const depth = d;
+    target.addScaledVector(right, ((b.minX + b.maxX) / 2) * depth / f)
+          .addScaledVector(up, ((b.minY + b.maxY) / 2) * depth / f);
+  }
+  camera.position.copy(target).addScaledVector(VIEW_DIR, d);
+  camera.lookAt(target);
+  controls.target.copy(target);
+}
 
 // ---- UI ----------------------------------------------------------------------
 const $ = id => document.getElementById(id);
 const fmt = (v, d = 1) => (typeof v === "number" ? v.toFixed(d) : "–");
 let ws = null, lastFrame = null, prevPhase = null, prevHadBest = false;
+const connected = () => ws?.readyState === WebSocket.OPEN;
 
-function send(msg) { if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg)); }
+function send(msg) { if (connected()) ws.send(JSON.stringify(msg)); }
+
+// tabs + minimise
+function selectTab(name) {
+  for (const t of ["agents", "outcomes"]) {
+    $(`tab-${t}`).setAttribute("aria-selected", String(t === name));
+    $(`view-${t}`).hidden = t !== name;
+  }
+}
+$("tab-agents").onclick = () => { selectTab("agents"); setMinimised(false); };
+$("tab-outcomes").onclick = () => { selectTab("outcomes"); setMinimised(false); };
+function setMinimised(min) {
+  $("main").classList.toggle("min", min);
+  $("min").textContent = min ? "+" : "–";
+  $("min").title = $("min").ariaLabel = min ? "Expand panel" : "Minimise panel";
+}
+$("min").onclick = () => setMinimised(!$("main").classList.contains("min"));
 
 const MUTE_SVG = `<svg class="mute" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"
   stroke-linecap="round" stroke-linejoin="round"><title>silenced</title><path d="M2 6h3l4-3v10l-4-3H2z"/>
@@ -325,7 +582,7 @@ function renderAgents(agents = []) {
       el.className = "row";
       el.innerHTML = `<span class="sw"></span><span class="id"></span><span class="role"></span>
         <span class="tries"></span><span class="score"><span class="bar"><i></i></span><span class="num"></span></span>
-        <button>Kill</button>`;
+        <button class="kill">Kill</button>`;
       el.querySelector(".sw").style.background = agentColour(a.id);
       el.querySelector(".id").textContent = a.id;
       el.querySelector("button").onclick = () => send({ cmd: "die", id: a.id });
@@ -340,51 +597,109 @@ function renderAgents(agents = []) {
     const r = Math.max(0, Math.min(1, a.robust ?? 0));
     const bar = el.querySelector(".bar i");
     bar.style.width = `${r * 100}%`;
-    bar.style.background = r >= 0.8 ? "var(--ok)" : agentColour(a.id);
+    bar.style.background = r >= EXECUTE_MIN ? "var(--green)" : agentColour(a.id);
     el.querySelector(".num").textContent = fmt(a.robust, 2);
-    const btn = el.querySelector("button");
-    btn.disabled = !a.alive || ws?.readyState !== WebSocket.OPEN;
+    el.querySelector("button").disabled = !a.alive || !connected();
   }
 }
 
-function renderResult(f) {
+function renderOutcomes(f) {
+  const attempts = (f.agents ?? []).reduce((s, a) => s + (a.tries ?? 0), 0);
+  $("attempts").textContent = attempts.toLocaleString();
+  $("successes").textContent = drawnSuccess.toLocaleString();
+  $("successes-of").textContent = `of ${drawn.toLocaleString()} attempts drawn`;
+
   const r = f.phase === "done" ? f.result : null;
-  $("result").classList.toggle("show", !!r);
   predictedMarker.visible = actualMarker.visible = !!r;
-  if (!r) return;
-  const { predicted: p, actual: a } = r;
-  $("px").textContent = fmt(p.x); $("py").textContent = fmt(p.y); $("pt").textContent = fmt(p.theta);
-  $("ax").textContent = fmt(a.x); $("ay").textContent = fmt(a.y); $("at").textContent = fmt(a.theta);
-  $("dist").textContent = fmt(Math.hypot(a.x - p.x, a.y - p.y));
-  place(predictedMarker, { ...p, z: boxZ(p) });
-  place(actualMarker, { ...a, z: boxZ(a) });
+  const out = $("outcome");
+  if (!r) {
+    if (!out.querySelector(".empty"))
+      out.innerHTML = `<div class="empty">Predicted against actual appears after a real push.</div>`;
+    return;
+  }
+  const p = r.predicted, a = r.actual;
+  const err = Math.hypot(a.x - p.x, a.y - p.y);
+  out.innerHTML = `
+    <div><span class="landed ${r.landed ? "ok" : ""}"></span></div>
+    <table>
+      <tr><th></th><th>x mm</th><th>y mm</th><th>θ°</th></tr>
+      <tr><td><span class="key" style="background:#1f9d57"></span>predicted</td><td>${fmt(p.x)}</td><td>${fmt(p.y)}</td><td>${fmt(p.theta)}</td></tr>
+      <tr><td><span class="key" style="background:#b8860b"></span>actual</td><td>${fmt(a.x)}</td><td>${fmt(a.y)}</td><td>${fmt(a.theta)}</td></tr>
+    </table>
+    <div class="err">error <b>${fmt(err)}</b> mm</div>`;
+  out.querySelector(".landed").textContent =
+    `${r.parcel ?? "parcel"} ${r.landed ? "landed in" : "missed"} the ${r.bin ?? "?"} bag`;
+  const s = parcelSize(r.parcel);
+  for (const [m, pose] of [[predictedMarker, p], [actualMarker, a]]) {
+    m.geometry = ghostGeom(r.parcel);
+    place(m, { ...pose, z: parcelZ(pose, s.height) });
+  }
 }
 
-function renderFrame(f) {
-  // a new search (replan) starts with no best: drop old ghosts
-  const hasBest = !!f.best;
-  if ((f.phase === "searching" && prevPhase && prevPhase !== "searching") || (prevHadBest && !hasBest)) {
-    clearGhosts();
-    seenKeys = new Set();
+const itemEls = new Map();
+function renderItemList(items = []) {
+  const box = $("items");
+  const ids = new Set(items.map(i => i.id));
+  for (const [id, el] of itemEls) if (!ids.has(id)) { el.remove(); itemEls.delete(id); }
+  for (const it of items) {
+    let el = itemEls.get(it.id);
+    if (!el) {
+      el = document.createElement("div");
+      el.className = "item";
+      el.innerHTML = `<span class="sw"></span><b class="id"></b><span class="pos"></span><span class="chip"></span>`;
+      el.querySelector(".id").textContent = it.id;
+      box.appendChild(el);
+      itemEls.set(it.id, el);
+    }
+    el.querySelector(".sw").style.background = colourOf(it.color);
+    el.querySelector(".sw").title = it.color ?? "";
+    const pos = it.pose ? `${fmt(it.pose.x, 0)}, ${fmt(it.pose.y, 0)} mm` : "–";
+    const bin = it.bin ? ` → ${it.bin} bag` : "";
+    el.querySelector(".pos").textContent = `${it.zone ?? "?"} · ${pos}${bin}`;
+    const chip = el.querySelector(".chip");
+    chip.textContent = it.status ?? "";
+    chip.className = `chip ${it.status ?? ""}`;
   }
-  prevPhase = f.phase; prevHadBest = hasBest;
+}
 
-  if (f.pose) setBoxPose(f.pose);
-  if (f.arm) setArmAngle(f.arm.angle);
-  ingestGhosts(f.ghosts, f.phase === "searching");
-
-  const ph = $("phase");
-  ph.textContent = f.phase ?? "–";
-  ph.className = f.phase ?? "";
-  $("best").textContent = f.best ? `${fmt(f.best.robust, 2)} (${f.best.agent})` : "–";
-
-  const silenced = (f.agents ?? []).some(a => a.alive && a.silenced);
+function renderControls(f) {
+  const silenced = (f?.agents ?? []).some(a => a.alive && a.silenced);
   const sb = $("silence");
   sb.classList.toggle("on", silenced);
   sb.textContent = silenced ? "Silenced · unsilence" : "Silence all";
+  sb.disabled = $("replan").disabled = !connected();
 
+  const robust = f?.best?.robust ?? 0;
+  const canSend = connected() && robust >= EXECUTE_MIN && ["searching", "ready"].includes(f?.phase);
+  $("send").disabled = !canSend;
+  $("send-sub").textContent =
+    f?.phase === "executing" ? "pushing…" :
+    f?.phase === "done" ? "push finished · replan for the next parcel" :
+    robust >= EXECUTE_MIN ? `best push scores ${fmt(robust, 2)}` : "needs a push scoring 0.80+";
+}
+
+function renderFrame(f) {
+  // a new search (replan) starts with no best: drop old ghosts and counts
+  const hasBest = !!f.best;
+  if ((f.phase === "searching" && prevPhase && prevPhase !== "searching" && prevPhase !== "ready") ||
+      (prevHadBest && !hasBest)) {
+    clearGhosts();
+    seenKeys = new Set();
+    drawn = drawnSuccess = 0;
+  }
+  if (f.phase === "done" && prevPhase && prevPhase !== "done") { selectTab("outcomes"); setMinimised(false); }
+  prevPhase = f.phase; prevHadBest = hasBest;
+
+  renderItems3D(f.items);
+  if (f.arm) setArmAngle(f.arm.angle);
+  ingestGhosts(f.ghosts, f.phase === "searching" || f.phase === "ready");
+
+  $("phase").textContent = f.phase ?? "–";
+  $("best").textContent = f.best ? `${fmt(f.best.robust, 2)} (${f.best.agent})` : "–";
   renderAgents(f.agents);
-  renderResult(f);
+  renderOutcomes(f);
+  renderItemList(f.items);
+  renderControls(f);
   lastFrame = f;
 }
 
@@ -393,11 +708,13 @@ $("silence").onclick = () => {
   send({ cmd: silenced ? "unsilence" : "silence" });
 };
 $("replan").onclick = () => send({ cmd: "replan" });
+$("send").onclick = () => send({ cmd: "execute" });
 
 function setConnected(on) {
   $("dot").classList.toggle("on", on);
-  $("dot").title = on ? "observer connected" : "observer disconnected, retrying";
-  $("silence").disabled = $("replan").disabled = !on;
+  $("dot").title = on ? "observer connected" : "observer offline, retrying";
+  if (!on) $("phase").textContent = "offline";
+  renderControls(on ? lastFrame : null);
   if (lastFrame) renderAgents(lastFrame.agents);
 }
 
@@ -410,15 +727,26 @@ function connect() {
 }
 connect();
 
-// ---- loop ------------------------------------------------------------------
-addEventListener("resize", () => {
-  camera.aspect = innerWidth / innerHeight;
-  camera.updateProjectionMatrix();
-  renderer.setSize(innerWidth, innerHeight);
+// ---- orbit toggle, resize, loop -------------------------------------------
+addEventListener("keydown", e => {
+  if (e.key !== "o" && e.key !== "O") return;
+  if (e.target.closest?.("input, textarea")) return;
+  controls.enabled = !controls.enabled;
+  $("orbit").classList.toggle("on", controls.enabled);
+  if (!controls.enabled) fitCamera();
 });
+function onResize() {
+  renderer.setSize(innerWidth, innerHeight);
+  if (!controls.enabled) fitCamera();
+}
+addEventListener("resize", onResize);
+new ResizeObserver(onResize).observe($("side"));
+new ResizeObserver(onResize).observe($("top"));
+fitCamera();
+
 renderer.setAnimationLoop(() => {
   updateGhosts(performance.now() / 1000);
-  controls.update();
+  if (controls.enabled) controls.update();
   renderer.render(scene, camera);
 });
 </script>
