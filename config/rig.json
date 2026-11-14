@@ -1,0 +1,40 @@
+{
+  "_note": "PLACEHOLDER measurements. Replace with the real rig. Units: mm and degrees. Table frame: origin at the front-left corner of the table top's footprint, x along the width (to the right), y along the depth (away from the front edge), z up from the floor. Angles are counter-clockwise seen from above, 0 = +x.",
+
+  "table": {
+    "width": 240,
+    "depth": 170,
+    "height": 40,
+    "goal_edge": "front",
+    "_goal_edge_values": "front (y = 0) | back (y = depth) | left (x = 0) | right (x = width)"
+  },
+
+  "arm": {
+    "pivot_x": 205,
+    "pivot_y": 145,
+    "length": 95,
+    "height": 18,
+    "rest_angle": 0,
+    "heading_at_zero": 180,
+    "direction": 1,
+    "_angles": "arm.angle is the servo angle. Heading of the stick in the table frame = heading_at_zero + direction * angle. height is the stick's height above the table top."
+  },
+
+  "box": {
+    "width": 50,
+    "depth": 35,
+    "height": 20,
+    "mass_g": 25,
+    "colour": "red",
+    "default_pose": {"x": 110, "y": 85, "theta": 0}
+  },
+
+  "obstacle": {
+    "enabled": true,
+    "width": 30,
+    "depth": 30,
+    "height": 25,
+    "colour": "blue",
+    "pose": {"x": 45, "y": 120, "theta": 20}
+  }
+}

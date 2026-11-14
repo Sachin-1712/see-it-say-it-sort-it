@@ -1,0 +1,426 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dry Run Viewer</title>
+<style>
+  :root { --panel: rgba(18,20,24,.82); --line: rgba(255,255,255,.08); --text: #c9ccd1; --dim: #7d828b;
+          --ok: #3ddc84; --warn: #ff9f43; }
+  html, body { margin: 0; height: 100%; background: #1b1d21; overflow: hidden; color: var(--text);
+               font: 13px/1.4 ui-sans-serif, system-ui, -apple-system, sans-serif; }
+  .card { position: fixed; background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+          backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); font-variant-numeric: tabular-nums; }
+  button { font: inherit; color: #e8eaed; background: #2c3036; border: 1px solid #3a3f46; border-radius: 5px;
+           padding: 4px 10px; cursor: pointer; }
+  button:hover:not(:disabled) { background: #363b42; }
+  button:disabled { opacity: .4; cursor: default; }
+  button.on { background: #5a3d1a; border-color: var(--warn); color: #ffd9b0; }
+
+  /* top bar */
+  #top { top: 12px; left: 12px; display: flex; align-items: center; gap: 14px; padding: 8px 12px; }
+  #top .label { color: var(--dim); }
+  #phase { font-weight: 600; color: #fff; text-transform: uppercase; letter-spacing: .04em; font-size: 12px;
+           padding: 2px 8px; border-radius: 4px; background: #33373e; }
+  #phase.searching { background: #26405f; color: #b9d6ff; }
+  #phase.executing { background: #5a3d1a; color: #ffd9b0; }
+  #phase.done { background: #1f4d34; color: #b6f2cf; }
+  #best { color: #fff; font-weight: 600; }
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #c0392b; }
+  .dot.on { background: #2ecc71; }
+
+  /* agent panel */
+  #agents { top: 12px; right: 12px; width: 300px; padding: 6px 0; }
+  #agents h2 { margin: 2px 12px 6px; font-size: 11px; font-weight: 600; color: var(--dim);
+               text-transform: uppercase; letter-spacing: .06em; }
+  .row { display: grid; grid-template-columns: 12px 22px 66px 40px 1fr 44px; align-items: center; gap: 8px;
+         padding: 5px 12px; border-top: 1px solid var(--line); }
+  .row.dead { opacity: .35; filter: grayscale(1); }
+  .row .sw { width: 10px; height: 10px; border-radius: 50%; }
+  .row .id { color: #fff; }
+  .row .role { color: var(--dim); font-size: 12px; }
+  .row .tries { text-align: right; font-size: 12px; }
+  .bar { position: relative; height: 6px; background: #2c3036; border-radius: 3px; overflow: hidden; }
+  .bar i { position: absolute; inset: 0 auto 0 0; border-radius: 3px; }
+  .score { display: flex; flex-direction: column; gap: 2px; font-size: 11px; color: var(--dim); }
+  .mute { width: 13px; height: 13px; vertical-align: -2px; margin-left: 4px; color: var(--warn); }
+  .row button { padding: 2px 0; font-size: 12px; }
+  @media (max-width: 900px) { #agents { top: 64px; } }
+  @media (max-width: 480px) { #top { right: 12px; flex-wrap: wrap; } #agents { left: 12px; width: auto; top: 100px; } }
+
+  /* result */
+  #result { left: 50%; bottom: 16px; transform: translateX(-50%); padding: 10px 16px; display: none; }
+  #result.show { display: block; }
+  #result table { border-collapse: collapse; }
+  #result td, #result th { padding: 2px 10px; text-align: right; }
+  #result th { color: var(--dim); font-weight: 500; }
+  #result td:first-child { text-align: left; }
+  #result .err { margin-top: 6px; text-align: center; font-size: 15px; color: #fff; }
+  .key { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 6px; }
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+<div id="top" class="card">
+  <span class="dot" id="dot" title="observer connection"></span>
+  <span id="phase">–</span>
+  <span><span class="label">best</span> <span id="best">–</span></span>
+  <button id="silence" disabled>Silence all</button>
+  <button id="replan" disabled>Replan</button>
+</div>
+<div id="agents" class="card"><h2>Agents</h2><div id="rows"></div></div>
+<div id="result" class="card">
+  <table>
+    <tr><th></th><th>x mm</th><th>y mm</th><th>θ°</th></tr>
+    <tr><td><span class="key" style="background:#3ddc84"></span>predicted</td><td id="px"></td><td id="py"></td><td id="pt"></td></tr>
+    <tr><td><span class="key" style="background:#ff9f43"></span>actual</td><td id="ax"></td><td id="ay"></td><td id="at"></td></tr>
+  </table>
+  <div class="err">error <b id="dist"></b> mm</div>
+</div>
+<script type="module">
+import * as THREE from "three";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+
+const WS_URL = "ws://localhost:8765";
+const DEG = Math.PI / 180;
+
+// ---------------------------------------------------------------------------
+// The ONLY place the simulation's z-up table frame becomes three.js y-up.
+// Table frame: x right, y away from the front edge, z up (mm, degrees CCW from above).
+// three.js:    X = x, Y = z, Z = -y. A CCW rotation about z is the same rotation about Y.
+function toThree({ x = 0, y = 0, z = 0, theta = 0 }) {
+  return { pos: new THREE.Vector3(x, z, -y), yaw: theta * DEG };
+}
+// ---------------------------------------------------------------------------
+
+const rig = await (await fetch("../config/rig.json")).json();
+const { table, arm, box } = rig;
+
+// ---- renderer, scene, camera ---------------------------------------------
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x1b1d21);
+
+const centre = toThree({ x: table.width / 2, y: table.depth / 2, z: table.height }).pos;
+const span = Math.max(table.width, table.depth);
+const camera = new THREE.PerspectiveCamera(40, innerWidth / innerHeight, 1, span * 40);
+camera.position.copy(centre).add(new THREE.Vector3(0, span * 1.1, span * 1.4));
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.copy(centre);
+controls.enableDamping = true;
+controls.maxPolarAngle = Math.PI * 0.49;
+
+// ---- soft lighting ---------------------------------------------------------
+scene.add(new THREE.HemisphereLight(0xdfe6f0, 0x2a2724, 1.1));
+const sun = new THREE.DirectionalLight(0xffffff, 1.6);
+sun.position.copy(centre).add(new THREE.Vector3(-span * 0.8, span * 2, span));
+sun.target.position.copy(centre);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.radius = 6;
+sun.shadow.bias = -0.0005;
+const sc = sun.shadow.camera;
+sc.left = sc.bottom = -span * 1.2; sc.right = sc.top = span * 1.2;
+sc.near = 1; sc.far = span * 6;
+scene.add(sun, sun.target);
+
+// ---- helpers ---------------------------------------------------------------
+const mat = (color, rough = 0.8) => new THREE.MeshStandardMaterial({ color, roughness: rough });
+function block(w, d, h, material) {      // w along table x, d along table y, h along z
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), material);
+  m.castShadow = m.receiveShadow = true;
+  return m;
+}
+function place(obj, pose) {
+  const t = toThree(pose);
+  obj.position.copy(t.pos);
+  obj.rotation.y = t.yaw;
+}
+const onTable = (x, y) => x >= 0 && x <= table.width && y >= 0 && y <= table.depth;
+// z of the box centre for a 2D pose: on the table top, or on the floor if it went over an edge
+const boxZ = p => onTable(p.x, p.y) ? table.height + box.height / 2 : box.height / 2;
+
+// ---- floor -----------------------------------------------------------------
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(span * 20, span * 20), mat(0x24272c, 1));
+floor.rotation.x = -Math.PI / 2;
+floor.receiveShadow = true;
+scene.add(floor);
+
+// ---- table -----------------------------------------------------------------
+const tableMesh = block(table.width, table.depth, table.height, mat(0x8a7a66, 0.9));
+place(tableMesh, { x: table.width / 2, y: table.depth / 2, z: table.height / 2 });
+scene.add(tableMesh);
+
+// goal edge: a thin strip along it
+{
+  const e = table.goal_edge, s = 4;
+  const alongX = e === "front" || e === "back";
+  const strip = block(alongX ? table.width : s, alongX ? s : table.depth, 0.6,
+                      new THREE.MeshStandardMaterial({ color: 0x3ddc84, emissive: 0x1a6b3f, roughness: 0.5 }));
+  const p = { front: { x: table.width / 2, y: s / 2 }, back: { x: table.width / 2, y: table.depth - s / 2 },
+              left: { x: s / 2, y: table.depth / 2 }, right: { x: table.width - s / 2, y: table.depth / 2 } }[e];
+  place(strip, { ...p, z: table.height + 0.3 });
+  strip.castShadow = false;
+  scene.add(strip);
+}
+
+// ---- obstacle --------------------------------------------------------------
+if (rig.obstacle?.enabled) {
+  const o = rig.obstacle;
+  const m = block(o.width, o.depth, o.height, mat(0x3b6fd8, 0.6));
+  place(m, { ...o.pose, z: table.height + o.height / 2 });
+  scene.add(m);
+}
+
+// ---- box -------------------------------------------------------------------
+const boxMesh = block(box.width, box.depth, box.height, mat(0xd8452f, 0.55));
+scene.add(boxMesh);
+function setBoxPose(pose) { place(boxMesh, { ...pose, z: table.height + box.height / 2 }); }
+setBoxPose(box.default_pose);
+
+// ---- arm -------------------------------------------------------------------
+// Group sits at the pivot on the table top and yaws with the stick heading.
+const armGroup = new THREE.Group();
+const servo = block(23, 12, 22, mat(0x2b2e33, 0.5));      // FS90-ish body, stays put
+place(servo, { x: arm.pivot_x, y: arm.pivot_y, z: table.height + 11 });
+scene.add(servo);
+const stickW = 8, stickT = 2;
+const stick = block(arm.length, stickW, stickT, mat(0xe6cf9a, 0.85));
+stick.position.set(arm.length / 2, 0, 0);                 // local +X = along the stick
+const hub = new THREE.Mesh(new THREE.CylinderGeometry(5, 5, stickT + 2, 20), mat(0xf2f2f2, 0.4));
+hub.castShadow = true;
+armGroup.add(stick, hub);
+scene.add(armGroup);
+function setArmAngle(angle) {
+  const heading = arm.heading_at_zero + arm.direction * angle;
+  place(armGroup, { x: arm.pivot_x, y: arm.pivot_y, z: table.height + arm.height, theta: heading });
+}
+setArmAngle(arm.rest_angle);
+
+// ---- agent colours ---------------------------------------------------------
+// Avoids green (success) and red (the real box).
+const PALETTE = ["#4e9cff", "#ff9f43", "#b07cff", "#ffd32a", "#18dcff", "#ff6bb5", "#e8e8e8", "#c08457"];
+function agentColour(id) {
+  const n = parseInt(String(id).replace(/\D/g, ""), 10);
+  if (!Number.isNaN(n)) return PALETTE[(n - 1 + PALETTE.length) % PALETTE.length];
+  let h = 0; for (const c of String(id)) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  return PALETTE[h % PALETTE.length];
+}
+
+// ---- ghosts ----------------------------------------------------------------
+const GHOST_CAP = 60;
+const GHOST_TRAVEL = 1.2;     // s to slide along its path
+const GHOST_HOLD = 2.0;       // s a success stays green
+const GHOST_FADE = 0.6;       // s to fade out
+const GHOST_OPACITY = 0.16;
+const SUCCESS_OPACITY = 0.5;
+const ghostGeom = new THREE.BoxGeometry(box.width, box.height, box.depth);
+const ghostGroup = new THREE.Group();
+scene.add(ghostGroup);
+let ghosts = [];              // {mesh, path, success, born}
+let seenKeys = new Set();     // ghost keys in the previous frame
+
+const ghostKey = g => `${g.agent}|${g.path.length}|${g.path[1]}|${g.path.at(-1)}`;
+
+function spawnGhost(g) {
+  if (!g.path?.length) return;
+  while (ghosts.length >= GHOST_CAP) removeGhost(ghosts[0]);
+  const material = new THREE.MeshStandardMaterial({
+    color: agentColour(g.agent), transparent: true, opacity: GHOST_OPACITY,
+    depthWrite: false, roughness: 0.6,
+  });
+  const mesh = new THREE.Mesh(ghostGeom, material);
+  ghostGroup.add(mesh);
+  const ghost = { mesh, path: g.path, success: !!g.success, born: performance.now() / 1000, green: false };
+  setGhostAt(ghost, 0);
+  ghosts.push(ghost);
+}
+function removeGhost(g) {
+  ghostGroup.remove(g.mesh);
+  g.mesh.material.dispose();
+  ghosts = ghosts.filter(x => x !== g);
+}
+function clearGhosts() { [...ghosts].forEach(removeGhost); }
+
+function setGhostAt(g, s) {   // s in [0, 1] along the path
+  const p = g.path, f = s * (p.length - 1), i = Math.min(Math.floor(f), p.length - 2), t = f - i;
+  const a = p[i], b = p[Math.min(i + 1, p.length - 1)];
+  const lerp = (u, v) => u + (v - u) * t;
+  place(g.mesh, { x: lerp(a[0], b[0]), y: lerp(a[1], b[1]), z: lerp(a[2], b[2]), theta: lerp(a[3], b[3]) });
+}
+
+function updateGhosts(now) {
+  for (const g of [...ghosts]) {
+    const age = now - g.born;
+    setGhostAt(g, Math.min(1, age / GHOST_TRAVEL));
+    const m = g.mesh.material;
+    if (age < GHOST_TRAVEL) continue;
+    if (g.success) {
+      if (!g.green) { m.color.set(0x3ddc84); m.emissive.set(0x0f4a2a); m.opacity = SUCCESS_OPACITY; g.green = true; }
+      const fade = age - GHOST_TRAVEL - GHOST_HOLD;
+      if (fade > 0) m.opacity = SUCCESS_OPACITY * (1 - fade / GHOST_FADE);
+      if (fade >= GHOST_FADE) removeGhost(g);
+    } else {
+      const fade = age - GHOST_TRAVEL;
+      m.opacity = GHOST_OPACITY * (1 - fade / GHOST_FADE);
+      if (fade >= GHOST_FADE) removeGhost(g);
+    }
+  }
+}
+
+function ingestGhosts(list = [], searching = true) {
+  const keys = new Set();
+  for (const g of list) {
+    const k = ghostKey(g);
+    keys.add(k);
+    if (searching && !seenKeys.has(k)) spawnGhost(g);   // don't replay old attempts after a reconnect
+  }
+  seenKeys = keys;
+}
+
+// ---- predicted vs actual markers ---------------------------------------------
+function marker(color) {
+  const m = new THREE.Mesh(ghostGeom, new THREE.MeshBasicMaterial({ color, wireframe: true }));
+  m.visible = false;
+  scene.add(m);
+  return m;
+}
+const predictedMarker = marker(0x3ddc84);
+const actualMarker = marker(0xff9f43);
+
+// ---- UI ----------------------------------------------------------------------
+const $ = id => document.getElementById(id);
+const fmt = (v, d = 1) => (typeof v === "number" ? v.toFixed(d) : "–");
+let ws = null, lastFrame = null, prevPhase = null, prevHadBest = false;
+
+function send(msg) { if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg)); }
+
+const MUTE_SVG = `<svg class="mute" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"
+  stroke-linecap="round" stroke-linejoin="round"><title>silenced</title><path d="M2 6h3l4-3v10l-4-3H2z"/>
+  <path d="M11 6l4 4M15 6l-4 4"/></svg>`;
+
+const rowEls = new Map();
+function renderAgents(agents = []) {
+  const rows = $("rows");
+  const ids = new Set(agents.map(a => a.id));
+  for (const [id, el] of rowEls) if (!ids.has(id)) { el.remove(); rowEls.delete(id); }
+  for (const a of agents) {
+    let el = rowEls.get(a.id);
+    if (!el) {
+      el = document.createElement("div");
+      el.className = "row";
+      el.innerHTML = `<span class="sw"></span><span class="id"></span><span class="role"></span>
+        <span class="tries"></span><span class="score"><span class="bar"><i></i></span><span class="num"></span></span>
+        <button>Kill</button>`;
+      el.querySelector(".sw").style.background = agentColour(a.id);
+      el.querySelector(".id").textContent = a.id;
+      el.querySelector("button").onclick = () => send({ cmd: "die", id: a.id });
+      rows.appendChild(el);
+      rowEls.set(a.id, el);
+    }
+    el.classList.toggle("dead", !a.alive);
+    const role = el.querySelector(".role");
+    role.textContent = a.alive ? a.role : "dead";
+    if (a.alive && a.silenced) role.insertAdjacentHTML("beforeend", MUTE_SVG);
+    el.querySelector(".tries").textContent = a.tries ?? 0;
+    const r = Math.max(0, Math.min(1, a.robust ?? 0));
+    const bar = el.querySelector(".bar i");
+    bar.style.width = `${r * 100}%`;
+    bar.style.background = r >= 0.8 ? "var(--ok)" : agentColour(a.id);
+    el.querySelector(".num").textContent = fmt(a.robust, 2);
+    const btn = el.querySelector("button");
+    btn.disabled = !a.alive || ws?.readyState !== WebSocket.OPEN;
+  }
+}
+
+function renderResult(f) {
+  const r = f.phase === "done" ? f.result : null;
+  $("result").classList.toggle("show", !!r);
+  predictedMarker.visible = actualMarker.visible = !!r;
+  if (!r) return;
+  const { predicted: p, actual: a } = r;
+  $("px").textContent = fmt(p.x); $("py").textContent = fmt(p.y); $("pt").textContent = fmt(p.theta);
+  $("ax").textContent = fmt(a.x); $("ay").textContent = fmt(a.y); $("at").textContent = fmt(a.theta);
+  $("dist").textContent = fmt(Math.hypot(a.x - p.x, a.y - p.y));
+  place(predictedMarker, { ...p, z: boxZ(p) });
+  place(actualMarker, { ...a, z: boxZ(a) });
+}
+
+function renderFrame(f) {
+  // a new search (replan) starts with no best: drop old ghosts
+  const hasBest = !!f.best;
+  if ((f.phase === "searching" && prevPhase && prevPhase !== "searching") || (prevHadBest && !hasBest)) {
+    clearGhosts();
+    seenKeys = new Set();
+  }
+  prevPhase = f.phase; prevHadBest = hasBest;
+
+  if (f.pose) setBoxPose(f.pose);
+  if (f.arm) setArmAngle(f.arm.angle);
+  ingestGhosts(f.ghosts, f.phase === "searching");
+
+  const ph = $("phase");
+  ph.textContent = f.phase ?? "–";
+  ph.className = f.phase ?? "";
+  $("best").textContent = f.best ? `${fmt(f.best.robust, 2)} (${f.best.agent})` : "–";
+
+  const silenced = (f.agents ?? []).some(a => a.alive && a.silenced);
+  const sb = $("silence");
+  sb.classList.toggle("on", silenced);
+  sb.textContent = silenced ? "Silenced · unsilence" : "Silence all";
+
+  renderAgents(f.agents);
+  renderResult(f);
+  lastFrame = f;
+}
+
+$("silence").onclick = () => {
+  const silenced = (lastFrame?.agents ?? []).some(a => a.alive && a.silenced);
+  send({ cmd: silenced ? "unsilence" : "silence" });
+};
+$("replan").onclick = () => send({ cmd: "replan" });
+
+function setConnected(on) {
+  $("dot").classList.toggle("on", on);
+  $("dot").title = on ? "observer connected" : "observer disconnected, retrying";
+  $("silence").disabled = $("replan").disabled = !on;
+  if (lastFrame) renderAgents(lastFrame.agents);
+}
+
+// ---- WebSocket -------------------------------------------------------------
+function connect() {
+  ws = new WebSocket(WS_URL);
+  ws.onopen = () => setConnected(true);
+  ws.onclose = () => { setConnected(false); setTimeout(connect, 1000); };
+  ws.onmessage = ev => renderFrame(JSON.parse(ev.data));
+}
+connect();
+
+// ---- loop ------------------------------------------------------------------
+addEventListener("resize", () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+renderer.setAnimationLoop(() => {
+  updateGhosts(performance.now() / 1000);
+  controls.update();
+  renderer.render(scene, camera);
+});
+</script>
+</body>
+</html>
