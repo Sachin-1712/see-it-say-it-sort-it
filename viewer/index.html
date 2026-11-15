@@ -4,9 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Gekko</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<script>
+  // Online (default): three.js from the CDN and Google Fonts. Offline (?offline=1, or the
+  // browser reports no network): the vendored three.js copy in ./vendor/three and system fonts.
+  window.GEKKO_OFFLINE = new URLSearchParams(location.search).has("offline") || navigator.onLine === false;
+  if (!window.GEKKO_OFFLINE) document.write('<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">');
+</script>
 <style>
   :root {
     --bg: #E9EAEC; --panel: #1B1D21; --border: #2C2F36; --raised: #24272C;
@@ -133,13 +136,10 @@
   }
 </style>
 <link rel="stylesheet" href="./inventory.css">
-<script type="importmap">
-{
-  "imports": {
-    "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
-    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
-  }
-}
+<script>
+  // The import map is written before any module loads, so this choice applies to every import.
+  { const base = window.GEKKO_OFFLINE ? "./vendor/three/" : "https://cdn.jsdelivr.net/npm/three@0.170.0/";
+    document.write(`<script type="importmap">${JSON.stringify({ imports: { "three": base + "build/three.module.js", "three/addons/": base + "examples/jsm/" } })}<\/script>`); }
 </script>
 </head>
 <body>

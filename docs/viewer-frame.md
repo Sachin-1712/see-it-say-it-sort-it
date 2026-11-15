@@ -53,8 +53,13 @@ Additional viewer commands are `load_demo`, `plan_workbench` (snapshot required)
 `invalidate`, and `replay_plan`. Replaying returns a `type: plan_replay` response
 with task/version and freshly simulated step trajectories. It changes no world
 state. Existing `die`, `silence`, `unsilence`, `replan` commands retain their
-purpose but now affect genuine processes/networking. `execute` and
-`confirm_ready` return errors; no hardware driver exists in the swarm.
+purpose but now affect genuine processes/networking. `execute` is a
+human-confirmed dry run: it returns `{"type":"dry_run_command","step":1,"steps":3,
+"target":"world_box_0003","bin":"left","tilt_deg":5.5,"commands":["G 0 41","P 0 41 180 90"],
+"robust":0.8,"plan_id":...,"task_id":...,"scene_version":1,"transmitted":false,"note":...}`
+for the next step of the validated plan, or an error. `confirm_ready` returns an error.
+No hardware driver exists in the swarm. The frame's `execution` object is
+`{"enabled":false,"dry_run":true,"next_step":1|null,"steps":N,"reason":...}`.
 
 The static viewer uses scene versions, stream sequence numbers and trial
 identities to reject stale/duplicate telemetry. A new physical workbench state

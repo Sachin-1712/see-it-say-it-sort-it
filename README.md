@@ -1,9 +1,20 @@
 # GEKKO
 
-Real decentralized MuJoCo planning is available on branch `sim`.
-Run `.venv312/bin/python -m swarm.server --workers 8` and open
-`http://localhost:8081/viewer/` after starting a static server on port 8081.
-Click **Load Three-Box Demo**. See [docs/swarm.md](docs/swarm.md) for setup,
+Real decentralized MuJoCo planning. Three terminals from the repository root:
+
+```sh
+python3 -m http.server 8080 --bind 127.0.0.1                   # viewer files
+.venv312/bin/python -m swarm.server --workers 6 --demo         # agents on ws://localhost:8765
+.venv312/bin/python -m sim.server                              # manual sweeps on ws://localhost:8766
+```
+
+Open `http://localhost:8080/viewer/`. `--demo` starts planning the three-box demo at
+launch (about a minute to a validated plan); otherwise click **Load Three-Box Demo**.
+**Send to Arduino** is a human-confirmed dry run: it logs the servo commands
+(`G 0 <start>`, `P 0 <start> <end> <speed>`) and sends nothing to hardware.
+Viewer options: `?observer=ws://host:port` and `?physics=ws://host:port` change the
+server addresses; `?offline=1` uses the vendored three.js in `viewer/vendor/three`
+and system fonts (also automatic when the browser reports no network). See [docs/swarm.md](docs/swarm.md) for setup,
 architecture, controls, reliability reports and physical limitations.
 UNO Q execution is disabled at the operator's request. The old fake observer
 is a legacy development tool, not the real planning backend.

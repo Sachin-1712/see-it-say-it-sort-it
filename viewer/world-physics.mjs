@@ -1,7 +1,9 @@
 // Requests real MuJoCo rollouts; observer/hardware WebSockets are never used here.
+// ?physics=ws://host:port overrides the default MuJoCo service address.
+export const physicsUrl = () => new URLSearchParams(globalThis.location?.search ?? "").get("physics") ?? "ws://localhost:8766";
 export function simulate(request, { onProgress = () => {}, signal, WebSocketImpl = WebSocket } = {}) {
   return new Promise((resolve, reject) => {
-    const socket = new WebSocketImpl("ws://localhost:8766");
+    const socket = new WebSocketImpl(physicsUrl());
     let done = false;
     const finish = (error, result) => {
       if (done) return; done = true; clearTimeout(timeout);

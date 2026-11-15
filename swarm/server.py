@@ -1,4 +1,4 @@
-"""Real worker observer: python -m swarm.server --workers 8 --demo."""
+"""Real worker observer: python -m swarm.server --workers 6 --demo."""
 import os
 for option in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"):
     os.environ.setdefault(option, "1")
@@ -40,8 +40,11 @@ async def run(args):
                         await asyncio.to_thread(swarm.invalidate)
                     elif cmd == "replan" and swarm.task:
                         await asyncio.to_thread(swarm.start, swarm.task["snapshot"], source=swarm.source)
-                    elif cmd in ("execute", "confirm_ready"):
-                        await ws.send(json.dumps(dict(type="error",reason="Hardware execution is disabled; simulation planning only.")))
+                    elif cmd == "execute":
+                        # Human-confirmed Send: dry run only. Logs the firmware lines; nothing reaches hardware.
+                        await ws.send(json.dumps(await asyncio.to_thread(swarm.dry_run), allow_nan=False))
+                    elif cmd == "confirm_ready":
+                        await ws.send(json.dumps(dict(type="error",reason="Hardware execution is disabled; Send runs as a dry run only.")))
                     else:
                         raise ValueError("unsupported command")
                 except (ValueError, KeyError, TypeError) as error:
@@ -54,7 +57,7 @@ async def run(args):
         if args.demo:
             swarm.start(source="golden")
         async with serve(handler, "localhost", args.port, origins=[LOCAL_ORIGIN,None], max_size=2*1024*1024):
-            print(f"Real GEKKO swarm observer ws://localhost:{args.port}; {args.workers} workers; hardware disabled",flush=True)
+            print(f"Real GEKKO swarm observer ws://localhost:{args.port}; {args.workers} workers; hardware disabled (Send is a dry run)",flush=True)
             while True:
                 frame = json.dumps(swarm.frame(),allow_nan=False)
                 for ws in list(clients):
@@ -69,7 +72,7 @@ async def run(args):
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--workers",type=int,default=8)
+    parser.add_argument("--workers",type=int,default=6)
     parser.add_argument("--seed",type=int,default=2026)
     parser.add_argument("--rollouts",type=int,default=2500)
     parser.add_argument("--timeout",type=float,default=600)

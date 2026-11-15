@@ -137,3 +137,32 @@ def test_precheck_rejections_do_not_invent_mujoco_trial_counts():
     assert result['invalid'] and result['engine_ran'] is False
     assert planner.trials==0 and planner.attempts==1 and planner.precheck_rejections==1
     assert planner.latest is None
+
+
+def test_send_is_a_confirmed_dry_run_of_the_validated_plan(tmp_path):
+    """Send turns the next validated step into the PRD firmware lines, logs them and never transmits."""
+    from swarm.supervisor import Swarm
+    swarm = Swarm(workers=1, seed=1, directory=tmp_path)
+    try:
+        with pytest.raises(ValueError, match="No validated plan"):
+            swarm.dry_run()
+        assert Swarm.servo_commands(dict(sweep_start_deg=41.0, sweep_end_deg=180, speed_deg_s=90)) == ["G 0 41", "P 0 41 180 90"]
+        assert Swarm.servo_commands(dict(sweep_start_deg=132.25, sweep_end_deg=0, speed_deg_s=150)) == ["G 0 132.2", "P 0 132.2 0 150"]
+        # A plan record shaped like a worker's validated plan; evidence decides robustness.
+        actions = [dict(target=f"world_box_000{i}", tilt_deg=5.0 * i, sweep_start_deg=40, sweep_end_deg=180, speed_deg_s=90) for i in (3, 2)]
+        plan = dict(id="plan-1", actions=actions, evidence={f"e{i}": dict(success=i < 9) for i in range(10)})
+        swarm.task = dict(task_id="t", goals={a["target"]: "left" for a in actions}, snapshot={"objects": []})
+        swarm.best = ("a1", plan)
+        assert swarm.execution_state()["next_step"] == 1 and swarm.execution_state()["enabled"] is False
+        first = swarm.dry_run()
+        assert first["step"] == 1 and first["commands"] == ["G 0 40", "P 0 40 180 90"] and first["transmitted"] is False
+        assert swarm.dry_run()["step"] == 2 and swarm.execution_state()["next_step"] is None
+        with pytest.raises(ValueError, match="already been sent"):
+            swarm.dry_run()
+        logged = [json.loads(line) for line in (tmp_path / "dry-run-commands.jsonl").read_text().splitlines()]
+        assert [entry["step"] for entry in logged] == [1, 2] and all(not entry["transmitted"] for entry in logged)
+        swarm.best = ("a1", dict(plan, id="plan-2", evidence={"e": dict(success=False)}))
+        with pytest.raises(ValueError, match="below"):
+            swarm.dry_run()
+    finally:
+        swarm.close()

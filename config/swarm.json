@@ -1,8 +1,8 @@
 {
-  "workers": 8,
+  "workers": 6,
   "seed": 2026,
   "heartbeat_s": 0.5,
-  "failure_timeout_s": 2.0,
+  "failure_timeout_s": 5.0,
   "checkpoint_s": 1.0,
   "lease_s": 4.0,
   "rollout_limit": 2500,
@@ -16,5 +16,6 @@
   "max_candidates": 160,
   "max_nodes": 16,
   "simulation_only": true,
-  "calibration_verified": false
+  "calibration_verified": false,
+  "_failure_timeout_note": "5 s, not 2 s: on an 8-core laptop with 6 to 8 busy MuJoCo workers, live peers' heartbeats can fall more than 2 s behind and were wrongly declared dead (docs/REVIEW.md). Recovery after a real kill now takes about 5 s."
 }

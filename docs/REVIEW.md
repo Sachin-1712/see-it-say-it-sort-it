@@ -1,5 +1,11 @@
 # Review of the `sim` branch (Joe's simulation and swarm work)
 
+> **Update on branch `stage-fixes`:** fixes 1, 2, 4 and 5 below have been applied
+> (dry-run Send, 5 s heartbeat timeout and 6-worker default, configurable server
+> addresses with the old observer stopped, vendored three.js for offline use and
+> planning at server start with `--demo`). Fix 3 (geometry) is deliberately not
+> applied. The review itself describes `origin/sim` as it was at `98ddf8f`.
+
 Reviewed Sun 15 Nov 2026 at `origin/sim` = `98ddf8f`, checked out in a separate
 worktree. No code was changed. Every number below comes from a command run during
 this review on the MacBook Air M2 (8 cores), Python 3.12.16, MuJoCo 3.17.0,

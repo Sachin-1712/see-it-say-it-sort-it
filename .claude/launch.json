@@ -2,16 +2,43 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "fake-observer",
-      "runtimeExecutable": ".venv/bin/python",
-      "runtimeArgs": ["scripts/fake_observer.py"],
+      "name": "viewer",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8080"
+      ],
+      "port": 8080
+    },
+    {
+      "name": "swarm",
+      "runtimeExecutable": ".venv312/bin/python",
+      "runtimeArgs": [
+        "-m",
+        "swarm.server",
+        "--workers",
+        "6",
+        "--demo"
+      ],
       "port": 8765
     },
     {
-      "name": "viewer",
-      "runtimeExecutable": "python3",
-      "runtimeArgs": ["-m", "http.server", "8080"],
-      "port": 8080
+      "name": "physics",
+      "runtimeExecutable": ".venv312/bin/python",
+      "runtimeArgs": [
+        "-m",
+        "sim.server"
+      ],
+      "port": 8766
+    },
+    {
+      "name": "fake-observer",
+      "runtimeExecutable": ".venv/bin/python",
+      "runtimeArgs": [
+        "scripts/fake_observer.py"
+      ],
+      "port": 8765
     }
   ]
 }

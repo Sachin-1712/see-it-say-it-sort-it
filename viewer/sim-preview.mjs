@@ -4,6 +4,7 @@ import { assetRouter } from "./assets.mjs";
 import { toThree } from "./frame.mjs";
 import { applyJoint } from "./model-assets.mjs";
 import { workbenchState } from "./workbench-state.mjs";
+import { physicsUrl } from "./world-physics.mjs";
 
 const radians = Math.PI / 180;
 const rotationAxes = [
@@ -122,7 +123,7 @@ function animate(host, rig, models, snapshot, result, assembly) {
 }
 
 async function installPreview() {
-  const socket = new WebSocket("ws://localhost:8766");
+  const socket = new WebSocket(physicsUrl());
   const trigger = Object.assign(document.createElement("button"), { type: "button", textContent: "Simulate push" });
   const toolbar = document.querySelector("#workbench-toolbar .world-actions");
   const dialog = document.createElement("dialog");

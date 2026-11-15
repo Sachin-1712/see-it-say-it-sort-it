@@ -12,8 +12,9 @@ From the repository root with Python 3.12:
 python3.12 -m venv .venv312
 .venv312/bin/python -m pip install -r requirements-sim.txt
 .venv312/bin/python -m http.server 8081 --bind 127.0.0.1
-# Separate terminal; port 8765 must be free (stop scripts/fake_observer.py).
-.venv312/bin/python -m swarm.server --workers 8 --seed 2026
+# Separate terminal; port 8765 must be free (stop scripts/fake_observer.py), or use --port N
+# and open the viewer with ?observer=ws://localhost:N.
+.venv312/bin/python -m swarm.server --workers 6 --seed 2026 --demo
 # Optional, for the independent main-workbench manual physics controls:
 .venv312/bin/python -m sim.server
 ```
@@ -70,7 +71,8 @@ guarantee of real-world reliability or a confidence bound.
 
 `swarm/worker.py` runs each independent process plus a network thread. All peers
 know task/config snapshots and peer endpoints at bootstrap. Heartbeats are sent
-about every 500 ms and failures suspected after 2 s. Every heartbeat carries a
+about every 500 ms and failures suspected after 5 s (2 s produced false deaths of live
+peers under CPU load on an 8-core laptop; see docs/REVIEW.md). Every heartbeat carries a
 small recoverable active-job checkpoint; full knowledge is gossiped to a rotating
 fanout. Packets are compressed and fragmented below macOS's UDP datagram limit.
 This keeps bulk trajectories from overwhelming heartbeats. No required central
@@ -149,3 +151,14 @@ benchmarks (use 1 on an already busy MacBook). The quick process tests also prov
 peer silence, reconciliation, actual trajectory audit provenance, version
 rejection, one-process role capabilities, and search continuing without observer
 control pipes. No test substitutes fabricated physics outcomes.
+
+## Send to Arduino (dry run)
+
+With a validated plan at robustness ≥ 0.8, **Send to Arduino** asks the operator to
+confirm the next step (target, bag and the tilt to set by hand). On confirm the server
+turns that step into the PRD firmware lines `G 0 <start>` (park) and
+`P 0 <start> <end> <speed>` (sweep), returns them as a `dry_run_command` reply, prints
+them and appends them to `.gekko/<run>/dry-run-commands.jsonl`. Nothing is transmitted;
+there is still no serial or network driver. Each Send advances one step; a new plan
+starts again at step 1. Simulated servo angles use the PRD convention (0° right,
+180° left) but are not calibrated against the real servo.

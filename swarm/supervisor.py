@@ -45,6 +45,7 @@ class Swarm:
         self.verification_trials=0
         self.killed = set()
         self.silenced = False
+        self.dry_run_plan, self.dry_run_step = None, 0
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 8 * 1024 * 1024)
         self.socket.bind(("127.0.0.1", 0))
@@ -67,6 +68,7 @@ class Swarm:
         self.killed = set()
         self.lifecycle_events=[]
         self.silenced = False
+        self.dry_run_plan, self.dry_run_step = None, 0
         self.started = time.monotonic()
         ids = [f"a{i + 1}" for i in range(self.settings["workers"])]
         reservations = []
@@ -200,7 +202,49 @@ class Swarm:
                     metrics=dict(trials=sum(a["tries"] for a in agents), precheck_rejections=sum(a["precheck_rejections"] for a in agents), successes=sum(a["successes"] for a in agents), plan_trials=sum(a["plan_trials"] for a in agents),
                                  verification_trials=self.verification_trials, active=len(alive), elapsed_s=round(time.monotonic()-self.started,2) if self.task else 0),
                     failure="Budget exhausted without a validated plan" if phase=="failed" else None,
-                    execution=dict(enabled=False, reason="UNO Q calibration and physical execution deferred by operator"))
+                    execution=self.execution_state())
+
+    def execution_state(self):
+        steps = len(self.best[1]["actions"]) if self.best else 0
+        step = self.dry_run_step if self.best and self.dry_run_plan == self.best[1].get("id") else 0
+        return dict(enabled=False, dry_run=True, next_step=step + 1 if step < steps else None, steps=steps,
+                    reason="Dry run: Send logs the servo commands; nothing reaches hardware. UNO Q execution deferred by operator")
+
+    @staticmethod
+    def servo_commands(action, arm=0):
+        """PRD section 6.7 firmware lines: park at the start angle, then one slow sweep."""
+        number = lambda value: f"{round(float(value), 1):g}"
+        start, end, speed = (number(action[key]) for key in ("sweep_start_deg", "sweep_end_deg", "speed_deg_s"))
+        return [f"G {arm} {start}", f"P {arm} {start} {end} {speed}"]
+
+    @synchronized
+    def dry_run(self):
+        """Human-confirmed Send, dry run: the next step of the validated plan becomes the
+        firmware lines it would send. They are logged and returned, never transmitted."""
+        if not self.task or not self.best:
+            raise ValueError("No validated plan to send yet")
+        _, plan = self.best
+        score = evidence_score(plan)
+        if score < self.settings["robust_threshold"]:
+            raise ValueError(f"Plan robustness {score:.2f} is below {self.settings['robust_threshold']}")
+        if self.dry_run_plan != plan.get("id"):
+            self.dry_run_plan, self.dry_run_step = plan.get("id"), 0
+        actions = plan["actions"]
+        if self.dry_run_step >= len(actions):
+            raise ValueError("Every step of this plan has already been sent (dry run). Replan for the next parcels.")
+        action = actions[self.dry_run_step]
+        self.dry_run_step += 1
+        record = dict(type="dry_run_command", step=self.dry_run_step, steps=len(actions), target=action["target"],
+                      bin=self.task["goals"][action["target"]], tilt_deg=action["tilt_deg"], commands=self.servo_commands(action),
+                      robust=score, plan_id=plan.get("id"), task_id=self.task["task_id"], scene_version=self.version,
+                      transmitted=False, note="Dry run: nothing was sent to hardware. Set the tilt by hand before the sweep.")
+        with (self.directory / "dry-run-commands.jsonl").open("a") as log:
+            log.write(json.dumps({"timestamp": time.time(), **record}) + "\n")
+        self.add_event(dict(type="dry_run_command", step=record["step"], steps=record["steps"], target=record["target"],
+                            commands=record["commands"], tilt_deg=record["tilt_deg"]))
+        print(f"DRY RUN step {record['step']}/{record['steps']} {record['target']} -> {record['bin']} bag: "
+              f"set tilt {record['tilt_deg']}° by hand, then {' ; '.join(record['commands'])} (not transmitted)", flush=True)
+        return record
 
     @synchronized
     def replay(self):

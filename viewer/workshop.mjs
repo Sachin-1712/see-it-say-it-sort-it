@@ -15,7 +15,8 @@ import { LineMaterial } from "three/addons/lines/LineMaterial.js";
 import { LineSegments2 } from "three/addons/lines/LineSegments2.js";
 import { LineSegmentsGeometry } from "three/addons/lines/LineSegmentsGeometry.js";
 
-const WS_URL = "ws://localhost:8765";
+// Observer address: ?observer=ws://host:port overrides the default (a busy port is not fatal on stage).
+const WS_URL = new URLSearchParams(location.search).get("observer") ?? "ws://localhost:8765";
 const DEG = Math.PI / 180;
 const EXECUTE_MIN = 0.8;
 const C = { accent: 0xF5C518, success: 0x3DDC84, bg: 0xEAEAEA };
@@ -582,9 +583,18 @@ function renderSend(f) {
   const b = $("send");
   const robust = f?.best?.robust ?? 0;
   const armed = connected() && robust >= EXECUTE_MIN && ["searching", "ready"].includes(f?.phase);
-  b.disabled = f?.protocol === "gekko-swarm-v1" || !armed;
+  if (f?.protocol === "gekko-swarm-v1") {
+    // Human-confirmed Send, dry run: the server logs the servo commands; nothing reaches hardware.
+    const ex = f.execution ?? {}, next = ex.next_step;
+    const ready = connected() && !!f.best && robust >= EXECUTE_MIN && ex.dry_run && next != null;
+    b.disabled = !ready; b.classList.toggle("armed", ready);
+    b.textContent = ready ? `Send to Arduino · dry run (step ${next} of ${ex.steps})` :
+                    f.best && ex.steps && next == null ? "All steps sent · dry run" : "Waiting for a validated plan";
+    return;
+  }
+  b.disabled = !armed;
   b.classList.toggle("armed", armed);
-  b.textContent = f?.protocol === "gekko-swarm-v1" ? "Hardware disabled · simulation only" : f?.phase === "executing" ? "Pushing..." : armed ? "Send to Arduino" :
+  b.textContent = f?.phase === "executing" ? "Pushing..." : armed ? "Send to Arduino" :
                   f?.phase === "done" ? "Pushed · Replan for the next parcel" : "Waiting for a plan above 80%";
 }
 
@@ -627,6 +637,10 @@ function renderFrame(f) {
     return;
   }
   if(f.type === "error"){$("swarm-status").textContent=f.reason;return;}
+  if(f.type === "dry_run_command"){
+    const text=`Dry run step ${f.step} of ${f.steps}: ${f.target} → ${f.bin} bag. Set tilt ${f.tilt_deg}° by hand, then ${f.commands.join(" · ")} (logged, not sent to hardware).`;
+    $("swarm-status").textContent=text; $("world-message").textContent=text; return;
+  }
   if(f.protocol === "gekko-swarm-v1"){renderSwarmFrame(f);return;}
   if(!new URLSearchParams(location.search).has("legacyObserver")){$("swarm-status").textContent="No simulation data · legacy fake observer ignored. Start python -m swarm.server.";return;}
   const hasBest = !!f.best;
@@ -653,7 +667,16 @@ $("silence").onclick = () => {
   send({ cmd: silenced ? "unsilence" : "silence" });
 };
 $("replan").onclick = () => send({ cmd: "replan" });
-$("send").onclick = () => {if(lastFrame?.protocol!=="gekko-swarm-v1")send({cmd:"execute"});};
+$("send").onclick = () => {
+  const f = lastFrame;
+  if (f?.protocol !== "gekko-swarm-v1") { send({ cmd: "execute" }); return; }
+  const step = f.best?.plan?.actions?.[(f.execution?.next_step ?? 1) - 1];
+  if (!step) return;
+  const name = f.task?.snapshot?.objects?.find(o => o.instanceId === step.target)?.name ?? step.target;
+  const ok = confirm(`Send step ${f.execution.next_step} of ${f.execution.steps}: ${name} → ${f.task?.goals?.[step.target] ?? "?"} bag?\n\n` +
+    `Set the tilt to ${step.tilt_deg}° by hand first.\nDRY RUN: the servo commands are logged on the server, not sent to the Arduino.`);
+  if (ok) send({ cmd: "execute" });
+};
 $("swarm-demo").onclick=()=>send({cmd:"load_demo"});
 $("swarm-plan").onclick=()=>{loadedSwarmTask="workbench";send({cmd:"plan_workbench",snapshot:workbenchState.snapshot()});selectTab("agents");$("observer-overlay").checked=true;};
 $("swarm-isolate").onchange=()=>{selectedAgent=$("swarm-isolate").value||null;swarmOverlay.selected=selectedAgent;};
