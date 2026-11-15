@@ -136,3 +136,7 @@
 /* Plan summary: heading on its own line, actions in a row below (no wrapped text under buttons). */
 #swarm-plan-details > strong { display: block; margin-bottom: 8px; line-height: 1.35; }
 #swarm-plan-details > button { margin: 0 8px 8px 0; vertical-align: top; }
+
+/* Start agents: the main call to action once objects are on the bench. */
+#swarm-plan.primary:disabled, #swarm-start-tab:disabled { background: var(--raised); color: var(--dim); }
+#swarm-start-tab { width: 100%; min-height: 40px; margin: 10px 0 4px; }

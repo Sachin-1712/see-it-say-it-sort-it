@@ -1,7 +1,8 @@
 import * as THREE from "three";
 import { MeshSurfaceSampler } from "three/addons/math/MeshSurfaceSampler.js";
 import { sampleModelSurface } from "./surface-points.mjs";
-export const MATERIALIZATION_DURATION_MS = 1200;
+// 2.2 s: slow enough to see the photo dissolve and the points settle onto the model.
+export const MATERIALIZATION_DURATION_MS = 2200;
 
 // A contained photo -> surface-particle -> opaque-model transition, never reconstruction.
 export class Materializer {

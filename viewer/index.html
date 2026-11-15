@@ -159,7 +159,7 @@
 <main id="scene" aria-label="Interactive workbench"></main>
 <div id="workbench-toolbar" class="panel">
   <div><b>Workbench</b><span id="world-count">0 objects · Visual placement</span></div>
-  <div class="world-actions"><button id="world-reset-view" type="button">Reset view</button><button id="swarm-demo" type="button">Load Three-Box Demo</button><button id="swarm-plan" type="button">Plan workbench</button><button id="world-clear" type="button">Clear workbench</button></div>
+  <div class="world-actions"><button id="world-reset-view" type="button">Reset view</button><button id="swarm-demo" type="button">Load Three-Box Demo</button><button id="swarm-plan" type="button" class="primary" title="Place the sweeper and at least one box first">▶ Start agents</button><button id="world-clear" type="button">Clear workbench</button></div>
   <label class="observer-toggle"><input id="observer-overlay" type="checkbox"> Show observer rehearsals</label>
   <label class="sr-only" for="world-selection">Select placed object</label><select id="world-selection" aria-label="Select placed object"><option value="">No object selected</option></select>
   <p id="world-message" role="status">Capture an object, then click its inventory card to place it.</p>
@@ -200,6 +200,7 @@
         <p class="inventory-note">Click a captured object to place it on the workbench. Box clicks extend the stack. Photos and placement stay in this tab only.</p>
       </div>
       <div class="view" id="view-agents" role="tabpanel" aria-labelledby="tab-agents" hidden><div id="swarm-status" role="status">No simulation data</div>
+        <button id="swarm-start-tab" type="button" class="primary" hidden>▶ Start agents on my workbench</button>
         <label for="swarm-isolate">Show agent</label><select id="swarm-isolate"><option value="">All agents</option></select>
         <div id="rows"></div><div id="swarm-activity" aria-label="Agent activity"></div>
         <div id="swarm-plan-details"></div></div>

@@ -187,7 +187,7 @@ measurement provenance and joint data separate from visual meshes.
 Confirmation first preserves the real photo and identity. In the inventory's
 preview canvas, the photograph dissolves in small tiles while **1,800 grey/white
 points** drift and converge onto area-weighted samples of the actual model's mesh
-surfaces. A shader updates a progress uniform over **1,200 ms**; target points are
+surfaces. A shader updates a progress uniform over **2,200 ms**; target points are
 computed once. The completed opaque mesh is revealed as the particles fade.
 Both saved and approximate models use this same path. It visually connects the
 photo and its representation; it does not claim photographic reconstruction.

@@ -75,18 +75,18 @@ test("repeated sweeper requests select the existing root instead of loading anot
   assert.equal(app.document.getElementById("world-tilt-panel").hidden, false);
 });
 
-test("materialization releases temporary resources and reveals the opaque model after 1200 ms", async t => {
+test("materialization releases temporary resources and reveals the opaque model at the end of its duration", async t => {
   let loads = 0; const textures = [];
   const app = await harness(t, { three: { TextureLoader: class { async loadAsync() { loads++; const texture = new THREE.Texture({ width: 640, height: 480 }); textures.push(texture); return texture; } } } });
-  const { Materializer } = await app.evaluate("materialization.mjs");
+  const { Materializer, MATERIALIZATION_DURATION_MS: duration } = await app.evaluate("materialization.mjs");
   const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(35, 1.5, .1, 1000); camera.position.set(80, 60, 100); camera.lookAt(0, 10, 0);
   const root = boxInstance().root; scene.add(root);
   const effect = new Materializer(scene, camera, () => {});
   const finished = effect.play(root, "blob:actual-captured-photo"); await new Promise(resolve => setImmediate(resolve));
   assert.equal(loads, 1); assert.equal(root.visible, false); assert.equal(scene.children.length, 3);
   let disposed = false; textures[0].addEventListener("dispose", () => { disposed = true; });
-  app.tick(600); assert.equal(root.visible, false); assert.ok(effect.resources);
-  app.tick(1200); await finished;
+  app.tick(duration / 2); assert.equal(root.visible, false); assert.ok(effect.resources);
+  app.tick(duration); await finished;
   assert.equal(root.visible, true); assert.equal(scene.children.length, 1); assert.equal(effect.resources, null); assert.equal(disposed, true); assert.equal(app.frames.size, 0);
   assert.equal(root.children[0].material.transparent, false);
 });

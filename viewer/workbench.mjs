@@ -103,7 +103,10 @@ export class Workbench {
     this.instances.set(item.instanceId, instance); this.scene.add(instance.root);
     instance.root.updateMatrixWorld(true);
     this.onBoundsChanged();
-    $("world-message").textContent = record.type === "box" ? `${state.count(record.id)} boxes stacked. Click Box to add another.` : `${record.name} placed. ${record.type === "sweeper" ? "Select it to adjust the tilt." : "Shape approximation."}`;
+    const placed = state.list(), ready = placed.some(i => i.type === "sweeper") && placed.some(i => i.type === "box");
+    const next = ready ? " Press ▶ Start agents to plan it." : record.type === "box" ? " Place the sweeper too." : " Place at least one box too.";
+    $("world-message").textContent = (record.type === "box" ? `${state.count(record.id)} boxes stacked. Click Box to add another.` :
+      `${record.name} placed.${record.type === "sweeper" ? "" : " Shape approximation."}`) + next;
   }
   synchronise() {
     const items = state.list(); this.items = items; const ids = new Set(items.map(item => item.instanceId));

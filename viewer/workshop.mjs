@@ -549,6 +549,14 @@ function renderOutcomes(f) {
 }
 
 const itemRows = new Map();
+// A readable name for a planned object. Hand-placed boxes all share the name "Box", so
+// repeated names get their stack position (Box 1 is the bottom), matching the workbench list.
+function objectLabel(id, frame = lastFrame) {
+  const objects = frame?.task?.snapshot?.objects ?? [], o = objects.find(x => x.instanceId === id);
+  if (!o?.name) return id;
+  const repeated = objects.filter(x => x.name === o.name).length > 1;
+  return repeated && Number.isFinite(o.stackIndex) ? `${o.name} ${o.stackIndex + 1}` : o.name;
+}
 function renderItems(items = [], frame = lastFrame) {
   const ids = new Set(items.map(i => i.id));
   for (const [id, el] of itemRows) if (!ids.has(id)) { el.remove(); itemRows.delete(id); }
@@ -562,8 +570,8 @@ function renderItems(items = [], frame = lastFrame) {
       itemRows.set(it.id, el);
     }
     // Swarm IDs are long (world_box_0001); show the object's name and keep the ID as a tooltip.
-    const label = el.querySelector(".id"), name = frame?.task?.snapshot?.objects?.find(o => o.instanceId === it.id)?.name;
-    label.textContent = name ?? it.id; label.title = it.id;
+    const label = el.querySelector(".id");
+    label.textContent = objectLabel(it.id, frame); label.title = it.id;
     el.querySelector(".sw").style.background = tagColour(it.color);
     el.querySelector(".sw").title = it.color ?? "";
     const route = el.querySelector(".route");
@@ -607,15 +615,34 @@ function renderSend(f) {
                   f?.phase === "done" ? "Pushed · Replan for the next parcel" : "Waiting for a plan above 80%";
 }
 
+// The "Show agent" list. Frames arrive 4 times a second; replacing a native <select>'s
+// options while its popup is open leaves the dropdown stuck over the page. So: never touch
+// it while it is focused/open, update labels in place, and only add or remove options when
+// the set of agents changes.
+function syncAgentSelect(agents) {
+  const select = $("swarm-isolate");
+  if (document.activeElement === select) return;
+  const wanted = ["", ...agents.map(a => a.id)];
+  const have = [...select.options].map(o => o.value);
+  if (wanted.join("|") !== have.join("|")) {
+    const prior = select.value;
+    select.replaceChildren(...wanted.map(id => Object.assign(document.createElement("option"), { value: id })));
+    select.value = wanted.includes(prior) ? prior : "";
+  }
+  select.options[0].textContent = "All agents";
+  agents.forEach((a, i) => {
+    const text = `${a.id.toUpperCase()} · ${a.role} · ${a.status}`;
+    if (select.options[i + 1].textContent !== text) select.options[i + 1].textContent = text;
+  });
+}
+
 function renderSwarmFrame(f) {
   if(!swarmFrames.accept(f))return;
   renderTop(f);renderAgents(f.agents);renderItems(f.items, f);renderSend(f);lastFrame=f;
-  $("swarm-demo").disabled=$("swarm-plan").disabled=!connected();
+  $("swarm-demo").disabled=!connected(); updateStartAgents(f);
   const metrics=f.metrics??{};
-  $("swarm-status").textContent=f.task?`${metrics.active??0} real processes · ${metrics.trials??0} MuJoCo trials · ${metrics.plan_trials??0} plan trials · scene ${f.task.scene_version} · ${f.task.task_id} · ${metrics.elapsed_s}s${f.agents.some(a=>a.silenced)?" · PEER NETWORK OFF: local checkpoints":""}${f.failure?` · ${f.failure}`:""}`:"No simulation data · load the three-box demo or plan your workbench.";
-  const select=$("swarm-isolate"), prior=select.value;
-  select.replaceChildren(Object.assign(document.createElement("option"),{value:"",textContent:"All agents"}),...(f.agents??[]).map(a=>Object.assign(document.createElement("option"),{value:a.id,textContent:`${a.id.toUpperCase()} · ${a.role} · ${a.status}`})));
-  select.value=prior;
+  $("swarm-status").textContent=f.task?`${metrics.active??0} real processes · ${metrics.trials??0} MuJoCo trials · ${metrics.plan_trials??0} plan trials · scene ${f.task.scene_version} · ${f.task.task_id} · ${metrics.elapsed_s}s${f.agents.some(a=>a.silenced)?" · PEER NETWORK OFF: local checkpoints":""}${f.failure?` · ${f.failure}`:""}`:"No simulation running · place the sweeper and boxes, then press ▶ Start agents (or Load Three-Box Demo).";
+  syncAgentSelect(f.agents??[]);
   $("m-attempts").textContent=(metrics.trials??0).toLocaleString();$("m-success").textContent=(metrics.successes??0).toLocaleString();$("m-best").textContent=pct(f.best?.robust);
   const feed=$("swarm-activity"),activity=(f.agents??[]).filter(a=>a.alive&&a.latest).map(a=>({agent:a.id,timestamp:a.latest.timestamp,type:a.latest.role,detail:`${a.latest.action.target} · tilt ${a.latest.action.tilt_deg}° · trial #${a.latest.trial_id.split(":").at(-1)} · score ${a.latest.score}`}));
   feed.replaceChildren(...[...(f.events??[]),...activity].sort((a,b)=>b.timestamp-a.timestamp).slice(0,20).map(event=>Object.assign(document.createElement("div"),{textContent:`${new Date(event.timestamp*1000).toLocaleTimeString()} · ${(event.agent??"swarm").toUpperCase()} · ${event.type.replaceAll("_"," ")}${event.detail?` · ${event.detail}`:""}${event.role?` → ${event.role}`:""}${event.failed_agent?` ${event.failed_agent.toUpperCase()}`:""}${event.checkpoint_id?` · ${event.checkpoint_id} (${event.recovered_trials??"shared"} trials)`:""}`})));
@@ -624,7 +651,7 @@ function renderSwarmFrame(f) {
   if(f.best?.plan){
     panel.appendChild(Object.assign(document.createElement("strong"),{textContent:`Validated complete simulation plan · ${pct(f.best.robust)} (${Object.keys(f.best.plan.evidence).length} independent trials)`}));
     const list=document.createElement("ol");
-    for(const step of f.best.plan.actions)list.appendChild(Object.assign(document.createElement("li"),{textContent:`${f.task.snapshot.objects.find(o=>o.instanceId===step.target)?.name??step.target}: manual tilt ${step.tilt_deg}° → ${step.direction.toUpperCase()} · predicted ${f.task.goals[step.target]} bag. Simulation angles/timing are uncalibrated.`}));
+    for(const step of f.best.plan.actions)list.appendChild(Object.assign(document.createElement("li"),{textContent:`${objectLabel(step.target,f)}: manual tilt ${step.tilt_deg}° → ${step.direction.toUpperCase()} · predicted ${f.task.goals[step.target]} bag. Simulation angles/timing are uncalibrated.`}));
     const replay=Object.assign(document.createElement("button"),{type:"button",textContent:"Preview validated sequence"});replay.onclick=()=>send({cmd:"replay_plan"});
     const back=Object.assign(document.createElement("button"),{type:"button",textContent:"Back to agent trials"});back.onclick=()=>swarmOverlay.stopSequence();
     panel.append(replay,back);
@@ -681,23 +708,37 @@ $("send").onclick = () => {
   if (f?.protocol !== "gekko-swarm-v1") { send({ cmd: "execute" }); return; }
   const step = f.best?.plan?.actions?.[(f.execution?.next_step ?? 1) - 1];
   if (!step) return;
-  const name = f.task?.snapshot?.objects?.find(o => o.instanceId === step.target)?.name ?? step.target;
+  const name = objectLabel(step.target, f);
   const ok = confirm(`Send step ${f.execution.next_step} of ${f.execution.steps}: ${name} → ${f.task?.goals?.[step.target] ?? "?"} bag?\n\n` +
     `Set the tilt to ${step.tilt_deg}° by hand first.\nDRY RUN: the servo commands are logged on the server, not sent to the Arduino.`);
   if (ok) send({ cmd: "execute" });
 };
 $("swarm-demo").onclick=()=>send({cmd:"load_demo"});
+// "Start agents": plan whatever is placed on the bench (the sweeper plus at least one box).
+function benchReady() {
+  const objects = workbenchState.snapshot().objects;
+  return objects.some(o => o.type === "sweeper") && objects.some(o => o.type === "box");
+}
+function updateStartAgents(f = lastFrame) {
+  const ready = connected() && benchReady();
+  const why = !connected() ? "Start the agents server: .venv312/bin/python -m swarm.server" :
+              !benchReady() ? "Place the sweeper and at least one box first" : "Plan the placed objects with independent MuJoCo agents";
+  for (const id of ["swarm-plan", "swarm-start-tab"]) { $(id).disabled = !ready; $(id).title = why; }
+  // In the Agents tab, offer it while nothing is running for this workbench.
+  $("swarm-start-tab").hidden = !!(f?.task && f.phase !== "failed");
+}
+$("swarm-start-tab").onclick = () => $("swarm-plan").click();
 $("swarm-plan").onclick=()=>{
   const unassigned=workbenchState.snapshot().objects.filter(o=>o.type==="box"&&!o.destination);
   if(unassigned.length){$("world-message").textContent=`${unassigned.length} placed box${unassigned.length>1?"es have":" has"} no bag (${[...new Set(unassigned.map(o=>o.color??"no colour"))].join(", ")}). Only red → left and blue → right can be sorted. Change the routing colour in Inventory, then Clear workbench and place again.`;return;}
   loadedSwarmTask="workbench";send({cmd:"plan_workbench",snapshot:workbenchState.snapshot()});selectTab("agents");$("observer-overlay").checked=true;};
-$("swarm-isolate").onchange=()=>{selectedAgent=$("swarm-isolate").value||null;swarmOverlay.selected=selectedAgent;};
+$("swarm-isolate").onchange=()=>{selectedAgent=$("swarm-isolate").value||null;swarmOverlay.selected=selectedAgent;$("swarm-isolate").blur();};
 
 function setConnected(on) {
   swarmOverlay.connected=on;
   $("conn").classList.toggle("on", on);
   $("conn").title = on ? "observer connected" : "observer offline, retrying";
-  $("swarm-demo").disabled=$("swarm-plan").disabled=!on;
+  $("swarm-demo").disabled=!on; updateStartAgents(on ? lastFrame : null);
   if(!on)$("swarm-status").textContent="Observer disconnected · workers may continue independently.";
   renderTop(on ? lastFrame : null);
   renderSend(on ? lastFrame : null);
@@ -723,6 +764,7 @@ workbench = new Workbench({ scene, camera, canvas: renderer.domElement, toThree:
   onBoundsChanged: () => { fitCamera(); refreshDebug(); } });
 lastWorldSignature=worldSignature(workbenchState.snapshot());
 document.addEventListener("workbenchchange",event=>{
+  updateStartAgents();
   if(loadingSwarmScene)return;
   const signature=worldSignature(event.detail);
   if(lastWorldSignature!==null && signature!==lastWorldSignature && lastFrame?.task)send({cmd:"invalidate"});
