@@ -23,7 +23,7 @@ const EXECUTE_MIN = 0.8;
 const C = { accent: 0xF5C518, success: 0x3DDC84, bg: 0x10131A };
 // Dark, minimal room with a little colour: blue-slate walls, a warm key light and a cool
 // rim light. The bench stays light so the boxes and sweeper read clearly against it.
-const ROOM_COLOURS = { floor: 0x161A22, floorGrid: 0x3A4253, back: 0x1E2330, side: 0x1B202B, wallGrid: 0x525C72 };
+const ROOM_COLOURS = { floor: 0x161A22, floorGrid: 0x3A4253, back: 0x1E2330, wallGrid: 0x525C72 };
 
 // Pose in the z-up table frame -> three.js Vector3 and yaw. The axis swap itself is
 // toThree in frame.mjs, the one conversion function.
@@ -122,10 +122,10 @@ function addLights(target, withShadow) {
 addLights(scene, true);
 
 
-// ---- workshop room: floor plus back and right walls, white gridlines at 60% ----
+// ---- workshop room: continuous floor and back wall, open on the right --------
 const sceneMaxX = Math.max(table.width, ...Object.values(bags).map(b => b.x + b.width / 2));
 const sceneMaxY = Math.max(table.depth, ...Object.values(bags).map(b => b.y + b.depth / 2));
-const ROOM = { left: -800, right: sceneMaxX + 80, front: -700, back: sceneMaxY + 70, height: 520, step: 40 };
+const ROOM = { left: -800, right: sceneMaxX + span * 10, front: -700, back: sceneMaxY + 70, height: 520, step: 40 };
 function grid(w, h, step, color, opacity = 0.9) {   // in the local XY plane from (0,0) to (w,h)
   const pts = [];
   for (let x = 0; x <= w + 1e-6; x += step) pts.push(x, 0, 0, x, h, 0);
@@ -154,15 +154,6 @@ function grid(w, h, step, color, opacity = 0.9) {   // in the local XY plane fro
   bg.position.copy(scenePose({ x: ROOM.left, y: ROOM.back - 0.3 }).pos);
   scene.add(bg);
 
-  const right = new THREE.Mesh(new THREE.PlaneGeometry(fd, ROOM.height), matte(ROOM_COLOURS.side));
-  right.rotation.y = -Math.PI / 2;                       // faces left (towards the camera)
-  right.position.copy(scenePose({ x: ROOM.right, y: ROOM.front + fd / 2, z: ROOM.height / 2 }).pos);
-  right.receiveShadow = true;
-  scene.add(right);
-  const rg = grid(fd, ROOM.height, ROOM.step, ROOM_COLOURS.wallGrid);
-  rg.rotation.y = -Math.PI / 2;                          // local +X -> table -y
-  rg.position.copy(scenePose({ x: ROOM.right - 0.3, y: ROOM.back }).pos);
-  scene.add(rg);
 }
 
 // ---- bench: a slab (table.thickness) on a support, top at table.height ---------
@@ -176,22 +167,6 @@ if (table.height - slabT > 0) {
   supportMesh = block(table.width - 2 * inset, table.depth - 2 * inset, supportH, matte(0x3A404D));
   place(supportMesh, { x: table.width / 2, y: table.depth / 2, z: supportH / 2 });
   scene.add(supportMesh);
-}
-
-// ---- zones: thin outlines flat on the table, no labels, no fill --------------
-const TOP = table.height + 0.25;
-const zoneGroups = {};
-for (const [name, z] of Object.entries(zones)) {
-  const t = 1.2, ink = new THREE.MeshBasicMaterial({ color: 0x4C4C4C });
-  const group = new THREE.Group(); zoneGroups[name] = group; scene.add(group);
-  // Lines sit just inside the zone edge, so the outline's outer size is exactly the zone size.
-  for (const [w, d, dx, dy] of [[z.width, t, 0, z.depth / 2 - t / 2], [z.width, t, 0, -z.depth / 2 + t / 2],
-                                [t, z.depth, z.width / 2 - t / 2, 0], [t, z.depth, -z.width / 2 + t / 2, 0]]) {
-    const s = new THREE.Mesh(new THREE.PlaneGeometry(w, d), ink);
-    s.rotation.x = -Math.PI / 2;
-    s.position.copy(scenePose({ x: z.x + dx, y: z.y + dy, z: TOP }).pos);
-    group.add(s);
-  }
 }
 
 // ---- bags: open-top bins; the rim is the colour of the parcels each accepts,
@@ -398,22 +373,21 @@ const tablePoints = [], environmentPoints = [];
   for (const b of Object.values(bags))
     for (const sx of [-1, 1]) for (const sy of [-1, 1]) for (const z of [0, b.height])
       add(environmentPoints, b.x + sx * b.width / 2, b.y + sy * b.depth / 2, z);
-
+  // Reserve fixed headroom for the rig and stack, including before they are placed.
+  for(const x of [0,table.width])for(const y of [0,table.depth])add(environmentPoints,x,y,table.height+span*.45);
 }
 
 function fitCamera() {
   const w = host.clientWidth, h = host.clientHeight;
   if (!w || !h) return;
   const allPoints = [...environmentPoints];
-  const bounds = workbench?.bounds();
-  if (bounds && !bounds.isEmpty()) for (const x of [bounds.min.x, bounds.max.x]) for (const y of [bounds.min.y, bounds.max.y]) for (const z of [bounds.min.z, bounds.max.z]) allPoints.push(new THREE.Vector3(x,y,z));
   camera.aspect = w / h;
   camera.updateProjectionMatrix();
   const fwd = VIEW_DIR.clone().negate();
   const right = new THREE.Vector3().crossVectors(fwd, new THREE.Vector3(0, 1, 0)).normalize();
   const up = new THREE.Vector3().crossVectors(right, fwd);
   const fy = (h / 2) / Math.tan(camera.fov * DEG / 2);           // focal length in px
-  const target = new THREE.Box3().setFromPoints(allPoints).getCenter(new THREE.Vector3());
+  const target = centre.clone(); // Keep the tabletop centre at the screen centre.
 
   const extent = (pts, d) => {
     const eye = target.clone().addScaledVector(VIEW_DIR, d);
@@ -428,16 +402,12 @@ function fitCamera() {
   const ok = d => {
     const t = extent(tablePoints, d), a = extent(allPoints, d);
     return t.x1 - t.x0 <= TABLE_SHARE * w &&
-           a.x1 - a.x0 <= (1 - 2 * EDGE) * w && a.y1 - a.y0 <= (1 - 2 * EDGE) * h;
+           Math.max(Math.abs(a.x0),Math.abs(a.x1)) <= (.5-EDGE)*w &&
+           Math.max(Math.abs(a.y0),Math.abs(a.y1)) <= (.5-EDGE)*h;
   };
-  let d = 0;
-  for (let pass = 0; pass < 3; pass++) {
-    let lo = 50, hi = 60000;
-    for (let i = 0; i < 40; i++) { const mid = (lo + hi) / 2; ok(mid) ? (hi = mid) : (lo = mid); }
-    d = hi;
-    const a = extent(allPoints, d);                                  // centre the content
-    target.addScaledVector(right, ((a.x0 + a.x1) / 2) * d / fy).addScaledVector(up, ((a.y0 + a.y1) / 2) * d / fy);
-  }
+  let lo = 50, hi = 60000;
+  for (let i = 0; i < 40; i++) { const mid = (lo + hi) / 2; ok(mid) ? (hi = mid) : (lo = mid); }
+  const d=hi;
   camera.position.copy(target).addScaledVector(VIEW_DIR, d);
   camera.lookAt(target);
   controls.target.copy(target);
@@ -801,7 +771,8 @@ connect();
 workbench = new Workbench({ scene, camera, canvas: renderer.domElement, toThree: scenePose, tagColour, table,
   setup: { ...modelConfig.workbench, stackPositionMm: zones.pick ? { x: zones.pick.x, y: zones.pick.y } : null,
     sweeperPositionMm: sweeperPositionFromConfig(rig, modelConfig) },
-  onBoundsChanged: () => { fitCamera(); refreshDebug(); } });
+  onBoundsChanged: () => { refreshDebug(); } });
+$("world-reset-view").onclick=()=>{fitCamera();refreshDebug();};
 lastWorldSignature=worldSignature(workbenchState.snapshot());
 document.addEventListener("workbenchchange",event=>{
   updateStartAgents();
@@ -864,7 +835,6 @@ function measure(object) {
 function debugTargets() {
   const list = [["Bench top", tableMesh, "bench"], ["Bench support", supportMesh, "bench"]];
   for (const [side, g] of Object.entries(bagGroups)) list.push([`${cap(side)} bag`, g, null]);
-  for (const [name, g] of Object.entries(zoneGroups)) list.push([`${cap(name)} zone`, g, null]);
   for (const part of workbench?.debugParts() ?? []) list.push([part.name, part.object, part.group]);
   return list.filter(([, object]) => object).map(([name, object, group]) => ({ name, object, group }));
 }
