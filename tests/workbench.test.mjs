@@ -6,42 +6,52 @@ import { WorkbenchState } from "../viewer/workbench-state.mjs";
 import { AssetRouter } from "../viewer/asset-router.mjs";
 import { createPrimitiveModel } from "../viewer/primitive-models.mjs";
 import { sampleModelSurface } from "../viewer/surface-points.mjs";
+import { readFileSync } from "node:fs";
+const rig = JSON.parse(readFileSync(new URL("../config/rig.json", import.meta.url), "utf8"));
+const models = JSON.parse(readFileSync(new URL("../config/models.json", import.meta.url), "utf8"));
+const setup = { ...models.workbench, stackPositionMm: { x: rig.zones.pick.x, y: rig.zones.pick.y } };
+const configured = () => { const state = new WorkbenchState(); state.configure(rig.table, setup); return state; };
 const box = { id: "box", name: "Box", modelKey: "box", type: "box" };
-const metadata = { dimensionsMm: { width: 50, depth: 35, height: 20 }, collision: { shape: "box" } };
+const metadata = { dimensionsMm: { width: 95, depth: 70, height: 25 }, collision: { shape: "box" } };
 const sweeperMeta = { ...metadata, joints: { tilt: { restDeg: 0, limitsDeg: [-35, 35] }, servo: { restDeg: 0, limitsDeg: [0, 180] } } };
 
+test("without config the workbench refuses to place; sizes never fall back to built-in values", () => {
+  assert.throws(() => new WorkbenchState().add(box, metadata), /not configured/);
+  assert.throws(() => new WorkbenchState().configure({ height: 90 }, {}), /missing/);
+  assert.throws(() => configured().add(box, { collision: { shape: "box" } }), /dimensions/);
+});
 test("bench starts empty; three clicks produce independent IDs with exact stacked centre heights", () => {
-  const state = new WorkbenchState(); assert.equal(state.list().length, 0);
+  const state = configured(); assert.equal(state.list().length, 0);
   const placed = [1, 2, 3].map(() => state.add(box, metadata));
-  assert.deepEqual(placed.map(item => item.position.z), [50, 70, 90]);
-  assert.deepEqual(placed.map(item => item.baseZ), [40, 60, 80]);
+  assert.deepEqual(placed.map(item => item.position.z), [102.5, 127.5, 152.5]);
+  assert.deepEqual(placed.map(item => item.baseZ), [90, 115, 140]);
   assert.deepEqual(placed.map(item => item.stackIndex), [0, 1, 2]);
   assert.equal(new Set(placed.map(item => item.instanceId)).size, 3);
-  assert.ok(placed.every(item => item.position.x === 145 && item.position.y === 75));
+  assert.ok(placed.every(item => item.position.x === rig.zones.pick.x && item.position.y === rig.zones.pick.y));
   assert.equal(state.count("box"), 3); assert.equal(state.snapshot().mode, "visual-placement");
 });
 test("cumulative geometry heights support mixed heights and no three-box cap", () => {
-  const state = new WorkbenchState();
+  const state = configured();
   state.add(box, metadata); state.add(box, { ...metadata, dimensionsMm: { ...metadata.dimensionsMm, height: 30 } });
-  const third = state.add(box, metadata); assert.equal(third.baseZ, 90); assert.equal(third.position.z, 100);
+  const third = state.add(box, metadata); assert.equal(third.baseZ, 145); assert.equal(third.position.z, 157.5);
   for (let i = 0; i < 20; i++) state.add(box, metadata);
   assert.equal(state.count("box"), 23);
 });
 test("sweeper is a singleton and its two setup angles are independent and clamped", () => {
-  const state = new WorkbenchState(), record = { id: "sweeper", type: "sweeper", modelKey: "sweeper", name: "Sweeper" };
+  const state = configured(), record = { id: "sweeper", type: "sweeper", modelKey: "sweeper", name: "Sweeper" };
   const first = state.add(record, sweeperMeta); state.add(record, sweeperMeta);
   assert.equal(state.list().length, 1); state.setJoint(first.instanceId, "servo", 90); state.setJoint(first.instanceId, "tilt", 20);
   assert.equal(state.list()[0].servoDeg, 90); assert.equal(state.list()[0].tiltDeg, 20);
   state.setJoint(first.instanceId, "tilt", 100); assert.equal(state.list()[0].tiltDeg, 35);
 });
 test("clear increments the placement epoch, retains unique IDs and cannot mutate a prior scene snapshot", () => {
-  const state = new WorkbenchState(); const item = state.add(box, metadata), snapshot = state.snapshot(), epoch = state.epoch;
+  const state = configured(); const item = state.add(box, metadata), snapshot = state.snapshot(), epoch = state.epoch;
   state.clear(); assert.equal(state.list().length, 0); assert.equal(state.epoch, epoch + 1);
-  const next = state.add(box, metadata); assert.notEqual(next.instanceId, item.instanceId); assert.equal(next.baseZ, 40);
+  const next = state.add(box, metadata); assert.notEqual(next.instanceId, item.instanceId); assert.equal(next.baseZ, 90);
   assert.equal(snapshot.objects.length, 1); assert.doesNotThrow(() => JSON.stringify(snapshot));
 });
 test("placed routing and physical metadata are snapshots independent of later inventory edits", () => {
-  const state = new WorkbenchState(), captured = { ...box, color: "red", destination: "left" };
+  const state = configured(), captured = { ...box, color: "red", destination: "left" };
   state.add(captured, { ...metadata, massG: 25, friction: null, placeholderMeasurements: true });
   captured.color = "blue"; captured.destination = "right";
   assert.equal(state.list()[0].color, "red"); assert.equal(state.list()[0].destination, "left");

@@ -7,8 +7,8 @@ const $ = id => document.getElementById(id);
 // One scene controller. Observer frames never call add(), clear() or setJoint().
 export class Workbench {
   instances = new Map(); queue = Promise.resolve();
-  constructor({ scene, camera, canvas, toThree, onBoundsChanged, table, setup }) {
-    Object.assign(this, { scene, camera, canvas, toThree, onBoundsChanged });
+  constructor({ scene, camera, canvas, toThree, onBoundsChanged, table, setup, tagColour = null }) {
+    Object.assign(this, { scene, camera, canvas, toThree, onBoundsChanged, tagColour });
     state.configure(table, setup);
     this.reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
     document.addEventListener("worldplace", event => {
@@ -50,6 +50,9 @@ export class Workbench {
     instance.root.position.copy(this.toThree({ ...item.position, z: item.baseZ }).pos);
     instance.root.userData.worldInstanceId = item.instanceId;
     instance.root.traverse(node => { if (node.isMesh) node.castShadow = node.receiveShadow = true; });
+    // The box's tag keeps its routing colour; everything else on the model stays grey.
+    const tag = record.type === "box" && item.color && this.tagColour && instance.root.getObjectByName("shipping_label");
+    if (tag) { tag.material = tag.material.clone(); tag.material.color.set(this.tagColour(item.color)); }
     instance.currentTilt = item.tiltDeg; instance.currentServo = item.servoDeg;
     this.instances.set(item.instanceId, instance); this.scene.add(instance.root);
     instance.root.updateMatrixWorld(true);
@@ -84,6 +87,18 @@ export class Workbench {
         applyJoint(instance.joints[joint], instance[actual]);
       }
     }
+  }
+  // Meshes the debug overlay measures, named for the console table.
+  debugParts() {
+    const parts = [];
+    for (const item of this.items ?? []) {
+      const root = this.instances.get(item.instanceId)?.root; if (!root) continue;
+      if (item.type === "box") parts.push({ name: `Box ${item.stackIndex + 1}`, object: root.getObjectByName("parcel_body") });
+      else if (item.type === "sweeper") for (const [name, node] of [["Can", "metal_can"], ["Servo case", "servo_case"], ["Stick", "wooden_stick"]])
+        parts.push({ name, object: root.getObjectByName(node) });
+      else parts.push({ name: item.name, object: root });
+    }
+    return parts.filter(part => part.object);
   }
   bounds() {
     const bounds = new THREE.Box3();

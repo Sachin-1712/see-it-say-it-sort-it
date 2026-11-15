@@ -37,6 +37,7 @@
 #model-load-status, #model-dimensions, .model-gestures, .model-measurement-note { font-size: 11px; line-height: 1.5; margin: 8px 0 0; color: var(--dim); }
 #model-load-status { color: var(--success); }
 #model-load-status[data-error="true"] { color: var(--danger); }
+#model-load-caption { font-size: 10px; line-height: 1.4; margin: 2px 0 0; color: var(--dim); }
 #model-retry { font-size: 12px; margin-top: 9px; }
 #model-photo-row { display: flex; gap: 10px; align-items: center; margin-top: 12px; padding: 8px; background: var(--raised); border-radius: 6px; }
 #model-captured-photo { width: 64px; height: 52px; object-fit: contain; background: #131519; border-radius: 3px; }

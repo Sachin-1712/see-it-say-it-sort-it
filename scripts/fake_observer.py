@@ -41,7 +41,7 @@ TAKEOVER_SECONDS = 2.0
 PARK_SPEED = 90  # deg/s when moving to the start angle
 
 RIG = json.loads((Path(__file__).resolve().parent.parent / "config" / "rig.json").read_text())
-TABLE, ARM, ZONES, BAGS = RIG["table"], RIG["arm"], RIG["zones"], RIG["bags"]
+TABLE, ZONES, BAGS = RIG["table"], RIG["zones"], RIG["bags"]
 SIZES = {p["id"]: p for p in RIG["parcels"]}
 COLOUR_TO_BAG = RIG["colour_to_bag"]
 COLOURS = list(COLOUR_TO_BAG)

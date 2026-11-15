@@ -76,7 +76,7 @@ Only two categories load permanent GLBs:
 
 | Category / model key | Asset | Geometry source |
 | --- | --- | --- |
-| `box` | `assets/models/box.glb` | `config/rig.json` parcel p1: 50 × 35 × 20 mm |
+| `box` | `assets/models/box.glb` | `config/rig.json` parcel p1: 95 × 70 × 25 mm (baked at 50 × 35 × 20, fitted at load) |
 | `sweeper` | `assets/models/sweeper.glb` | `config/models.json` sweeper assembly |
 
 The three former box-specific files have been retired. Historical inventory IDs
@@ -127,7 +127,7 @@ bounding box marked approximate. Mass and friction are null until measured.
 
 Config and scene-state records use right-handed **millimetres, Z-up**. Blender
 constructs meshes in metres; glTF exports **Y-up**, mapping `(x,y,z)` to `(x,z,-y)`.
-The existing `toThree` function in `viewer/workshop.mjs` remains the placement pose
+`toThree` in `viewer/frame.mjs` is the one z-up to y-up conversion; `scenePose` in `viewer/workshop.mjs` wraps it for placement poses
 conversion. `ModelLibrary` scales glTF roots by 1000 and does not rotate them twice.
 Procedural approximations are already created in viewer millimetres/Y-up.
 
@@ -139,12 +139,14 @@ centreZ = baseZ + newBox.height / 2
 ```
 
 The root is placed at `baseZ`; scene metadata records the centre as `position.z`.
-With the current 40 mm workbench and 20 mm boxes, the first three centres are
-50, 70 and 90 mm in the absolute table frame (10, 30, 50 above the surface).
+With the bench top at 90 mm and 25 mm boxes, the first three centres are
+102.5, 127.5 and 152.5 mm in the absolute table frame (bottoms at 90, 115 and 140).
 Visual labels extend at most 0.015 mm above the body and are excluded from its
 collision/stacking dimensions. Placement uses asset dimensions, not photo pixels.
 
-World positions are configurable in `config/models.json` under `workbench`.
+The stack sits at the centre of `config/rig.json` `zones.pick`; the sweeper and other
+objects use positions in `config/models.json` under `workbench`. `WorkbenchState` has no
+built-in sizes or positions and refuses to place anything until configured.
 `WorkbenchState` assigns unique `world_box_####`, `world_sweeper_####` or
 `world_unknown_####` IDs. IDs do not repeat after Clear. Its snapshot is JSON-ready:
 
@@ -223,3 +225,18 @@ gravity, stability checks, arbitrary object editing or MuJoCo connection. The
 unknown placement positions are simple display slots and do not avoid overlap.
 There is no measured M2 frame-rate benchmark; particle count and work per frame
 are bounded, and the transition was visibly exercised in Chrome.
+
+## Load-time fitting to config (placeholder sizes)
+
+All sizes are placeholders marked `"measured": false`. Boxes come from
+`config/rig.json` `parcels`; the can, servo, stick and tilt from `config/models.json`.
+Blender has not been rerun: `viewer/model-fit.mjs` measures each part's mesh and
+scales it so its bounding box matches config exactly (box body, can, servo case and
+stick separately), then moves the tilt pivot, servo mount, rims and stick to their
+configured places. `assets/models/manifest.json` collision primitives and joints are
+synced to the same values and `tests/fit.test.mjs` checks they agree.
+
+Press **D** in the viewer (or open `?debug=1`) for measured bounding boxes with mm
+labels and a 100 mm scale bar. Every refresh prints a `console.table` of each
+object's measured size and centre in table-frame mm. The stick reads 120 × 3 × 10 in
+x × y × z because it stands on its 10 mm edge with 3 mm along the shaft.

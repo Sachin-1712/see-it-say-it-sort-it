@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Dry Run Viewer</title>
+<title>Gekko</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
@@ -150,7 +150,7 @@
 <header id="top">
   <div class="brand">
     <span class="conn" id="conn" title="observer offline"></span>
-    <b>Dry Run</b>
+    <b>Gekko</b>
     <span id="phase">offline</span>
   </div>
   <div id="goal"><span class="muted">Waiting for the observer</span></div>
@@ -194,7 +194,7 @@
           <div class="model-preview-heading"><div><span class="heading">Object preview</span><h2 id="model-preview-title">Your object</h2></div><button id="model-reset" type="button" disabled>Reset view</button></div>
           <label class="sr-only" for="model-select">Preview object</label><select id="model-select" aria-label="Preview object"></select>
           <div id="model-canvas" tabindex="0" role="img" aria-label="Interactive object preview. Drag to rotate; scroll or pinch to zoom."></div>
-          <p id="model-load-status" role="status"></p><button id="model-retry" type="button" hidden>Retry preview</button>
+          <p id="model-load-status" role="status"></p><p id="model-load-caption" hidden></p><button id="model-retry" type="button" hidden>Retry preview</button>
           <p class="model-gestures">Drag to rotate · Scroll or pinch to zoom</p>
           <div id="model-photo-row" hidden><img id="model-captured-photo" alt="Your captured object"><p id="model-photo-label"></p></div>
           <p id="model-dimensions"></p><button id="model-replay" type="button">Replay transition</button>

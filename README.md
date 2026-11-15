@@ -1,4 +1,4 @@
-# Dry Run
+# Gekko
 
 A DurHack camera-to-3D workbench: capture an object, confirm its identity, watch
 it materialize in inventory, then click to place it in the workshop.

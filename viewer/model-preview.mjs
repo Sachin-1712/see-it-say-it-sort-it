@@ -77,6 +77,9 @@ async function showModel(id, materialize = false) {
   $("model-dimensions").textContent = "";
   host.setAttribute("aria-label", `Interactive 3D preview of ${record.name}. Drag to rotate; scroll or pinch to zoom.`);
   status("Preparing object preview…"); updatePhoto();
+  // Honest provenance: known objects are pre-built GLBs sized from config; others are typed-in shapes.
+  $("model-load-caption").textContent = record.type === "unknown" ? "Approximate shape, dimensions you entered" : "Pre-built model, dimensions from config";
+  $("model-load-caption").hidden = false;
   try {
     initRenderer();
     if (current) scene.remove(current.root);
@@ -90,7 +93,7 @@ async function showModel(id, materialize = false) {
     host.dataset.loadedModel = record.modelKey;
     if (materialize) {
       controls.enabled = false; host.dataset.transition = "materializing";
-      status("Forming your 3D representation…");
+      status(record.type === "unknown" ? `Loading the ${record.name} approximation` : `Loading the ${record.name} model`);
       try { await materializer.play(instance.root, inventory.getPhoto(id)?.url); }
       catch { instance.root.visible = true; draw(); }
       if (token !== version) return;

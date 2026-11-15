@@ -2,93 +2,60 @@
   "schemaVersion": 1,
   "units": "millimetres, grams, degrees",
   "coordinates": "right-handed Z-up: x right, y away, z up",
-  "note": "ALL geometry is provisional. rig.json itself labels its measurements PLACEHOLDER. Replace these values with measured hardware before physics or real motion.",
+  "note": "PLACEHOLDER geometry: realistic estimates, not measured (measured:false throughout). Box sizes come from config/rig.json parcels. The GLBs in assets/models were baked at older sizes; viewer/model-fit.mjs scales their parts at load time to the sizes below. Blender has not been rerun.",
   "boxes": [
     {
       "id": "box",
       "name": "Box",
       "rigParcel": "p1",
-      "fallbackDimensionsMm": [
-        50,
-        35,
-        20
-      ],
-      "fallbackMassG": 25,
       "colour": "#969696"
     }
   ],
   "sweeper": {
     "id": "sweeper",
     "name": "Cylindrical Sweeper",
-    "note": "Every sweeper measurement, axis, pivot, rest angle and limit below is an UNMEASURED PLACEHOLDER. Default shaft is horizontal (+Y), not vertical. Verify mounted servo orientation, direction and manual tilt pivot against the rig.",
+    "note": "Every value is an UNMEASURED PLACEHOLDER. Frame: can-base centre, Z-up, +x points from the can towards the box stack.",
     "can": {
       "radiusMm": 33,
-      "heightMm": 110,
-      "massG": 55
+      "heightMm": 115,
+      "massG": 55,
+      "measured": false,
+      "_note": "diameter 66"
     },
     "assemblyTilt": {
-      "pivotMm": [
-        0,
-        0,
-        0
-      ],
-      "axisZup": [
-        1,
-        0,
-        0
-      ],
-      "limitsDeg": [
-        -35,
-        35
-      ]
+      "pivotMm": [33, 0, 0],
+      "axisZup": [0, 1, 0],
+      "limitsDeg": [-35, 35],
+      "measured": false,
+      "_note": "pivot on the bottom edge of the can on the side facing the boxes (+x). Positive tilt tips the can towards the boxes."
     },
     "servo": {
-      "pivotMm": [
-        0,
-        -8,
-        122
-      ],
-      "axisZup": [
-        0,
-        1,
-        0
-      ],
+      "pivotMm": [45, 8, 111],
+      "axisZup": [0, 1, 0],
       "mountRollDeg": 0,
-      "caseDimensionsLocalMm": [
-        23,
-        24,
-        12
-      ],
+      "caseDimensionsLocalMm": [23, 23, 12],
       "restDeg": 0,
       "direction": 1,
-      "limitsDeg": [
-        0,
-        180
-      ],
-      "massG": 9
+      "limitsDeg": [0, 180],
+      "massG": 9,
+      "measured": false,
+      "_note": "Shaft axis +Y kept from before. Shaft centre 4 mm below the can top (115 - 4 = 111). Case is 23 wide (x) x 12 along the shaft (y) x 23 tall (z); caseDimensionsLocalMm lists it in servo-local order (x, y, shaft). The case is clamped to the outside of the can wall facing the boxes (x 33.5 to 56.5, y -6 to 6) because a case centred on the can would sit inside it."
     },
     "stick": {
-      "lengthMm": 180,
-      "widthMm": 9,
+      "lengthMm": 120,
+      "widthMm": 10,
       "thicknessMm": 3,
-      "pivotFromEndMm": 8,
-      "massG": 6
+      "pivotFromEndMm": 5,
+      "massG": 2,
+      "measured": false,
+      "_note": "attached at one end to the servo horn: the horn hole is 5 mm (half the width) from the end"
     },
     "friction": null
   },
   "workbench": {
-    "stackPositionMm": {
-      "x": 145,
-      "y": 75
-    },
-    "sweeperPositionMm": {
-      "x": 52,
-      "y": 120
-    },
-    "otherPositionMm": {
-      "x": 55,
-      "y": 40
-    },
-    "note": "Visual setup positions; no collision or stability simulation. Sweeper geometry and pivots remain placeholders."
+    "sweeperPositionMm": {"x": 70, "y": 220, "measured": false, "_note": "can centre: 70 mm from the left edge, 80 mm from the back edge of the 300 mm deep bench"},
+    "otherPositionMm": {"x": 60, "y": 60},
+    "otherSpacingMm": 60,
+    "note": "The box stack is placed at the centre of rig.json zones.pick. Visual placement only: no collision or stability simulation."
   }
 }

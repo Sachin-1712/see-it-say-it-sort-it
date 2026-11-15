@@ -35,6 +35,7 @@ async function harness(t, overrides = {}) {
   return { window, document: window.document, evaluate, motion, frames, tick(milliseconds) { time = milliseconds; const callbacks = [...frames.values()]; frames.clear(); callbacks.forEach(callback => callback(time)); } };
 }
 const record = { id: "box", type: "box", name: "Box", modelKey: "box" };
+const SETUP = { stackPositionMm: { x: 230, y: 220 }, sweeperPositionMm: { x: 70, y: 220 }, otherPositionMm: { x: 60, y: 60 }, otherSpacingMm: 60 };
 function boxInstance() {
   const root = new THREE.Group();
   const mesh = new THREE.Mesh(new THREE.BoxGeometry(50, 20, 35), new THREE.MeshStandardMaterial()); mesh.position.y = 10; root.add(mesh);
@@ -50,7 +51,7 @@ test("three rapid placement clicks create three separate roots and clearing a pe
   const { workbenchState: state } = await app.evaluate("workbench-state.mjs");
   const scene = new THREE.Scene(), canvas = app.document.createElement("canvas");
   const workbench = new Workbench({ scene, camera: new THREE.PerspectiveCamera(), canvas,
-    toThree: pose => ({ pos: new THREE.Vector3(pose.x, pose.z, -pose.y) }), onBoundsChanged() {}, table: { height: 40 }, setup: {} });
+    toThree: pose => ({ pos: new THREE.Vector3(pose.x, pose.z, -pose.y) }), onBoundsChanged() {}, table: { height: 40 }, setup: SETUP });
   const place = () => app.document.dispatchEvent(new app.window.CustomEvent("worldplace", { detail: { record } }));
   place(); place(); place(); await workbench.queue;
   assert.equal(workbench.instances.size, 3);
@@ -68,7 +69,7 @@ test("repeated sweeper requests select the existing root instead of loading anot
   } });
   const { Workbench } = await app.evaluate("workbench.mjs");
   const workbench = new Workbench({ scene: new THREE.Scene(), camera: new THREE.PerspectiveCamera(), canvas: app.document.createElement("canvas"),
-    toThree: pose => ({ pos: new THREE.Vector3(pose.x, pose.z, -pose.y) }), onBoundsChanged() {}, table: { height: 40 }, setup: {} });
+    toThree: pose => ({ pos: new THREE.Vector3(pose.x, pose.z, -pose.y) }), onBoundsChanged() {}, table: { height: 40 }, setup: SETUP });
   for (let i = 0; i < 3; i++) app.document.dispatchEvent(new app.window.CustomEvent("worldplace", { detail: { record: { id: "sweeper", name: "Sweeper", type: "sweeper", modelKey: "sweeper" } } }));
   await workbench.queue; assert.equal(loads, 1); assert.equal(workbench.instances.size, 1);
   assert.equal(app.document.getElementById("world-tilt-panel").hidden, false);

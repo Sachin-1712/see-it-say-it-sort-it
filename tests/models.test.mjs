@@ -6,6 +6,7 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import validator from "gltf-validator";
 import { ModelLibrary, applyJoint, ASSET_TO_VIEWER_SCALE } from "../viewer/model-assets.mjs";
 import { OBJECT_SLOTS } from "../viewer/inventory-store.mjs";
+import { fitToConfig } from "../viewer/model-fit.mjs";
 
 const directory = new URL("../assets/models/", import.meta.url);
 const manifest = JSON.parse(await readFile(new URL("manifest.json", directory), "utf8"));
@@ -50,20 +51,17 @@ test("each inventory slot maps to a distinct permanent asset", () => {
   for (const slot of OBJECT_SLOTS) assert.ok(manifest.models[slot.modelKey]);
 });
 
-test("boxes preserve rig dimensions, metre/Y-up export and bottom-centre origins", async () => {
-  for (const [index, key] of ["box"].entries()) {
-    const asset = await parse(`${key}.glb`), body = asset.scene.getObjectByName("parcel_body");
-    const bounds = new THREE.Box3().setFromObject(body), size = bounds.getSize(new THREE.Vector3()), center = bounds.getCenter(new THREE.Vector3());
-    const dimensions = manifest.models[key].dimensionsMm;
-    const expected = index < 2 ? [rig.parcels[index].width, rig.parcels[index].depth, rig.parcels[index].height] : modelConfig.boxes[2].fallbackDimensionsMm;
-    assert.deepEqual(Object.values(dimensions), expected);
-    near(size.x * 1000, dimensions.width); near(size.y * 1000, dimensions.height); near(size.z * 1000, dimensions.depth);
-    near(bounds.min.y, 0); near(center.x, 0); near(center.z, 0);
-    const instance = await makeLibrary().instantiate(key);
-    const viewerBounds = new THREE.Box3().setFromObject(instance.root.getObjectByName("parcel_body"));
-    near(viewerBounds.getSize(new THREE.Vector3()).y, dimensions.height);
-    assert.equal(instance.root.scale.x, ASSET_TO_VIEWER_SCALE);
-  }
+test("the baked box GLB is metre/Y-up with a bottom-centre origin, and fitting sizes it from rig.json", async () => {
+  const asset = await parse("box.glb"), body = asset.scene.getObjectByName("parcel_body");
+  const bounds = new THREE.Box3().setFromObject(body), center = bounds.getCenter(new THREE.Vector3());
+  near(bounds.min.y, 0); near(center.x, 0); near(center.z, 0);
+  const instance = await makeLibrary().instantiate("box");
+  assert.equal(instance.root.scale.x, ASSET_TO_VIEWER_SCALE);
+  const p1 = rig.parcels.find(parcel => parcel.id === modelConfig.boxes[0].rigParcel);
+  assert.deepEqual(manifest.models.box.dimensionsMm, { width: p1.width, depth: p1.depth, height: p1.height });
+  const fitted = fitToConfig(THREE, instance, "box", { rig, models: modelConfig });
+  const size = new THREE.Box3().setFromObject(fitted.root.getObjectByName("parcel_body")).getSize(new THREE.Vector3());
+  near(size.x, p1.width); near(size.y, p1.height); near(size.z, p1.depth);
 });
 
 test("servo rotates only its output around the configured horizontal shaft; tilt moves the assembly", async () => {

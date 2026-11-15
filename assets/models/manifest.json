@@ -12,22 +12,22 @@
       "colour": "#969696",
       "origin": "bottom-centre",
       "dimensionsMm": {
-        "width": 50,
-        "depth": 35,
-        "height": 20
+        "width": 95,
+        "depth": 70,
+        "height": 25
       },
-      "massG": 25,
+      "massG": 30,
       "collision": {
         "shape": "box",
         "sizeMm": [
-          50,
-          35,
-          20
+          95,
+          70,
+          25
         ],
         "centerMm": [
           0,
           0,
-          10.0
+          12.5
         ]
       },
       "measurementSource": "config/rig.json parcels.p1",
@@ -36,7 +36,8 @@
       "nodes": {
         "root": "box",
         "body": "parcel_body"
-      }
+      },
+      "measured": false
     },
     "sweeper": {
       "name": "Cylindrical Sweeper",
@@ -44,25 +45,27 @@
       "type": "sweeper",
       "origin": "can-base-centre",
       "dimensionsMm": {
-        "width": 205.6,
+        "width": 193.6,
         "depth": 67.2,
-        "height": 137.0
+        "height": 125.5
       },
       "placeholderMeasurements": true,
       "measurementSource": "config/models.json sweeper",
-      "massG": 70,
+      "massG": 66,
       "friction": null,
       "geometry": {
         "can": {
           "radiusMm": 33,
-          "heightMm": 110,
-          "massG": 55
+          "heightMm": 115,
+          "massG": 55,
+          "measured": false,
+          "_note": "diameter 66"
         },
         "servo": {
           "pivotMm": [
-            0,
-            -8,
-            122
+            45,
+            8,
+            111
           ],
           "axisZup": [
             0,
@@ -72,7 +75,7 @@
           "mountRollDeg": 0,
           "caseDimensionsLocalMm": [
             23,
-            24,
+            23,
             12
           ],
           "restDeg": 0,
@@ -81,14 +84,18 @@
             0,
             180
           ],
-          "massG": 9
+          "massG": 9,
+          "measured": false,
+          "_note": "Shaft axis +Y kept from before. Shaft centre 4 mm below the can top (115 - 4 = 111). Case is 23 wide (x) x 12 along the shaft (y) x 23 tall (z); caseDimensionsLocalMm lists it in servo-local order (x, y, shaft). The case is clamped to the outside of the can wall facing the boxes (x 33.5 to 56.5, y -6 to 6) because a case centred on the can would sit inside it."
         },
         "stick": {
-          "lengthMm": 180,
-          "widthMm": 9,
+          "lengthMm": 120,
+          "widthMm": 10,
           "thicknessMm": 3,
-          "pivotFromEndMm": 8,
-          "massG": 6
+          "pivotFromEndMm": 5,
+          "massG": 2,
+          "measured": false,
+          "_note": "attached at one end to the servo horn: the horn hole is 5 mm (half the width) from the end"
         }
       },
       "collision": {
@@ -99,11 +106,11 @@
             "node": "metal_can",
             "shape": "cylinder",
             "radiusMm": 33,
-            "heightMm": 110,
+            "heightMm": 115,
             "centerMm": [
               0,
               0,
-              55.0
+              57.5
             ],
             "axisZup": [
               0,
@@ -116,27 +123,27 @@
             "shape": "box",
             "sizeMm": [
               23,
-              24,
+              23,
               12
             ],
             "frame": "servo_mount local",
             "centerMm": [
               0,
               0,
-              -8.0
+              -8
             ]
           },
           {
             "node": "wooden_stick",
             "shape": "box",
             "sizeMm": [
-              180,
-              9,
+              120,
+              10,
               3
             ],
             "frame": "servo_output local",
             "centerMm": [
-              82.0,
+              55,
               0,
               4.5
             ]
@@ -147,19 +154,19 @@
         "tilt": {
           "node": "assembly_tilt",
           "pivotMm": [
-            0,
+            33,
             0,
             0
           ],
           "axisZup": [
-            1.0,
-            0.0,
-            0.0
+            0,
+            1,
+            0
           ],
           "axisGltfLocal": [
-            1.0,
-            0.0,
-            -0.0
+            0,
+            0,
+            -1
           ],
           "limitsDeg": [
             -35,
@@ -172,14 +179,14 @@
           "node": "servo_output",
           "parent": "servo_mount",
           "pivotMm": [
-            0,
-            -8,
-            122
+            45,
+            8,
+            111
           ],
           "axisZup": [
-            0.0,
-            1.0,
-            0.0
+            0,
+            1,
+            0
           ],
           "axisGltfLocal": [
             0,
@@ -200,7 +207,9 @@
         "mount": "servo_mount",
         "servoOutput": "servo_output",
         "stick": "wooden_stick"
-      }
+      },
+      "measured": false
     }
-  }
+  },
+  "note": "Physical sizes, collision and joints below match config/rig.json and config/models.json (placeholders, measured:false). The GLB geometry was baked at older sizes; viewer/model-fit.mjs scales each part at load time to these values. Blender has not been rerun."
 }

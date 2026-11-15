@@ -1,4 +1,5 @@
 import { selectTab } from "./tabs.mjs";
+import { toThree, fromThree } from "./frame.mjs";
 import { Workbench } from "./workbench.mjs";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import * as THREE from "three";
@@ -12,16 +13,13 @@ import { LineSegmentsGeometry } from "three/addons/lines/LineSegmentsGeometry.js
 const WS_URL = "ws://localhost:8765";
 const DEG = Math.PI / 180;
 const EXECUTE_MIN = 0.8;
-const C = { accent: 0xF5C518, success: 0x3DDC84, bg: 0xE9EAEC };
+const C = { accent: 0xF5C518, success: 0x3DDC84, bg: 0xEAEAEA };
 
-// ---------------------------------------------------------------------------
-// The ONLY place the simulation's z-up table frame becomes three.js y-up.
-// Table frame: x right, y away from the front edge, z up (mm, degrees CCW from above).
-// three.js:    X = x, Y = z, Z = -y. A CCW rotation about z is the same rotation about Y.
-function toThree({ x = 0, y = 0, z = 0, theta = 0 }) {
-  return { pos: new THREE.Vector3(x, z, -y), yaw: theta * DEG };
+// Pose in the z-up table frame -> three.js Vector3 and yaw. The axis swap itself is
+// toThree in frame.mjs, the one conversion function.
+function scenePose({ x = 0, y = 0, z = 0, theta = 0 }) {
+  return { pos: new THREE.Vector3(...toThree({ x, y, z })), yaw: theta * DEG };
 }
-// ---------------------------------------------------------------------------
 
 const rig = await (await fetch("../config/rig.json")).json();
 const { table } = rig;
@@ -62,14 +60,14 @@ function block(w, d, h, material) {      // w along table x, d along table y, h 
   return m;
 }
 function place(obj, pose) {
-  const t = toThree(pose);
+  const t = scenePose(pose);
   obj.position.copy(t.pos);
   obj.rotation.y = t.yaw;
 }
 const onTable = (x, y) => x >= 0 && x <= table.width && y >= 0 && y <= table.depth;
 const parcelZ = (pose, h) => (onTable(pose.x, pose.y) ? table.height : 0) + h / 2;   // bags sit on the floor
 
-function floorText(text, heightMM, color = "#5E636C") {
+function floorText(text, heightMM, color = "#616161") {
   const px = 96, c = document.createElement("canvas"), ctx = c.getContext("2d");
   const font = `700 ${px}px Inter, ui-sans-serif, system-ui, sans-serif`;
   ctx.font = font;
@@ -87,10 +85,10 @@ function floorText(text, heightMM, color = "#5E636C") {
 }
 
 // ---- lights (soft key + ambient), mirrored into the parcel pass ---------------
-const centre = toThree({ x: table.width / 2, y: table.depth / 2, z: table.height }).pos;
+const centre = scenePose({ x: table.width / 2, y: table.depth / 2, z: table.height }).pos;
 const span = Math.max(table.width, table.depth);
 function addLights(target, withShadow) {
-  target.add(new THREE.HemisphereLight(0xffffff, 0xd4d6da, 1.2));
+  target.add(new THREE.HemisphereLight(0xffffff, 0xd5d5d5, 1.2));
   const key = new THREE.DirectionalLight(0xffffff, 1.5);
   key.position.copy(centre).add(new THREE.Vector3(-span * 0.9, span * 2.4, span * 1.2));
   key.target.position.copy(centre);
@@ -108,7 +106,9 @@ addLights(scene, true);
 
 
 // ---- workshop room: floor plus back and right walls, white gridlines at 60% ----
-const ROOM = { left: -800, right: table.width + 120, front: -700, back: table.depth + 70, height: 520, step: 40 };
+const sceneMaxX = Math.max(table.width, ...Object.values(bags).map(b => b.x + b.width / 2));
+const sceneMaxY = Math.max(table.depth, ...Object.values(bags).map(b => b.y + b.depth / 2));
+const ROOM = { left: -800, right: sceneMaxX + 80, front: -700, back: sceneMaxY + 70, height: 520, step: 40 };
 function grid(w, h, step) {               // in the local XY plane from (0,0) to (w,h)
   const pts = [];
   for (let x = 0; x <= w + 1e-6; x += step) pts.push(x, 0, 0, x, h, 0);
@@ -119,84 +119,93 @@ function grid(w, h, step) {               // in the local XY plane from (0,0) to
 }
 {
   const fw = ROOM.right - ROOM.left, fd = ROOM.back - ROOM.front;
-  const floor = new THREE.Mesh(new THREE.PlaneGeometry(fw, fd), matte(0xD9DBDF));
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(fw, fd), matte(0xDADADA));
   floor.rotation.x = -Math.PI / 2;
-  floor.position.copy(toThree({ x: ROOM.left + fw / 2, y: ROOM.front + fd / 2 }).pos);
+  floor.position.copy(scenePose({ x: ROOM.left + fw / 2, y: ROOM.front + fd / 2 }).pos);
   floor.receiveShadow = true;
   scene.add(floor);
   const fg = grid(fw, fd, ROOM.step);
   fg.rotation.x = -Math.PI / 2;                          // local +Y -> table +y
-  fg.position.copy(toThree({ x: ROOM.left, y: ROOM.front, z: 0.3 }).pos);
+  fg.position.copy(scenePose({ x: ROOM.left, y: ROOM.front, z: 0.3 }).pos);
   scene.add(fg);
 
-  const back = new THREE.Mesh(new THREE.PlaneGeometry(fw, ROOM.height), matte(0xE3E5E8));
-  back.position.copy(toThree({ x: ROOM.left + fw / 2, y: ROOM.back, z: ROOM.height / 2 }).pos);
+  const back = new THREE.Mesh(new THREE.PlaneGeometry(fw, ROOM.height), matte(0xE4E4E4));
+  back.position.copy(scenePose({ x: ROOM.left + fw / 2, y: ROOM.back, z: ROOM.height / 2 }).pos);
   back.receiveShadow = true;
   scene.add(back);
   const bg = grid(fw, ROOM.height, ROOM.step);
-  bg.position.copy(toThree({ x: ROOM.left, y: ROOM.back - 0.3 }).pos);
+  bg.position.copy(scenePose({ x: ROOM.left, y: ROOM.back - 0.3 }).pos);
   scene.add(bg);
 
-  const right = new THREE.Mesh(new THREE.PlaneGeometry(fd, ROOM.height), matte(0xDDDFE3));
+  const right = new THREE.Mesh(new THREE.PlaneGeometry(fd, ROOM.height), matte(0xDEDEDE));
   right.rotation.y = -Math.PI / 2;                       // faces left (towards the camera)
-  right.position.copy(toThree({ x: ROOM.right, y: ROOM.front + fd / 2, z: ROOM.height / 2 }).pos);
+  right.position.copy(scenePose({ x: ROOM.right, y: ROOM.front + fd / 2, z: ROOM.height / 2 }).pos);
   right.receiveShadow = true;
   scene.add(right);
   const rg = grid(fd, ROOM.height, ROOM.step);
   rg.rotation.y = -Math.PI / 2;                          // local +X -> table -y
-  rg.position.copy(toThree({ x: ROOM.right - 0.3, y: ROOM.back }).pos);
+  rg.position.copy(scenePose({ x: ROOM.right - 0.3, y: ROOM.back }).pos);
   scene.add(rg);
 }
 
-// ---- table -----------------------------------------------------------------
-const tableMesh = block(table.width, table.depth, table.height, matte(0xAEAEAE));
-place(tableMesh, { x: table.width / 2, y: table.depth / 2, z: table.height / 2 });
+// ---- bench: a slab (table.thickness) on a support, top at table.height ---------
+const slabT = table.thickness ?? table.height;
+const tableMesh = block(table.width, table.depth, slabT, matte(0xAEAEAE));
+place(tableMesh, { x: table.width / 2, y: table.depth / 2, z: table.height - slabT / 2 });
 scene.add(tableMesh);
-
-// ---- zones: thin outlines flat on the table, small labels, no fill ---------
-const TOP = table.height + 0.25;
-for (const [name, z] of Object.entries(zones)) {
-  const t = 1.2, ink = new THREE.MeshBasicMaterial({ color: 0x4A4E56 });
-  for (const [w, d, dx, dy] of [[z.width, t, 0, z.depth / 2], [z.width, t, 0, -z.depth / 2],
-                                [t, z.depth, z.width / 2, 0], [t, z.depth, -z.width / 2, 0]]) {
-    const s = new THREE.Mesh(new THREE.PlaneGeometry(w, d), ink);
-    s.rotation.x = -Math.PI / 2;
-    s.position.copy(toThree({ x: z.x + dx, y: z.y + dy, z: TOP }).pos);
-    scene.add(s);
-  }
-  const label = floorText(name.toUpperCase(), 7, "#4A4E56");        // left of the zone, clear of parcels
-  label.position.copy(toThree({ x: z.x - z.width / 2 - 16 - label.userData.width / 2, y: z.y, z: TOP }).pos);
-  scene.add(label);
+let supportMesh = null;
+if (table.height - slabT > 0) {
+  const inset = 30, supportH = table.height - slabT;
+  supportMesh = block(table.width - 2 * inset, table.depth - 2 * inset, supportH, matte(0x7A7A7A));
+  place(supportMesh, { x: table.width / 2, y: table.depth / 2, z: supportH / 2 });
+  scene.add(supportMesh);
 }
 
-// ---- bags: open-top bins, rim tinted with the parcel colour each accepts -----
-const bagLabelPoints = [];
+// ---- zones: thin outlines flat on the table, no labels, no fill --------------
+const TOP = table.height + 0.25;
+const zoneGroups = {};
+for (const [name, z] of Object.entries(zones)) {
+  const t = 1.2, ink = new THREE.MeshBasicMaterial({ color: 0x4C4C4C });
+  const group = new THREE.Group(); zoneGroups[name] = group; scene.add(group);
+  // Lines sit just inside the zone edge, so the outline's outer size is exactly the zone size.
+  for (const [w, d, dx, dy] of [[z.width, t, 0, z.depth / 2 - t / 2], [z.width, t, 0, -z.depth / 2 + t / 2],
+                                [t, z.depth, z.width / 2 - t / 2, 0], [t, z.depth, -z.width / 2 + t / 2, 0]]) {
+    const s = new THREE.Mesh(new THREE.PlaneGeometry(w, d), ink);
+    s.rotation.x = -Math.PI / 2;
+    s.position.copy(scenePose({ x: z.x + dx, y: z.y + dy, z: TOP }).pos);
+    group.add(s);
+  }
+}
+
+// ---- bags: open-top bins; the rim is the colour of the parcels each accepts,
+// and its top (b.height) is level with the bench top -------------------------
+const bagGroups = {};
 for (const [side, b] of Object.entries(bags)) {
-  const body = matte(0x5E636C), t = 2.5, rimH = 3;
-  const rim = matte(0x898989);
+  const body = matte(0x616161), t = 2.5, rimH = 3, wallH = b.height - rimH;
+  const rim = matte(bagColour[side] ? tagColour(bagColour[side]) : 0x898989);
   const parts = [
     [b.width, b.depth, t, 0, 0, t / 2, body],
-    [b.width, t, b.height, 0, b.depth / 2 - t / 2, b.height / 2, body],
-    [b.width, t, b.height, 0, -b.depth / 2 + t / 2, b.height / 2, body],
-    [t, b.depth, b.height, b.width / 2 - t / 2, 0, b.height / 2, body],
-    [t, b.depth, b.height, -b.width / 2 + t / 2, 0, b.height / 2, body],
-    [b.width + 1, t + 1, rimH, 0, b.depth / 2 - t / 2, b.height + rimH / 2, rim],
-    [b.width + 1, t + 1, rimH, 0, -b.depth / 2 + t / 2, b.height + rimH / 2, rim],
-    [t + 1, b.depth + 1, rimH, b.width / 2 - t / 2, 0, b.height + rimH / 2, rim],
-    [t + 1, b.depth + 1, rimH, -b.width / 2 + t / 2, 0, b.height + rimH / 2, rim],
+    [b.width, t, wallH, 0, b.depth / 2 - t / 2, wallH / 2, body],
+    [b.width, t, wallH, 0, -b.depth / 2 + t / 2, wallH / 2, body],
+    [t, b.depth, wallH, b.width / 2 - t / 2, 0, wallH / 2, body],
+    [t, b.depth, wallH, -b.width / 2 + t / 2, 0, wallH / 2, body],
+    [b.width, t, rimH, 0, b.depth / 2 - t / 2, wallH + rimH / 2, rim],
+    [b.width, t, rimH, 0, -b.depth / 2 + t / 2, wallH + rimH / 2, rim],
+    [t, b.depth, rimH, b.width / 2 - t / 2, 0, wallH + rimH / 2, rim],
+    [t, b.depth, rimH, -b.width / 2 + t / 2, 0, wallH + rimH / 2, rim],
   ];
+  const group = new THREE.Group(); bagGroups[side] = group; scene.add(group);
   for (const [w, d, h, dx, dy, dz, m] of parts) {
     const p = block(w, d, h, m);
     place(p, { x: b.x + dx, y: b.y + dy, z: dz });
-    scene.add(p);
+    group.add(p);
   }
-  const label = floorText(`${side.toUpperCase()} BAG`, 9);
-  // The camera looks from the front-left, so the table hides the floor in front of the
-  // right bag: that label moves forward past the table's front edge.
-  const ly = b.x > table.width ? Math.min(b.y - b.depth / 2 - 14, -14) : b.y - b.depth / 2 - 14;
-  label.position.copy(toThree({ x: b.x, y: ly, z: 0.5 }).pos);
-  scene.add(label);
-  bagLabelPoints.push([b.x - label.userData.width / 2, ly - 6], [b.x + label.userData.width / 2, ly + 6]);
+  // Same rule for both bags: upright on the inside of the bin's back wall, facing the front.
+  // (On the floor in front of the bins, the bench hides the right bag's label from the camera.)
+  const label = floorText(`${side.toUpperCase()} BAG`, 12, "#D6D6D6");
+  label.rotation.x = 0;
+  label.position.copy(scenePose({ x: b.x, y: b.y + b.depth / 2 - t - 0.6, z: b.height - rimH - 16 }).pos);
+  group.add(label);
 }
 
 // Inventory instances are introduced only by explicit placement, never observer items.
@@ -232,7 +241,7 @@ let seenKeys = new Set();
 let successCount = 0;
 
 const ghostKey = g => `${g.agent}|${g.parcel}|${g.path.length}|${g.path[1]}|${g.path.at(-1)}`;
-const pathPositions = path => path.flatMap(p => toThree({ x: p[0], y: p[1], z: p[2] }).pos.toArray());
+const pathPositions = path => path.flatMap(p => scenePose({ x: p[0], y: p[1], z: p[2] }).pos.toArray());
 
 function spawnGhost(g) {
   if (!g.path || g.path.length < 2) return;
@@ -263,7 +272,7 @@ function pointAlong(path, s) {            // table-frame point at fraction s of 
 function setGhostProgress(g, s) {
   const segs = g.path.length - 1;
   g.line.geometry.instanceCount = Math.max(1, Math.ceil(s * segs));
-  g.dot.position.copy(toThree(pointAlong(g.path, s)).pos);
+  g.dot.position.copy(scenePose(pointAlong(g.path, s)).pos);
 }
 function setGhostOpacity(g, k) {
   g.line.material.opacity = GHOST_OPACITY * k * (g.green ? 2 : 1);
@@ -365,14 +374,13 @@ const EDGE = 0.06;                             // keep everything this far insid
 
 const tablePoints = [], environmentPoints = [];
 {
-  const add = (list, x, y, z) => list.push(toThree({ x, y, z }).pos);
+  const add = (list, x, y, z) => list.push(scenePose({ x, y, z }).pos);
   for (const x of [0, table.width]) for (const y of [0, table.depth]) for (const z of [0, table.height]) {
     add(tablePoints, x, y, z); add(environmentPoints, x, y, z);
   }
   for (const b of Object.values(bags))
-    for (const sx of [-1, 1]) for (const sy of [-1, 1]) for (const z of [0, b.height + 3])
+    for (const sx of [-1, 1]) for (const sy of [-1, 1]) for (const z of [0, b.height])
       add(environmentPoints, b.x + sx * b.width / 2, b.y + sy * b.depth / 2, z);
-  for (const [x, y] of bagLabelPoints) add(environmentPoints, x, y, 0);
 
 }
 
@@ -623,10 +631,128 @@ function connect() {
 connect();
 
 // ---- placement: independent of all observer items and arm poses ----------------
-workbench = new Workbench({ scene, camera, canvas: renderer.domElement, toThree, onBoundsChanged: fitCamera, table, setup: modelConfig.workbench ?? {} });
+// Sizes and positions come only from config: the stack sits at the centre of the pick zone.
+workbench = new Workbench({ scene, camera, canvas: renderer.domElement, toThree: scenePose, tagColour, table,
+  setup: { ...modelConfig.workbench, stackPositionMm: zones.pick ? { x: zones.pick.x, y: zones.pick.y } : null },
+  onBoundsChanged: () => { fitCamera(); refreshDebug(); } });
 ghostGroup.visible = false;
 $("observer-overlay").onchange = () => { ghostGroup.visible = $("observer-overlay").checked; bestLine.visible = ghostGroup.visible && !!bestPath; if (bestBox) bestBox.visible = false; };
 document.addEventListener("workbenchclear", () => { $("observer-overlay").checked = false; ghostGroup.visible = false; clearGhosts(); bestLine.visible = false; if (bestBox) bestBox.visible = false; });
+// ---- debug overlay ("D"): measured boxes with mm labels and a 100 mm scale bar ----
+// Sizes are measured from the rendered geometry, not copied from config, so this
+// checks the fitting. Labels read width (x) x depth (y) x height (z), table frame.
+const DEBUG = { on: new URLSearchParams(location.search).has("debug"), group: new THREE.Group(), labels: [], attached: [] };
+DEBUG.group.visible = false; scene.add(DEBUG.group);
+const debugInk = new THREE.LineBasicMaterial({ color: C.accent, depthTest: false, transparent: true });
+const fmt = v => (Math.round(v * 10) / 10).toString();
+const AXES = [new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, 1)];
+function measure(object) {
+  object.updateWorldMatrix(true, true);
+  const tableAxes = v => { const p = fromThree(v.toArray()); return { x: Math.abs(p.x), y: Math.abs(p.y), z: Math.abs(p.z) }; };
+  if (object.isMesh) {                    // oriented: the mesh's own box, axes matched to the nearest world axis
+    object.geometry.computeBoundingBox();
+    const local = object.geometry.boundingBox, size = local.getSize(new THREE.Vector3());
+    const q = object.getWorldQuaternion(new THREE.Quaternion()), scale = object.getWorldScale(new THREE.Vector3());
+    const world = new THREE.Vector3();
+    AXES.forEach((axis, i) => {
+      const dir = axis.clone().applyQuaternion(q).toArray().map(Math.abs), k = dir.indexOf(Math.max(...dir));
+      world.setComponent(k, size.getComponent(i) * scale.getComponent(i));
+    });
+    const centre = local.getCenter(new THREE.Vector3()).applyMatrix4(object.matrixWorld);
+    const aabb = new THREE.Box3().setFromObject(object);
+    return { size: tableAxes(world), centre: fromThree(centre.toArray()), minZ: aabb.min.y, top: aabb.max.y };
+  }
+  const box = new THREE.Box3().setFromObject(object);
+  return { size: tableAxes(box.getSize(new THREE.Vector3())), centre: fromThree(box.getCenter(new THREE.Vector3()).toArray()), minZ: box.min.y, top: box.max.y };
+}
+function debugTargets() {
+  const list = [["Bench top", tableMesh], ["Bench support", supportMesh]];
+  for (const [side, g] of Object.entries(bagGroups)) list.push([`${cap(side)} bag`, g]);
+  for (const [name, g] of Object.entries(zoneGroups)) list.push([`${cap(name)} zone`, g]);
+  for (const part of workbench?.debugParts() ?? []) list.push([part.name, part.object]);
+  return list.filter(([, object]) => object).map(([name, object]) => ({ name, object }));
+}
+function textSprite(text) {
+  const px = 44, c = document.createElement("canvas"), ctx = c.getContext("2d");
+  const font = `600 ${px}px "JetBrains Mono", ui-monospace, monospace`;
+  ctx.font = font; c.width = Math.ceil(ctx.measureText(text).width + px); c.height = Math.ceil(px * 1.6);
+  ctx.fillStyle = "rgba(27,29,33,0.88)"; ctx.beginPath(); ctx.roundRect(0, 0, c.width, c.height, px * 0.4); ctx.fill();
+  ctx.font = font; ctx.fillStyle = "#F5C518"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(text, c.width / 2, c.height / 2);
+  const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true }));
+  const h = 11; sprite.scale.set(h * c.width / c.height, h, 1); sprite.renderOrder = 21;
+  return sprite;
+}
+function clearDebug() {
+  for (const helper of DEBUG.attached) { helper.parent?.remove(helper); helper.geometry.dispose(); }
+  for (const child of [...DEBUG.group.children]) { DEBUG.group.remove(child); child.geometry?.dispose(); child.material?.map?.dispose(); if (child.material !== debugInk) child.material?.dispose?.(); }
+  DEBUG.attached = []; DEBUG.labels = [];
+}
+function scaleBar() {                    // 100 mm along +x near the bench's front-left corner, ticks every 10 mm
+  const g = new THREE.Group(), z = table.height + 0.6, x0 = 15, y0 = 14;
+  const yellow = new THREE.MeshBasicMaterial({ color: C.accent, depthTest: false }), dark = new THREE.MeshBasicMaterial({ color: 0x1B1D21, depthTest: false });
+  const bar = new THREE.Mesh(new THREE.PlaneGeometry(100, 3), yellow); bar.rotation.x = -Math.PI / 2;
+  bar.position.copy(scenePose({ x: x0 + 50, y: y0, z }).pos); bar.renderOrder = 20; g.add(bar);
+  for (let i = 0; i <= 10; i++) {
+    const tick = new THREE.Mesh(new THREE.PlaneGeometry(0.8, i % 5 ? 4 : 7), dark); tick.rotation.x = -Math.PI / 2;
+    tick.position.copy(scenePose({ x: x0 + i * 10, y: y0 + (i % 5 ? 1 : 2.5), z: z + 0.1 }).pos); tick.renderOrder = 21; g.add(tick);
+  }
+  const label = textSprite("100 mm"); label.position.copy(scenePose({ x: x0 + 50, y: y0 + 12, z: z + 6 }).pos); g.add(label);
+  return g;
+}
+function refreshDebug() {
+  clearDebug();
+  const rows = [];
+  for (const { name, object } of debugTargets()) {
+    const m = measure(object);
+    rows.push({ object: name, "w x mm": +fmt(m.size.x), "d y mm": +fmt(m.size.y), "h z mm": +fmt(m.size.z),
+      "centre x": +fmt(m.centre.x), "centre y": +fmt(m.centre.y), "centre z": +fmt(m.centre.z), "bottom z": +fmt(m.minZ), measured: false });
+    if (!DEBUG.on) continue;
+    if (object.isMesh) {                  // oriented box that follows the mesh (tilt, servo)
+      const local = object.geometry.boundingBox, size = local.getSize(new THREE.Vector3());
+      const helper = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(size.x, size.y, size.z)), debugInk);
+      helper.position.copy(local.getCenter(new THREE.Vector3())); helper.renderOrder = 20; helper.raycast = () => {};
+      object.add(helper); DEBUG.attached.push(helper);
+    } else {
+      const helper = new THREE.Box3Helper(new THREE.Box3().setFromObject(object), C.accent);
+      helper.material.depthTest = false; helper.material.transparent = true; helper.renderOrder = 20; DEBUG.group.add(helper);
+    }
+    const label = textSprite(`${name} ${fmt(m.size.x)} × ${fmt(m.size.y)} × ${fmt(m.size.z)}`);
+    DEBUG.group.add(label); DEBUG.labels.push({ label, object });
+  }
+  DEBUG.bar ??= scene.add(scaleBar()).children.at(-1);
+  DEBUG.bar.visible = DEBUG.on;
+  DEBUG.group.visible = DEBUG.on;
+  updateDebugLabels();
+  console.table(rows);
+  return rows;
+}
+function updateDebugLabels() {
+  // Each label starts just above its object and moves up until its on-screen
+  // rectangle overlaps no label placed before it.
+  const w = host.clientWidth, h = host.clientHeight, used = [], p = new THREE.Vector3();
+  const rect = (label, pos) => {
+    p.copy(pos).project(camera);
+    const dist = camera.position.distanceTo(pos), px = (h / 2) / Math.tan(camera.fov * DEG / 2) / dist;
+    const cx = (p.x + 1) / 2 * w, cy = (1 - p.y) / 2 * h, hw = label.scale.x * px / 2 + 3, hh = label.scale.y * px / 2 + 2;
+    return { x0: cx - hw, x1: cx + hw, y0: cy - hh, y1: cy + hh };
+  };
+  const hits = r => used.some(u => r.x0 < u.x1 && r.x1 > u.x0 && r.y0 < u.y1 && r.y1 > u.y0);
+  for (const { label, object } of DEBUG.labels) {
+    const box = new THREE.Box3().setFromObject(object), pos = box.getCenter(new THREE.Vector3());
+    pos.y = box.max.y + 8;
+    let r = rect(label, pos);
+    for (let i = 0; i < 40 && hits(r); i++) { pos.y += 4; r = rect(label, pos); }
+    used.push(r); label.position.copy(pos);
+  }
+}
+addEventListener("keydown", e => {
+  if (document.querySelector("dialog[open]") || /INPUT|SELECT|TEXTAREA/.test(e.target.tagName)) return;
+  if (e.key !== "d" && e.key !== "D") return;
+  DEBUG.on = !DEBUG.on; refreshDebug();
+});
+window.gekkoDebug = { refresh: refreshDebug, get on() { return DEBUG.on; } };
+refreshDebug();
 // ---- loop ------------------------------------------------------------------
 let previousTime = performance.now() / 1000;
 fitCamera(); resize();
@@ -635,6 +761,7 @@ renderer.setAnimationLoop(() => {
   workbench.update(now - previousTime); previousTime = now;
   updateGhosts(now);
   updateBest(now, lastFrame?.phase);
+  if (DEBUG.on) updateDebugLabels();
   if (controls.enabled) controls.update();
   renderer.clear();
   renderer.render(scene, camera);
