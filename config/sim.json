@@ -1,0 +1,30 @@
+{
+  "_note": "Simulation defaults and unmeasured physical parameters.",
+  "measured": false,
+  "timestep_s": 0.001,
+  "gravity_m_s2": 9.81,
+  "solver_iterations": 30,
+  "friction": {"sliding": 0.32, "torsional": 0.002, "rolling": 0.0001},
+  "solref": [0.008, 1.0],
+  "solimp": [0.9, 0.95, 0.001, 0.5, 2],
+  "servo": {
+    "measured": false,
+    "max_torque_nm": 0.15,
+    "default_speed_deg_s": 60,
+    "max_speed_deg_s": 360,
+    "position_gain_nm_rad": 2.0,
+    "damping_nm_s_rad": 0.012,
+    "armature_kg_m2": 0.00002,
+    "stall_error_deg": 4,
+    "stall_speed_deg_s": 8,
+    "stall_duration_s": 0.06
+  },
+  "settle_before_s": 0.15,
+  "settle_after_s": 0.65,
+  "max_sweep_duration_s": 12,
+  "sample_rate_hz": 20,
+  "tilt_resolution_deg": 0.5,
+  "alignment_servo_resolution_deg": 1,
+  "demo_speeds_deg_s": [90, 150, 220, 60, 320],
+  "demo_angle_offsets_deg": [0, 6, 12]
+}
