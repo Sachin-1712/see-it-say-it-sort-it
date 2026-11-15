@@ -89,6 +89,8 @@
             23
           ],
           "riserMm": 6.4,
+          "caseShaftGapMm": 2,
+          "hornRiseMm": 3,
           "restDeg": 0,
           "direction": -1,
           "limitsDeg": [

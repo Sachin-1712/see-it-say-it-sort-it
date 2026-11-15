@@ -5,6 +5,8 @@ from xml.etree.ElementTree import Element, SubElement, tostring
 import mujoco
 import numpy as np
 
+from .geometry import mount_rotation, shaft_rotation, stick_shape, sweeper_origin, tilt_rotation, unit
+
 MM = 0.001
 GRAM = 0.001
 
@@ -41,7 +43,58 @@ def element_rotation(item):
             cy * sp * cr + sy * cp * sr, sy * cp * cr - cy * sp * sr)
 
 
-def compile_scene(scene):
+def add_sweeper(root, world, item, spec, settings, tilt_deg):
+    """Evaluate the manually locked tilt hinge as a rigid transform."""
+    tilt = spec["assemblyTilt"]
+    can = spec["can"]
+    servo = spec["servo"]
+    pivot = np.asarray(tilt["pivotMm"])
+    assembly = SubElement(world, "body", name="assembly_tilt",
+                          pos=si(sweeper_origin(item) + pivot),
+                          quat=vector(tilt_rotation(tilt, tilt_deg)))
+    can_axis = unit(can["axisZup"])
+    can_center = np.asarray(can["baseCentreMm"]) + can_axis * can["heightMm"] / 2
+    can_body = SubElement(assembly, "body", name="can", pos=si(can_center - pivot),
+                          quat=vector(shaft_rotation(can_axis)))
+    SubElement(can_body, "geom", name="can", type="cylinder",
+               size=si((can["radiusMm"], can["heightMm"] / 2)), mass=str(can["massG"] * GRAM))
+
+    mount = SubElement(assembly, "body", name="servo_case",
+                       pos=si(np.asarray(servo["pivotMm"]) - pivot),
+                       quat=vector(mount_rotation(servo)))
+    width, depth, height = servo["caseDimensionsLocalMm"]
+    gap = servo["caseShaftGapMm"]
+    SubElement(mount, "geom", name="servo_case", type="box",
+               pos=si((0, 0, -height / 2 - gap)), size=si((width / 2, depth / 2, height / 2)),
+               mass=str(servo["massG"] * GRAM))
+    riser = servo.get("riserMm", 0)
+    if riser > 0:
+        SubElement(mount, "geom", name="servo_mount_bracket", type="box",
+                   pos=si((0, 0, -height - gap - riser / 2)),
+                   size=si((width / 2, depth / 2, riser / 2)), mass="0")
+
+    output = SubElement(mount, "body", name="stick")
+    limits = np.deg2rad(servo["limitsDeg"])
+    SubElement(output, "joint", name="servo", type="hinge",
+               axis=vector((0, 0, servo["direction"])), ref=str(np.deg2rad(servo["restDeg"])),
+               limited="true", range=vector(limits), armature=str(settings["armature_kg_m2"]),
+               damping=str(settings["damping_nm_s_rad"]))
+    size, center = stick_shape(spec)
+    SubElement(output, "geom", name="stick", pos=si(center), type="box",
+               size=si(size / 2), mass=str(spec["stick"]["massG"] * GRAM))
+
+    # Exclude rigid assembly components from colliding with their own output.
+    contact = SubElement(root, "contact")
+    for part in ("can", "servo_case"):
+        SubElement(contact, "exclude", body1=part, body2="stick")
+    actuator = SubElement(root, "actuator")
+    torque = settings["max_torque_nm"]
+    SubElement(actuator, "position", name="servo", joint="servo",
+               kp=str(settings["position_gain_nm_rad"]), ctrllimited="true", ctrlrange=vector(limits),
+               forcelimited="true", forcerange=vector((-torque, torque)))
+
+
+def compile_scene(scene, *, tilt_deg=None):
     """Return a fresh MjModel. Any trial state belongs to a separate MjData."""
     cfg = scene.config()
     sim = cfg["sim"]
@@ -64,7 +117,9 @@ def compile_scene(scene):
                size=si((width / 2, depth / 2, thickness / 2)))
     SubElement(world, "geom", name="floor", type="plane", size="0 0 0.1")
     for index, item in enumerate(scene.snapshot["objects"]):
-        if item["type"] != "box":
+        if item["type"] == "sweeper":
+            locked = item.get("tiltDeg", 0) if tilt_deg is None else tilt_deg
+            add_sweeper(root, world, item, cfg["models"]["sweeper"], sim["servo"], locked)
             continue
         half_size = [item["dimensionsMm"][key] / 2 for key in ("width", "depth", "height")]
         body = SubElement(world, "body", name=f"parcel_{index}",
@@ -75,3 +130,13 @@ def compile_scene(scene):
                    mass=str(item["massG"] * GRAM),
                    priority="1", friction=vector(box_friction(item, friction)))
     return mujoco.MjModel.from_xml_string(tostring(root, encoding="unicode"))
+
+
+
+def initial_data(model, servo_deg=None):
+    data = mujoco.MjData(model)
+    if servo_deg is not None:
+        address = model.joint("servo").qposadr[0]
+        data.qpos[address] = data.ctrl[0] = np.deg2rad(servo_deg)
+    mujoco.mj_forward(model, data)
+    return data
