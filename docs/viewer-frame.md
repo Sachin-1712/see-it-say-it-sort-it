@@ -92,3 +92,15 @@ No real serial transport is enabled. `execution.physical_next_step` and
 `confirmed_step` reports the calibrated L/R mapping (or null when unverified),
 manual tilt, step/target/destination, `transmitted:false`, `acknowledged:false` and
 the hardware blocker. Configuration is in `config/uno-q.json`.
+
+## Automatic saved-plan playback
+
+Frames additionally carry `hardware_playback` with mode/status, connection, arming,
+step/box/destination/command/manual tilt, acknowledgement, running state and the
+remaining three-second countdown. `hardware_connect` uses the configured USB device;
+`hardware_arm` requires `armed:true`; `hardware_start` selects `mode:"hardware"`
+or `"dry_run"`; `hardware_stop` cancels and sends S if connected. `hardware_key`
+accepts L/R/S/C via the same serial owner, requires operator arming for movement,
+and refuses sweeps during playback. Stop remains available. No per-step confirmation
+is needed for this playback path; verified tilt and motion calibration are required
+for real sweeps. DONE means acknowledged servo motion, never measured box sorting.

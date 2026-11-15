@@ -14,10 +14,17 @@ def main():
     parser.add_argument('--seed',type=int,default=2026)
     parser.add_argument('--workers',type=int,default=4)
     parser.add_argument('--output',type=Path,default=DEFAULT_PATH)
+    parser.add_argument('--inspect',action='store_true',help='Validate and list saved action hashes without running search')
     args=parser.parse_args()
     swarm=Swarm(args.workers,args.seed,settings={'time_limit_s':args.timeout})
     started=time.monotonic()
     try:
+        if args.inspect:
+            from swarm.saved_plan import load, sha
+            swarm.start(source='golden',run=False)
+            bundle=load(args.output,swarm.task,configuration())
+            print(json.dumps([dict(step=i+1,action_hash=sha(a),**a) for i,a in enumerate(bundle['plan']['actions'])],indent=2))
+            return 0
         swarm.start(source='golden')
         while time.monotonic()-started<args.timeout:
             frame=swarm.frame()

@@ -205,23 +205,28 @@
         <label for="swarm-isolate">Show agent</label><select id="swarm-isolate"><option value="">All agents</option></select>
         <div class="demo-controls">
           <button id="swarm-stop" type="button">Stop Live Search</button>
-          <button id="swarm-saved" type="button">Load Previously Validated Plan</button>
-          <button id="swarm-replay" type="button" disabled>Replay Three-Box Solution</button>
+          <button id="swarm-saved" type="button">Load Saved Plan</button>
+          <button id="swarm-replay" type="button" disabled>Preview</button>
         </div>
         <div id="recovery-banner" role="status" hidden></div>
         <div id="recovery-timeline" aria-label="Recovery timeline"></div>
         <div id="saved-attribution" role="status" hidden></div>
         <div id="rows"></div><div id="swarm-activity" aria-label="Agent activity"></div>
         <div id="swarm-plan-details"></div>
-        <div class="physical-controls">
-          <strong>UNO Q · PHYSICAL EXECUTION DISABLED</strong>
-          <p>Simulation replay does not describe the physical box state. Calibration, L/R mapping and firmware acknowledgement remain unverified.</p>
-          <button id="physical-step" type="button" disabled>Execute One Confirmed Step · disabled</button>
-          <button id="physical-dry" type="button" disabled>Dry Run One Confirmed Step</button>
-          <button id="physical-outcome" type="button" disabled>Confirm Actual Box Outcome</button>
-          <button id="physical-failed" type="button" disabled>Outcome failed / unknown</button>
-          <button id="physical-stop" type="button">Stop · disconnect servo power</button>
-          <p id="physical-status" role="status">No serial connection. For an immediate physical stop, disconnect servo power. Close servo_keys.py and Serial Monitor before any future serial connection.</p>
+        <div class="physical-controls" aria-label="Saved-plan hardware playback">
+          <strong id="playback-title">Load a saved plan for playback</strong>
+          <p>MANUAL TILT — GEKKO does not adjust the can. Physical playback requires calibrated positioning or a verified tilt sensor before every sweep.</p>
+          <p id="playback-step" role="status"></p>
+          <p id="playback-tilt"></p>
+          <p id="playback-connection" role="status">Hardware disconnected · not armed</p>
+          <button id="physical-connect" type="button">Connect UNO Q</button>
+          <button id="physical-arm" type="button" disabled>Arm Hardware Once</button>
+          <button id="physical-step" type="button" disabled>Start Hardware Playback</button>
+          <button id="physical-dry" type="button" disabled>Start Timed Dry Run</button>
+          <button id="physical-stop" type="button">STOP</button>
+          <p id="physical-status" role="status">Physical execution disabled by default. Timed dry run sends no sweep commands.</p>
+          <p>For an immediate physical stop, disconnect servo power. Close Serial Monitor and external servo_keys.py; keyboard commands must use GEKKO's single serial owner.</p>
+          <div hidden><button id="physical-outcome" type="button" disabled></button><button id="physical-failed" type="button" disabled></button></div>
         </div></div>
       <div class="view" id="view-outcomes" role="tabpanel" aria-labelledby="tab-outcomes" hidden>
         <div class="metric"><span class="k">Attempts tested</span><span class="v mono" id="m-attempts">0</span></div>

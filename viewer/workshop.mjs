@@ -660,10 +660,16 @@ function renderSwarmFrame(f) {
   $("swarm-stop").disabled=!connected()||!f.task||f.live_search_stopped;
   $("swarm-saved").disabled=!connected()||!f.task||!f.live_search_stopped;
   $("swarm-replay").disabled=!connected()||!f.best;
-  $("physical-dry").disabled=!connected()||!saved||f.execution?.awaiting_outcome||!f.execution?.physical_next_step;
-  $("physical-outcome").disabled=!connected()||!f.execution?.awaiting_outcome;
-  $("physical-failed").disabled=!connected()||!f.execution?.awaiting_outcome;
-
+  const hw=f.hardware_playback??{connection:'Disconnected',message:'Physical execution disabled by default'};
+  $("physical-dry").disabled=!connected()||!saved||hw.running;
+  $("physical-step").disabled=!connected()||!saved||!hw.armed||hw.running;
+  $("physical-connect").disabled=!connected()||hw.running;
+  $("physical-arm").disabled=!connected()||!saved||hw.running||!hw.connection.startsWith('Connected');
+  $("playback-title").textContent=saved?'SAVED PLAN LOADED · PREVIOUSLY VALIDATED PLAN':'Load a saved plan for playback';
+  $("playback-connection").textContent=`${hw.connection} · ${hw.armed?'ARMED FOR ONE START':'NOT ARMED'} · ${hw.mode==='hardware'?'PHYSICAL PLAYBACK':'DRY RUN / IDLE'}`;
+  $("playback-step").textContent=hw.step?`Step ${hw.step}/${hw.steps} — ${hw.box??hw.target??'Servo'} → ${(hw.destination??'').toUpperCase()}`:'';
+  $("playback-tilt").textContent=hw.tilt_deg!=null?`REQUIRED MANUAL TILT: ${hw.tilt_deg}° · sweep ${(hw.direction??'').toUpperCase()} · ${hw.command?`servo command ${hw.command}`:'L/R mapping unverified'}`:'';
+  $("physical-status").textContent=hw.status==='interval'?`${hw.last_acknowledged?`Completed servo step ${hw.last_acknowledged.step} (DONE acknowledged; box unverified). `:''}Next sweep in ${hw.remaining_s} · ${hw.message}`:hw.message;
   $("swarm-status").textContent=f.task?`${metrics.active??0} real processes · ${metrics.trials??0} MuJoCo trials · ${metrics.plan_trials??0} plan trials · scene ${f.task.scene_version} · ${f.task.task_id} · ${metrics.elapsed_s}s${f.agents.some(a=>a.silenced)?" · PEER NETWORK OFF: local checkpoints":""}${f.failure?` · ${f.failure}`:""}`:"No simulation running · place the sweeper and boxes, then press ▶ Start agents (or Load Three-Box Demo).";
   syncAgentSelect(f.agents??[]);
   $("m-attempts").textContent=(metrics.trials??0).toLocaleString();$("m-success").textContent=(metrics.successes??0).toLocaleString();$("m-best").textContent=pct(f.best?.robust);
@@ -675,10 +681,10 @@ function renderSwarmFrame(f) {
     panel.appendChild(Object.assign(document.createElement("strong"),{textContent:`${resultLabel(f.best)} · ${pct(f.best.robust)} (${Object.keys(f.best.plan.evidence).length} independent trials)`}));
     const list=document.createElement("ol");
     for(const step of f.best.plan.actions)list.appendChild(Object.assign(document.createElement("li"),{textContent:`${objectLabel(step.target,f)}: manual tilt ${step.tilt_deg}° → ${step.direction.toUpperCase()} · predicted ${f.task.goals[step.target]} bag. Simulation angles/timing are uncalibrated.`}));
-    const replay=Object.assign(document.createElement("button"),{type:"button",textContent:"Replay Three-Box Solution"});replay.onclick=()=>send({cmd:"replay_plan"});
+    const replay=Object.assign(document.createElement("button"),{type:"button",textContent:"Preview"});replay.onclick=()=>send({cmd:"replay_plan"});
     const back=Object.assign(document.createElement("button"),{type:"button",textContent:"Back to agent trials"});back.onclick=()=>swarmOverlay.stopSequence();
     panel.append(replay,back);
-    panel.append(list,Object.assign(document.createElement("p"),{textContent:"Simulation prediction only. UNO Q execution is disabled."}));
+    panel.append(list,Object.assign(document.createElement("p"),{textContent:"Stored simulation prediction. Physical playback requires verified calibration and one-time arming; box outcomes are not measured."}));
   }else panel.textContent=f.failure??"No complete validated plan yet.";
   }
   swarmOverlay.visible=$("observer-overlay").checked;
@@ -700,7 +706,7 @@ function renderFrame(f) {
     $("physical-outcome").disabled=false;return;
   }
   if(f.type==='outcome_confirmed'){$("physical-status").textContent=`Human reported outcome recorded. Next step ${f.next_step}. No physical command was sent.`;$("physical-outcome").disabled=true;return;}
-  if(f.type === "error"){$("swarm-status").textContent=f.reason;return;}
+  if(f.type === "error"){$("swarm-status").textContent=f.reason;$("physical-status").textContent=f.reason;return;}
   if(f.type === "dry_run_command"){
     const text=`Dry run step ${f.step} of ${f.steps}: ${f.target} → ${f.bin} bag. Set tilt ${f.tilt_deg}° by hand, then ${f.commands.join(" · ")} (logged, not sent to hardware).`;
     $("swarm-status").textContent=text; $("world-message").textContent=text; return;
@@ -745,12 +751,11 @@ $("swarm-demo").onclick=()=>send({cmd:"load_demo"});
 $("swarm-stop").onclick=()=>send({cmd:'stop_live'});
 $("swarm-saved").onclick=()=>send({cmd:'load_saved'});
 $("swarm-replay").onclick=()=>send({cmd:'replay_plan'});
-$("physical-stop").onclick=()=>{send({cmd:'hardware_stop'});$("physical-status").textContent='STOP: disconnect servo power physically. No serial transport is active.';};
-$("physical-dry").onclick=()=>{
- const step=lastFrame?.best?.plan?.actions?.[(lastFrame.execution?.physical_next_step??1)-1];if(!step)return;
- const confirmed=confirm(`DRY RUN ONLY — no command will be transmitted.\nSet tilt manually to ${step.tilt_deg}°. Confirm the actual box scene matches this plan, and the previous boxes have the expected outcomes.\nPrepare ${step.target} → ${lastFrame.task.goals[step.target]}?`);
- if(confirmed)send({cmd:'prepare_step',plan_id:lastFrame.best.plan.id,tilt_confirmed:true,scene_confirmed:true});
-};
+$("physical-connect").onclick=()=>send({cmd:'hardware_connect'});
+$("physical-arm").onclick=()=>send({cmd:'hardware_arm',armed:true});
+$("physical-step").onclick=()=>send({cmd:'hardware_start',mode:'hardware'});
+$("physical-dry").onclick=()=>send({cmd:'hardware_start',mode:'dry_run'});
+$("physical-stop").onclick=()=>{send({cmd:'hardware_stop'});$("physical-status").textContent='STOP requested. Disconnect servo power physically for an immediate stop.';};
 $("physical-failed").onclick=()=>send({cmd:"confirm_outcome",success:false});
 $("physical-outcome").onclick=()=>{if(confirm('Confirm you have observed the actual box in its expected bin. This is a human report, not hardware acknowledgement.'))send({cmd:'confirm_outcome',success:true});};
 // "Start agents": plan whatever is placed on the bench (the sweeper plus at least one box).

@@ -4,9 +4,28 @@
   "acknowledgement_verified": false,
   "serial_port": null,
   "baud": 115200,
-  "direction_commands": {"increasing": null, "decreasing": null},
+  "direction_commands": {
+    "increasing": null,
+    "decreasing": null
+  },
   "servo_limits_deg": null,
   "tilt_limits_deg": null,
   "calibration_id": null,
-  "note": "UNO Q accepts L/R/S/C. Measure which command produces each simulated sweep direction; never infer it from the letter. Physical transport is locked until firmware acknowledgement and safe integration are verified."
+  "note": "Disabled by default. Calibrate actual L/R movement, servo limits, endpoint/action profiles, firmware completion and tilt verification. Manual multi-angle tilt without a verified sensor requires timed dry run.",
+  "completion_verified": false,
+  "completion_verification_id": null,
+  "command_timeout_s": 5,
+  "endpoint_angles_deg": {
+    "L": null,
+    "R": null,
+    "C": null
+  },
+  "tilt_verification": {
+    "mode": "none",
+    "verified": false,
+    "calibration_id": null,
+    "tolerance_deg": 1,
+    "angle_deg": null
+  },
+  "action_profiles": {}
 }

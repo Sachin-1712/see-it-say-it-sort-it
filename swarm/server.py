@@ -11,6 +11,7 @@ from websockets.asyncio.server import serve
 from websockets.exceptions import ConnectionClosed
 
 from .supervisor import Swarm
+from .playback import Playback
 
 LOCAL_ORIGIN = re.compile(r"https?://(?:localhost|127\.0\.0\.1|\[::1\])(?::\d+)?")
 
@@ -18,15 +19,33 @@ LOCAL_ORIGIN = re.compile(r"https?://(?:localhost|127\.0\.0\.1|\[::1\])(?::\d+)?
 async def run(args):
     swarm = Swarm(workers=args.workers, seed=args.seed, directory=args.directory,
                   settings={"rollout_limit":args.rollouts,"time_limit_s":args.timeout})
+    playback=Playback(swarm)
+    playback_owner=None
     clients = set()
     async def handler(ws):
+        nonlocal playback_owner
         clients.add(ws)
         try:
             async for raw in ws:
                 try:
                     message=json.loads(raw)
                     cmd=message.get("cmd")
-                    if cmd == "die":
+                    if cmd in ('load_demo','start_agents','plan_workbench','invalidate','replan','load_saved') and playback.running:
+                        playback.stop()
+                        if playback.job:await playback.job
+                    if cmd == 'hardware_connect':
+                        await playback.connect()
+                    elif cmd == 'hardware_arm':
+                        if message.get('armed') is not True:raise ValueError('Explicit operator arming is required')
+                        await playback.arm()
+                    elif cmd == 'hardware_start':
+                        if message.get('mode') not in ('dry_run','hardware'):raise ValueError('Choose dry_run or hardware')
+                        await playback.start(dry_run=message['mode']=='dry_run')
+                        playback_owner=ws
+                    elif cmd == 'hardware_key':
+                        await playback.start_keyboard(message.get('key'),message.get('armed') is True)
+                        playback_owner=ws
+                    elif cmd == "die":
                         if not swarm.kill(message.get("id")):raise ValueError("Agent process was already stopped")
                         await ws.send(json.dumps(swarm.frame(),allow_nan=False))
                     elif cmd in ("silence", "unsilence"):
@@ -45,7 +64,7 @@ async def run(args):
                     elif cmd == "confirm_outcome":
                         await ws.send(json.dumps(await asyncio.to_thread(swarm.confirm_outcome,message.get('success'))))
                     elif cmd == "hardware_stop":
-                        await ws.send(json.dumps(dict(type='error',reason='No hardware transport is active. Disconnect servo power physically for an immediate physical stop.')))
+                        playback.stop()
                     elif cmd == "plan_workbench":
                         await asyncio.to_thread(swarm.start, message.get("snapshot"))
                     elif cmd == "replay_plan":
@@ -61,19 +80,27 @@ async def run(args):
                         await ws.send(json.dumps(dict(type="error",reason="Hardware execution is disabled; Send runs as a dry run only.")))
                     else:
                         raise ValueError("unsupported command")
-                except (ValueError, KeyError, TypeError) as error:
+                except (ValueError, KeyError, TypeError, OSError, TimeoutError) as error:
+                    if isinstance(cmd,str) and cmd.startswith('hardware_'):
+                        playback.state['message']=str(error)
+                        if not playback.running:
+                            playback.armed=False
+                            playback.state['status']='failed'
                     await ws.send(json.dumps(dict(type="error",reason=str(error))))
         except ConnectionClosed:
             pass
         finally:
+            if playback_owner is ws and playback.running:playback.stop()
             clients.discard(ws)
     try:
         if args.demo:
             swarm.start(source="golden")
         async with serve(handler, "localhost", args.port, origins=[LOCAL_ORIGIN,None], max_size=2*1024*1024):
-            print(f"Real GEKKO swarm observer ws://localhost:{args.port}; {args.workers} workers; hardware disabled (Send is a dry run)",flush=True)
+            print(f"Real GEKKO swarm observer ws://localhost:{args.port}; {args.workers} workers; serial disabled until calibrated and armed; saved playback available",flush=True)
             while True:
-                frame = json.dumps(swarm.frame(),allow_nan=False)
+                current=swarm.frame()
+                current["hardware_playback"]=playback.snapshot()
+                frame = json.dumps(current,allow_nan=False)
                 for ws in list(clients):
                     try:
                         await ws.send(frame)
@@ -81,6 +108,9 @@ async def run(args):
                         clients.discard(ws)
                 await asyncio.sleep(.25)
     finally:
+        playback.stop()
+        if playback.job:await playback.job
+        playback.bridge.close()
         swarm.close()
 
 

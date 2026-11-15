@@ -44,3 +44,6 @@ in [docs/PRD.md](docs/PRD.md); newer scoped requirements supersede its older exc
 
 For the four-agent hackathon flow, offline validated replay, measured timings and
 disabled-by-default UNO Q preparation, see [docs/demo.md](docs/demo.md).
+
+Saved-plan serial playback, keyboard client, UNO Q sketch and calibration blockers:
+[docs/hardware-playback.md](docs/hardware-playback.md).

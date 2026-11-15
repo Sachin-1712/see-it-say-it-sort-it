@@ -43,28 +43,13 @@ trials. Silence, missing checkpoints, delayed heartbeats and a dead successor do
 not produce invented recovery. No extra validated result means the banner says
 so even when further trials have run. Stopped agents retain their history.
 
-## UNO Q blocker and dry run
+## UNO Q playback
 
-Real execution is locked, including when configuration flags are edited. No
-serial device is opened and no commands are transmitted. We have not verified
-this rig's firmware acknowledgement, servo travel, direction calibration or a
-safe serial integration. This deliberately uses the requested disabled-hardware
-fallback. No claim of hardware receipt or physical completion is made.
-
-`config/uno-q.json` records opt-in settings, calibrated servo/tilt limits,
-calibration identity and explicit **increasing/decreasing simulated angle → L/R**
-mapping. A letter is never treated as a physical direction. Changing it invalidates
-an old bundle. The separate Dry Run One Confirmed Step control requires manual
-tilt/scene confirmation, reports sent=false/acknowledged=false, and blocks the next
-step until a human confirms the actual box outcome. Failed/unknown outcomes require
-resetting the scene and reloading. Simulated G/P logging remains separate and cannot
-advance the confirmed-step workflow.
-
-For future integration, use one Python serial owner only; close `servo_keys.py`
-and Serial Monitor before connecting. Verify L/R/S/C behavior and acknowledgement
-on the actual board, then implement/test that transport before enabling the
-Execute control. The UI Stop control sends no unverified `S`; for an immediate
-physical stop **disconnect servo power**.
+The serial playback workflow supersedes the earlier manual per-step dry run.
+See [hardware-playback.md](hardware-playback.md) for the single-owner bridge,
+one-start automatic countdown, compatible firmware, keyboard client and required
+calibration. Hardware stays disabled by default. Without verified completion,
+action profiles and per-step tilt, use Start Timed Dry Run; no sweep is sent.
 
 ## Measurements and verification
 
