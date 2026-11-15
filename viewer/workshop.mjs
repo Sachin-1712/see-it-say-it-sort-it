@@ -681,6 +681,8 @@ function renderSwarmFrame(f) {
   feed.replaceChildren(...[...(f.events??[]),...activity].sort((a,b)=>b.timestamp-a.timestamp).slice(0,20).map(event=>Object.assign(document.createElement("div"),{textContent:`${new Date(event.timestamp*1000).toLocaleTimeString()} · ${(event.agent??"swarm").toUpperCase()} · ${event.type.replaceAll("_"," ")}${event.detail?` · ${event.detail}`:""}${event.role?` → ${event.role}`:""}${event.failed_agent?` ${event.failed_agent.toUpperCase()}`:""}${event.checkpoint_id?` · ${event.checkpoint_id} (${event.recovered_trials??"shared"} trials)`:""}`})));
   $("swarm-plan-details").hidden=!f.failure;
   $("swarm-plan-details").textContent=f.failure??'';
+  const routes=JSON.stringify((f.best?.plan?.actions??[]).map(action=>({name:objectLabel(action.target,f),bin:f.task.goals[action.target]})));
+  if($("swarm-plan-details").dataset.routes!==routes)$("swarm-plan-details").dataset.routes=routes;
   swarmOverlay.visible=$("observer-overlay").checked;
   swarmOverlay.ingest(f);
   swarmOverlay.syncDryRun(f);

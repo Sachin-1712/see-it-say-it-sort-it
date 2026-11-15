@@ -1,9 +1,10 @@
 // Read the validated routes already shown by the viewer. The planner and its
 // WebSocket protocol stay independent of speech.
 const panel = document.getElementById("swarm-plan-details");
+const controls = document.querySelector(".demo-controls");
 const connection = document.getElementById("conn");
 const speech = window.speechSynthesis;
-if (panel && connection && speech && typeof SpeechSynthesisUtterance === "function") {
+if (panel && controls && connection && speech && typeof SpeechSynthesisUtterance === "function") {
   installNarration();
 }
 
@@ -18,11 +19,11 @@ function installNarration() {
 
   function narration() {
     if (!connection.classList.contains("on")) return null;
-    const steps = [...panel.querySelectorAll(":scope > ol > li")];
-    const routes = steps.map(step => {
-      const route = /^(.+): manual tilt .+ · predicted (left|right) bag\./.exec(step.textContent);
-      return route ? `${route[1]} to the ${route[2]} bin.` : null;
-    });
+    let steps;
+    try { steps = JSON.parse(panel.dataset.routes ?? "[]"); } catch { return null; }
+    if (!Array.isArray(steps)) return null;
+    const routes = steps.map(step => typeof step?.name === "string" && ["left", "right"].includes(step.bin)
+      ? `${step.name} to the ${step.bin} bin.` : null);
     return routes.length && routes.every(Boolean)
       ? `See it. Say it. Sort it. The simulation predicts this order. ${routes.join(" ")}`
       : null;
@@ -43,7 +44,7 @@ function installNarration() {
       button.textContent = "Say it";
     }
     if (!next) button.remove();
-    else if (!panel.contains(button)) panel.insertBefore(button, panel.querySelector(":scope > ol"));
+    else if (!controls.contains(button)) controls.append(button);
   }
 
   button.onclick = () => {
@@ -67,7 +68,7 @@ function installNarration() {
   };
 
   const observer = new MutationObserver(update);
-  observer.observe(panel, { childList: true });
+  observer.observe(panel, { attributes: true, attributeFilter: ["data-routes"] });
   observer.observe(connection, { attributes: true, attributeFilter: ["class"] });
   window.addEventListener("pagehide", stop);
   speech.getVoices(); // Allow browsers with asynchronous voice loading to prime the list.
