@@ -1,6 +1,6 @@
-import {resultLabel, recoveryText} from "./demo-state.mjs";
+import {resultLabel, recoveryText, dryRunAvailability} from "./demo-state.mjs?v=timed-replay-1";
 import { SwarmFrames } from "./swarm-state.mjs";
-import { SwarmOverlay } from "./swarm-overlay.mjs";
+import { SwarmOverlay } from "./swarm-overlay.mjs?v=timed-replay-1";
 import { workbenchState } from "./workbench-state.mjs";
 import { selectTab } from "./tabs.mjs";
 import { toThree, fromThree } from "./frame.mjs";
@@ -661,7 +661,9 @@ function renderSwarmFrame(f) {
   $("swarm-saved").disabled=!connected()||!f.task||!f.live_search_stopped;
   $("swarm-replay").disabled=!connected()||!f.best;
   const hw=f.hardware_playback??{connection:'Disconnected',message:'Physical execution disabled by default'};
-  $("physical-dry").disabled=!connected()||!saved||hw.running;
+  const dry=dryRunAvailability(f,connected());
+  $("physical-dry").disabled=!dry.enabled;$("physical-dry").title=dry.reason;
+  $("dry-run-status").textContent=dry.reason;
   $("physical-step").disabled=!connected()||!saved||!hw.armed||hw.running;
   $("physical-connect").disabled=!connected()||hw.running;
   $("physical-connect").textContent=hw.status==="connecting"?"Connecting…":"Connect UNO Q";
@@ -693,6 +695,7 @@ function renderSwarmFrame(f) {
   }
   swarmOverlay.visible=$("observer-overlay").checked;
   swarmOverlay.ingest(f);
+  swarmOverlay.syncDryRun(f);
   if(f.source === "golden" && f.task && loadedSwarmTask!==`${f.task.task_id}:${f.task.scene_version}` && workbench){
     loadedSwarmTask=`${f.task.task_id}:${f.task.scene_version}`;
     loadingSwarmScene=true;
@@ -766,7 +769,11 @@ $("physical-arm").onclick=()=>{
   send({cmd:'hardware_arm',armed:true});
 };
 $("physical-step").onclick=()=>send({cmd:'hardware_start',mode:'hardware'});
-$("physical-dry").onclick=()=>send({cmd:'hardware_start',mode:'dry_run'});
+$("physical-dry").onclick=()=>{
+  $("physical-status").textContent='Starting stored MuJoCo dry run — no hardware commands.';
+  $("observer-overlay").checked=true;swarmOverlay.visible=true;
+  send({cmd:'hardware_start',mode:'dry_run'});
+};
 $("physical-stop").onclick=()=>{send({cmd:'hardware_stop'});$("physical-status").textContent='STOP requested. Disconnect servo power physically for an immediate stop.';};
 $("physical-failed").onclick=()=>send({cmd:"confirm_outcome",success:false});
 $("physical-outcome").onclick=()=>{if(confirm('Confirm you have observed the actual box in its expected bin. This is a human report, not hardware acknowledgement.'))send({cmd:'confirm_outcome',success:true});};

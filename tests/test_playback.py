@@ -119,6 +119,7 @@ def test_timed_dry_run_uses_saved_order_and_full_three_second_gaps(validated):
         assert not controller.state['acknowledged'] and controller.bridge.port is None
         actions=controller.swarm.saved_bundle['plan']['actions']
         assert [target for seconds,target,_ in waits if seconds!=3]==[a['target'] for a in actions]
+        assert [seconds for seconds,_,_ in waits if seconds!=3]==[r['trajectories']['stick'][-1][0] for r in controller.swarm.saved_bundle['plan']['results']]
         intervals=[(i,w) for i,w in enumerate(waits) if w[0]==3]
         assert len(intervals)==2
         for i,(_,_,started) in intervals:assert waits[i+1][2]-started>=3

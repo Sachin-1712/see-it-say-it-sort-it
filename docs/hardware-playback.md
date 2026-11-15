@@ -18,8 +18,11 @@ physics/configuration, hardware configuration, source and engine hashes must mat
 the existing 24-hour expiry and 80%/20-trial requirements remain. The cached file
 is local at `.gekko/validated-three-box.json`. Regenerate after calibration changes.
 
-The timed dry run needs one Start click. It follows the saved action order and
-waits a full three seconds after each simulated sweep before the next simulated
+The timed dry run needs one Start click and never moves the real servo. It
+animates yellow outlines from stored MuJoCo body trajectories. If a scene edit
+unloads the plan, reload the matching demo and saved plan; the disabled button
+explains this prerequisite. It follows the saved action order and
+waits a full three seconds after each complete stored trajectory before the next simulated
 movement. No sweep bytes are transmitted, and no physical completion is claimed.
 Required **MANUAL tilt** is displayed throughout the next-step countdown. A timer
 does not verify tilt or servo completion.

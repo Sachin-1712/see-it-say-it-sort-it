@@ -182,3 +182,20 @@ test("agent ghost worlds stay independent, isolate A3 and ignore new trials afte
   assert.equal(overlay.agents.get("a3").trial.trial_id,"a3:1:1");
   overlay.clear();assert.equal(overlay.agents.size,0);assert.deepEqual(physical.position.toArray(),[22,33,44]);
 });
+
+test('timed dry run animates stored tracks, holds the previous result during countdown and stops',async t=>{
+ const app=await harness(t),{SwarmOverlay}=await app.evaluate('swarm-overlay.mjs');
+ const scene=new THREE.Scene(),overlay=new SwarmOverlay(scene);
+ const task={snapshot:{objects:[{type:'box',instanceId:'box',position:{x:0,y:0,z:10},dimensionsMm:{width:20,depth:20,height:20}}]},config:{models:{sweeper:{stick:{lengthMm:100,widthMm:10,thicknessMm:3}}}}};
+ const result={trajectories:{box:[[0,0,0,10,0,0,0],[1,100,0,10,0,0,0]],stick:[[0,0,0,30,0,0,0],[1,10,0,30,0,0,0]]}};
+ const frame={task,best:{plan:{results:[result]}},hardware_playback:{mode:'dry_run',status:'dry_run_sweeping',running:true,run_id:'run',replay_step:1,replay_elapsed_s:.5}};
+ overlay.syncDryRun(frame);overlay.update(0);
+ assert.equal(overlay.preview.meshes.get('box').position.x,50);
+ const preview=overlay.preview;
+ frame.hardware_playback={...frame.hardware_playback,status:'interval',step:2,replay_elapsed_s:1};
+ overlay.syncDryRun(frame);overlay.update(0);
+ assert.equal(overlay.preview,preview);assert.equal(preview.meshes.get('box').position.x,100);
+ assert.equal(task.snapshot.objects[0].position.x,0,'solid setup is not mutated');
+ frame.hardware_playback.status='interrupted';overlay.syncDryRun(frame);
+ assert.equal(overlay.preview,null);
+});

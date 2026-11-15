@@ -16,3 +16,14 @@ test('recovery waits for actual takeover and trial evidence',()=>{
  assert.match(recoveryText({...real,new_trials:2,resumed:true}),/2 new trials.*WORK RESUMED/);
  assert.match(recoveryText({...real,successor_alive:false}),/SUCCESSOR OFFLINE/);
 });
+
+test('dry run explains missing scene/plan and works without any hardware calibration',async()=>{
+ const {dryRunAvailability}=await import('../viewer/demo-state.mjs');
+ assert.equal(dryRunAvailability({task:null}).enabled,false);
+ assert.match(dryRunAvailability({task:null}).reason,/Load Three-Box Demo.*Load Saved Plan/);
+ const frame={task:{task_id:'scene'},best:{attribution:'previously_validated'},hardware_playback:{running:false,armed:false,connection:'Disconnected'}};
+ assert.equal(dryRunAvailability(frame).enabled,true);
+ assert.match(dryRunAvailability(frame).reason,/No Arduino calibration or arming required/);
+ assert.equal(dryRunAvailability({...frame,best:null}).enabled,false);
+ assert.equal(dryRunAvailability(frame,false).enabled,false);
+});

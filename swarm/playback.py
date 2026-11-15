@@ -4,6 +4,7 @@ import copy
 import math
 import threading
 import time
+import uuid
 from .hardware import configuration, prepare
 from .saved_plan import identity, sha, check_plan
 from .serial_bridge import SerialBridge
@@ -28,7 +29,8 @@ class Playback:
 
     def snapshot(self):
         return dict(self.state,connection=self.bridge.connection,armed=self.armed,running=self.running,
-                    remaining_s=max(0,math.ceil(self.state.get('next_at',0)-time.monotonic())))
+                    remaining_s=max(0,math.ceil(self.state.get('next_at',0)-time.monotonic())),
+                    replay_elapsed_s=min(self.state.get('replay_duration_s',0),max(0,time.monotonic()-self.state.get('replay_started_at',time.monotonic()))))
 
     def bundle(self):
         s=self.swarm
@@ -125,7 +127,7 @@ class Playback:
             profiles=self.profiles(bundle,config)
         self.armed=False # every start consumes the one-time arm
         self.cancel.clear()
-        self.state=dict(status='starting',mode='dry_run' if dry_run else 'hardware',step=0,
+        self.state=dict(run_id=uuid.uuid4().hex,status='starting',mode='dry_run' if dry_run else 'hardware',step=0,
                         steps=len(bundle['plan']['actions']),acknowledged=False,completed_steps=0,message='PREVIOUSLY VALIDATED PLAN')
         self.job=asyncio.create_task(self.run(bundle,config,profiles,dry_run))
 
@@ -158,7 +160,8 @@ class Playback:
                     await self.wait(INTERVAL_S,guard)
                 if dry_run:
                     self.state.update(status='dry_run_sweeping',message='DRY RUN — no serial command sent; no movement acknowledged')
-                    duration=abs(action['sweep_end_deg']-action['sweep_start_deg'])/action['speed_deg_s']
+                    duration=bundle['plan']['results'][index]['trajectories']['stick'][-1][0]
+                    self.state.update(replay_step=index+1,replay_started_at=time.monotonic(),replay_duration_s=duration)
                     await self.wait(duration,guard)
                 else:
                     p=profiles[index]

@@ -26,6 +26,22 @@ export class SwarmOverlay {
     group.add(stick);meshes.set("stick",stick);
     this.preview={group,results,meshes,started:performance.now()/1000};
   }
+  syncDryRun(frame) {
+    const playback=frame.hardware_playback;
+    if(playback?.mode!=='dry_run' || !playback.run_id)return;
+    if(['interrupted','failed'].includes(playback.status)){
+      if(this.preview?.dryRunId===playback.run_id)this.stopSequence();
+      return;
+    }
+    const result=frame.best?.plan?.results?.[(playback.replay_step??0)-1];
+    if(!frame.task || !result || (!playback.running && this.preview?.dryRunId!==playback.run_id))return;
+    const key=`${playback.run_id}:${playback.replay_step}`;
+    if(this.preview?.dryRunKey!==key){
+      this.playSequence([result],frame.task);
+      this.preview.dryRunKey=key;this.preview.dryRunId=playback.run_id;
+    }
+    this.preview.started=performance.now()/1000-playback.replay_elapsed_s;
+  }
   clear() { this.stopSequence();for(const agent of this.agents.values()) this.dispose(agent); this.agents.clear(); }
   dispose(agent) { agent.group.removeFromParent(); agent.group.traverse(o=>{if(!o.isSprite)o.geometry?.dispose(); if(o.material){o.material.map?.dispose();o.material.dispose();}}); }
   ingest(frame) {
