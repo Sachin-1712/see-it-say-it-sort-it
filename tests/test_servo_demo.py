@@ -14,17 +14,20 @@ def test_single_start_runs_endpoints_without_tilt_profiles_and_homes_if_needed(v
         actions=p.swarm.saved_bundle['plan']['actions']
         expected=[cfg['direction_commands']['increasing' if a['sweep_end_deg']>a['sweep_start_deg'] else 'decreasing'] for a in actions]
         try:
-            await p.connect();await p.arm()
-            assert p.snapshot()['servo_demo_ready'] and not p.snapshot()['automatic_ready']
+            with pytest.raises(ValueError,match='Explicit Arm'):await p.arm_and_send(False,True)
+            assert p.bridge.port is None
             with pytest.raises(ValueError,match='manual-tilt'):await p.start(False,servo_demo=True)
-            await p.start(False,servo_demo=True,manual_tilt=True)
+            await p.arm_and_send(True,True) # one action connects, arms, then runs
             await p.job
             assert p.state['status']=='servo_demo_completed'
-            assert p.state['completed_steps']==len(actions) and p.state['acknowledged']
+            assert p.state['completed_steps']==len(actions)+1 and p.state['acknowledged']
             assert not p.state['tilt_verified'] and not p.state['sorting_verified']
             assert not p.armed
+            assert p.state['steps']==len(actions)+1 and p.state['box']=='Extra demo command L'
+            assert p.state['endpoint_held'] is (expected[-1]=='L')
+            assert len(p.swarm.saved_bundle['plan']['actions'])==len(actions)
             moves=[(c,t) for c,t in fw.events if c in 'LRC']
-            assert [c for c,_ in moves]==['C',*expected]
+            assert [c for c,_ in moves]==['C',*expected,'L']
             assert all(moves[i+1][1]-fw.acks[i]>=3 for i in range(len(moves)-1))
         finally:p.bridge.close();fw.close()
     asyncio.run(run())

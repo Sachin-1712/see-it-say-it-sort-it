@@ -19,9 +19,9 @@ def test_individual_operator_tests_do_not_enable_automatic_playback():
     async def run():
         fw,cfg,p=setup()
         try:
-            await p.connect()
-            with pytest.raises(ValueError,match='operator presence'):await p.arm_calibration(False)
-            await p.arm_calibration(True)
+            with pytest.raises(ValueError,match='manual-control'):await p.arm_manual_control(False)
+            assert p.bridge.port is None
+            await p.arm_manual_control(True)
             assert p.calibration_armed and not p.armed
             await p.start_calibration_move('C');await p.job
             assert p.state['status']=='calibration_review' and fw.angle==90

@@ -137,6 +137,14 @@ class Playback:
         if status['calibration']!=config['calibration_id'] or status['limits']!=config['servo_limits_deg'] or status['completion']!='VERIFIED':
             raise ValueError('Firmware calibration/limits/completion mismatch')
 
+    def demo_actions(self,bundle,config):
+        actions=list(bundle['plan']['actions'])
+        # Operator-requested trailing L belongs only to the servo demonstration.
+        # It is not a fourth box action or additional MuJoCo validation evidence.
+        side='left' if config['direction_commands']['increasing']=='L' else 'right'
+        actions.append(dict(target=None,tilt_deg=actions[-1]['tilt_deg'],direction=side,demo_command='L'))
+        return actions
+
     def demo_endpoints(self,bundle,config):
         # Endpoint demonstration only: no assertion that these reproduce the
         # MuJoCo action's exact start angle, speed, tilt or physical box outcome.
@@ -145,9 +153,11 @@ class Playback:
         timeout=config.get('command_timeout_s',5)
         if not isinstance(timeout,(int,float)) or not math.isfinite(timeout) or not 0<timeout<=30:
             raise ValueError('Invalid completion timeout')
-        for action in bundle['plan']['actions']:
-            direction='increasing' if action['sweep_end_deg']>action['sweep_start_deg'] else 'decreasing'
-            command=config['direction_commands'][direction]
+        for action in self.demo_actions(bundle,config):
+            if action.get('demo_command'):command=action['demo_command']
+            else:
+                direction='increasing' if action['sweep_end_deg']>action['sweep_start_deg'] else 'decreasing'
+                command=config['direction_commands'][direction]
             end=config.get('endpoint_angles_deg',{}).get(command)
             if not isinstance(end,(int,float)) or not math.isfinite(end) or not low<=end<=high:
                 raise ValueError('Servo demo endpoint outside verified limits')
@@ -156,6 +166,20 @@ class Playback:
         if not isinstance(center,(int,float)) or not math.isfinite(center) or not low<=center<=high:
             raise ValueError('Missing verified centering endpoint')
         return profiles
+
+    async def arm_and_send(self,confirmed=False,manual_tilt=False):
+        self.require_idle()
+        if confirmed is not True or manual_tilt is not True:
+            raise ValueError('Explicit Arm & Send action with operator-managed tilt is required')
+        if not self.bridge.port or not self.bridge.port.is_open:await self.connect()
+        await self.arm()
+        await self.start(False,servo_demo=True,manual_tilt=True)
+
+    async def arm_manual_control(self,confirmed=False):
+        self.require_idle()
+        if confirmed is not True:raise ValueError('Explicit manual-control arming required')
+        if not self.bridge.port or not self.bridge.port.is_open:await self.connect()
+        await self.arm_calibration(True)
 
     async def start(self,dry_run=True,servo_demo=False,manual_tilt=False):
         self.require_idle()
@@ -171,7 +195,7 @@ class Playback:
         self.armed=False # every start consumes the one-time arm
         self.cancel.clear()
         self.state=dict(run_id=uuid.uuid4().hex,status='starting',mode='servo_demo' if servo_demo else 'dry_run' if dry_run else 'hardware',tilt_verified=False,sorting_verified=False,step=0,
-                        steps=len(bundle['plan']['actions']),acknowledged=False,completed_steps=0,message='PREVIOUSLY VALIDATED PLAN')
+                        steps=len(profiles) if servo_demo else len(bundle['plan']['actions']),acknowledged=False,completed_steps=0,message='PREVIOUSLY VALIDATED PLAN')
         self.job=asyncio.create_task(self.run(bundle,config,profiles,dry_run,servo_demo))
 
     def guard(self,bundle,config):
@@ -189,7 +213,7 @@ class Playback:
     async def run(self,bundle,config,profiles,dry_run,servo_demo=False):
         guard=lambda:self.guard(bundle,config)
         try:
-            actions=bundle['plan']['actions']
+            actions=self.demo_actions(bundle,config) if servo_demo else bundle['plan']['actions']
             objects={o['instanceId']:o for o in self.swarm.task['snapshot']['objects']}
             centered=False
             if servo_demo:
@@ -204,9 +228,9 @@ class Playback:
                     centered=True
             for index,action in enumerate(actions):
                 guard()
-                prepared=prepare(action,config)
-                self.state.update(step=index+1,target=action['target'],box=objects[action['target']].get('name',action['target']),
-                    destination=self.swarm.task['goals'][action['target']],tilt_deg=action['tilt_deg'],
+                prepared=None if servo_demo else prepare(action,config)
+                self.state.update(step=index+1,target=action['target'],box=objects[action['target']].get('name',action['target']) if action['target'] else 'Extra demo command L',
+                    destination=self.swarm.task['goals'][action['target']] if action['target'] else action['direction'],tilt_deg=action['tilt_deg'],
                     direction=action.get('direction'),command=profiles[index]['command'] if servo_demo else prepared['command'],acknowledged=False,next_at=0)
                 if index or centered:
                     self.state.update(status='interval',next_at=time.monotonic()+INTERVAL_S,
@@ -228,15 +252,16 @@ class Playback:
                         if actual is None or abs(actual-action['tilt_deg'])>tilt['tolerance_deg']:
                             raise ValueError('Required manual tilt is unverified; next physical sweep blocked')
                         if status['angle'] is None or abs(status['angle']-p['start_deg'])>.5:raise ValueError('Servo start position mismatch; no automatic reposition')
-                    self.state.update(status='sweeping',message='AUTOMATIC SERVO DEMO — waiting for DONE. Manual tilt and box sorting are unverified.' if servo_demo else 'Sweeping — waiting for correlated DONE; box outcome unverified')
+                    endpoint_held=bool(servo_demo and abs(status['angle']-p['end_deg'])<=.5)
+                    self.state.update(endpoint_held=endpoint_held,status='holding_endpoint' if endpoint_held else 'sweeping',message=f"Sending {p['command']}; commanded endpoint is unchanged at {p['end_deg']}°. Waiting for DONE." if endpoint_held else 'AUTOMATIC SERVO DEMO — waiting for DONE. Manual tilt and box sorting are unverified.' if servo_demo else 'Sweeping — waiting for correlated DONE; box outcome unverified')
                     end=await self.bridge.request(p['command'],self.cancel,p['timeout_s'],guard)
                     guard()
                     if not math.isfinite(end) or abs(end-p['end_deg'])>.5:raise ValueError('Acknowledged endpoint mismatch')
                     self.state['completed_steps']+=1
-                    self.state['last_acknowledged']=dict(step=index+1,target=action['target'],command=p['command'],timestamp=time.time())
-                    self.state.update(status='step_completed',acknowledged=True,message='Completed — firmware acknowledged servo movement. Box sorting is unverified.')
+                    self.state['last_acknowledged']=dict(step=index+1,target=action['target'],command=p['command'],endpoint_held=endpoint_held,timestamp=time.time())
+                    self.state.update(status='step_completed',acknowledged=True,message='Command acknowledged; endpoint held, no additional travel commanded.' if endpoint_held else 'Completed — firmware acknowledged servo movement. Box sorting is unverified.')
             self.state.update(status='servo_demo_completed' if servo_demo else 'dry_run_finished' if dry_run else 'completed',next_at=0,
-                message='Automatic servo demo completed — all endpoint movements acknowledged. Manual tilt and box sorting were not verified.' if servo_demo else 'Dry-run playback finished — nothing sent or acknowledged' if dry_run else 'Playback completed — all servo movements acknowledged; box outcomes unverified')
+                message='Automatic servo demo completed — all endpoint commands acknowledged. Manual tilt and box sorting were not verified.' if servo_demo else 'Dry-run playback finished — nothing sent or acknowledged' if dry_run else 'Playback completed — all servo movements acknowledged; box outcomes unverified')
         except (Exception,asyncio.CancelledError) as error:
             sent=False if dry_run else self.bridge.stop_now()
             self.state.update(status='interrupted' if self.cancel.is_set() else 'failed',next_at=0,

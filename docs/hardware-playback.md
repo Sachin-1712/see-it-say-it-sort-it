@@ -198,3 +198,23 @@ client disconnect interrupt the sequence. There is no automatic restart. No
 per-step confirmation is requested. The wire command is
 `{"cmd":"hardware_start","mode":"servo_demo","manual_tilt":true}`; the mode
 still requires explicit device arming and all saved-plan identity/evidence checks.
+
+The operator subsequently requested one additional L at the end of the automatic
+servo demo. The schedule is now the saved directions followed by that extra L
+(currently L → R → L → L). The added step is labelled **Extra demo command L**;
+it is not added to the validated plan or its evidence. Repeated L commands hold
+the same commanded endpoint and do not create a new leftward sweep. The extra
+command still waits for the preceding DONE plus three seconds and gets its own
+correlated acknowledgement.
+
+## Compact Arduino panel
+
+The panel now has one **Arm & Send to Arduino** action. It connects if needed,
+checks/arms the calibrated device and starts the automatic servo demo in one click.
+**Arm manual control** connects/arms only manual L/C/R controls. Both share STOP.
+The verbose calibration, strict-sorting and dry-run controls were removed from this
+panel; stored simulation remains available through Preview. Backend diagnostic and
+strict-validation APIs remain available.
+
+Wire commands: `hardware_send` with `armed:true, manual_tilt:true`, and
+`hardware_manual_arm` with `confirmed:true`. Neither silently retries after errors.

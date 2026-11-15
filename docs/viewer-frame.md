@@ -113,3 +113,9 @@ and DONE + 3-second gaps, but does not assert tilt or box sorting verification.
 The active mode is `servo_demo`, with `tilt_verified:false`, `sorting_verified:false`
 and final status `servo_demo_completed`. Unknown initial servo position is centred
 once at Start; a position loss later aborts instead of auto-homing/restarting.
+
+Compact UI commands: `hardware_send` (`armed:true, manual_tilt:true`) connects if
+needed, arms and starts the endpoint demo in one action. `hardware_manual_arm`
+(`confirmed:true`) connects if needed and arms manual L/C/R controls only. The
+operator-added fourth L is a labelled extra demo command; it does not modify the
+validated three-action plan. Repeated endpoint commands are reported as holds.

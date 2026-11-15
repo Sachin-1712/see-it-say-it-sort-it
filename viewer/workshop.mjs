@@ -1,4 +1,4 @@
-import {resultLabel, recoveryText, dryRunAvailability} from "./demo-state.mjs?v=timed-replay-1";
+import {resultLabel, recoveryText} from "./demo-state.mjs?v=timed-replay-1";
 import { SwarmFrames } from "./swarm-state.mjs";
 import { SwarmOverlay } from "./swarm-overlay.mjs?v=timed-replay-1";
 import { workbenchState } from "./workbench-state.mjs";
@@ -603,15 +603,8 @@ function renderSend(f) {
   const b = $("send");
   const robust = f?.best?.robust ?? 0;
   const armed = connected() && robust >= EXECUTE_MIN && ["searching", "ready"].includes(f?.phase);
-  if (f?.protocol === "gekko-swarm-v1") {
-    // Human-confirmed Send, dry run: the server logs the servo commands; nothing reaches hardware.
-    const ex = f.execution ?? {}, next = ex.next_step;
-    const ready = connected() && !!f.best && robust >= EXECUTE_MIN && ex.dry_run && next != null;
-    b.disabled = !ready; b.classList.toggle("armed", ready);
-    b.textContent = ready ? `Log simulated G/P step ${next} of ${ex.steps} · no hardware` :
-                    f.best && ex.steps && next == null ? "All simulated steps logged" : "Waiting for a validated plan";
-    return;
-  }
+  if (f?.protocol === "gekko-swarm-v1") { b.hidden=true;return; }
+  b.hidden=false;
   b.disabled = !armed;
   b.classList.toggle("armed", armed);
   b.textContent = f?.phase === "executing" ? "Pushing..." : armed ? "Send to Arduino" :
@@ -661,28 +654,20 @@ function renderSwarmFrame(f) {
   $("swarm-saved").disabled=!connected()||!f.task||!f.live_search_stopped;
   $("swarm-replay").disabled=!connected()||!f.best;
   const hw=f.hardware_playback??{connection:'Disconnected',message:'Physical execution disabled by default'};
-  const dry=dryRunAvailability(f,connected());
-  $("physical-dry").disabled=!dry.enabled;$("physical-dry").title=dry.reason;
-  $("dry-run-status").textContent=dry.reason;
   const firstDemoStep=f.best?.plan?.actions?.[0];
-  $("servo-demo-setup").textContent=firstDemoStep?`Before Start: set MANUAL tilt to ${firstDemoStep.tilt_deg}°. The servo may centre automatically, then follows the saved directions.`:"Load a saved plan to prepare the automatic servo demo.";
-  $("servo-demo-start").disabled=!connected()||!saved||!hw.armed||!hw.servo_demo_ready||hw.running;
-  $("physical-step").disabled=!connected()||!saved||!hw.armed||!hw.automatic_ready||hw.running;
-  $("physical-step").title=hw.automatic_reason??"Automatic playback requires verified tilt and action profiles";
-  $("automatic-status").textContent=hw.armed?`Verified sorting mode: ${(hw.automatic_reason??"").replace(": use timed dry-run playback"," — requires verified tilt positioning")}. The automatic servo demo is separate.`:"";
-  $("physical-connect").disabled=!connected()||hw.running;
-  $("physical-connect").textContent=hw.status==="connecting"?"Connecting…":"Connect UNO Q";
-  $("calibration-arm").disabled=!connected()||hw.running||!hw.connection.startsWith('Connected')||!$("calibration-present").checked;
+  $("servo-demo-setup").textContent=firstDemoStep?`Start tilt ${firstDemoStep.tilt_deg}° · saved sequence + extra L · DONE + 3s between commands.`:'Load Saved Plan to enable automatic sending.';
+  $("servo-demo-start").disabled=!connected()||!saved||hw.running;
+  $("servo-demo-start").textContent=hw.running&&hw.mode==='servo_demo'?'Sending…':'Arm & Send to Arduino';
+  $("calibration-arm").disabled=!connected()||hw.running||hw.calibration_armed;
+  $("calibration-arm").textContent=hw.calibration_armed?'Manual control armed':'Arm manual control';
   for(const id of ['calibration-center','calibration-left','calibration-right'])$(id).disabled=!connected()||hw.running||!hw.calibration_armed;
-  $("physical-arm").disabled=!connected()||!saved||hw.running||!hw.connection.startsWith('Connected');
-  $("physical-arm").textContent=hw.armed?'Device armed for one Start':hw.status==='failed'?'Arm Hardware Once · BLOCKED':'Arm Hardware Once';
-  $("physical-arm").title=hw.status==='failed'?hw.message:'Check measured hardware calibration and arm for one playback';
   $("physical-status").dataset.error=String(hw.status==='failed');
-  $("playback-title").textContent=saved?'SAVED PLAN LOADED · PREVIOUSLY VALIDATED PLAN':'Load a saved plan for playback';
-  $("playback-connection").textContent=`${hw.connection} · ${hw.armed?'ARMED FOR ONE START':'NOT ARMED'} · ${hw.mode==='servo_demo'?'AUTOMATIC REAL SERVO DEMO · MANUAL TILT · BOX SORTING UNVERIFIED':hw.mode==='hardware'?'VERIFIED PHYSICAL PLAYBACK':hw.mode==='calibration'?'SUPERVISED REAL SERVO TESTS':hw.running?'SIMULATION ONLY':'IDLE — choose a playback mode'}`;
-  $("playback-step").textContent=hw.step?`Step ${hw.step}/${hw.steps} — ${hw.box??hw.target??'Servo'} → ${(hw.destination??'').toUpperCase()}`:'';
-  $("playback-tilt").textContent=hw.tilt_deg!=null?`REQUIRED MANUAL TILT: ${hw.tilt_deg}° · sweep ${(hw.direction??'').toUpperCase()} · ${hw.command?`servo command ${hw.command}`:'L/R mapping unverified'}`:'';
-  $("physical-status").textContent=hw.status==='interval'?`${hw.last_acknowledged?`Completed servo step ${hw.last_acknowledged.step} (DONE acknowledged; box unverified). `:''}Next sweep in ${hw.remaining_s} · ${hw.message}`:hw.message;
+  $("playback-connection").textContent=hw.connection.startsWith('Connected')?'Connected':hw.status==='connecting'?'Connecting…':'Disconnected';
+  $("playback-step").hidden=!hw.running||!hw.step;
+  $("playback-step").textContent=hw.step?`Step ${hw.step}/${hw.steps} · ${hw.box??hw.target??'Servo'} → ${(hw.destination??'').toUpperCase()}`:'';
+  $("playback-tilt").hidden=!hw.running||hw.tilt_deg==null;
+  $("playback-tilt").textContent=hw.tilt_deg!=null?`Manual tilt ${hw.tilt_deg}° · command ${hw.command??'—'}`:'';
+  $("physical-status").textContent=hw.status==='interval'?`Next command in ${hw.remaining_s}…`:hw.status==='servo_demo_completed'?'Done · all servo commands acknowledged.':hw.status==='calibration_review'?`${hw.command} acknowledged · check the real arm.`:hw.status==='calibration_ready'?'Manual control ready.':hw.status==='starting'?'Preparing servo…':['sweeping','calibration_moving'].includes(hw.status)?`Sending ${hw.command} · waiting for DONE…`:hw.status==='holding_endpoint'?`${hw.command} · holding endpoint; waiting for DONE…`:hw.status==='connected'?'Ready.':hw.message;
   $("swarm-status").textContent=f.task?`${metrics.active??0} real processes · ${metrics.trials??0} MuJoCo trials · ${metrics.plan_trials??0} plan trials · scene ${f.task.scene_version} · ${f.task.task_id} · ${metrics.elapsed_s}s${f.agents.some(a=>a.silenced)?" · PEER NETWORK OFF: local checkpoints":""}${f.failure?` · ${f.failure}`:""}`:"No simulation running · place the sweeper and boxes, then press ▶ Start agents (or Load Three-Box Demo).";
   syncAgentSelect(f.agents??[]);
   $("m-attempts").textContent=(metrics.trials??0).toLocaleString();$("m-success").textContent=(metrics.successes??0).toLocaleString();$("m-best").textContent=pct(f.best?.robust);
@@ -715,11 +700,6 @@ function renderFrame(f) {
     if(lastFrame?.task?.task_id===f.task_id && lastFrame.task.scene_version===f.scene_version){swarmOverlay.playSequence(f.results,lastFrame.task);$("world-message").textContent=`${f.label} · yellow outlines: stored MuJoCo simulation. Solid objects: workbench setup, not physical state.`;}
     return;
   }
-  if(f.type==='confirmed_step'){
-    $("physical-status").textContent=`DRY RUN step ${f.step}: ${f.target} → ${f.bin}; tilt ${f.tilt_deg}°. ${f.command??'No calibrated L/R mapping'}. NOT SENT · NOT ACKNOWLEDGED. ${f.reason}`;
-    $("physical-outcome").disabled=false;return;
-  }
-  if(f.type==='outcome_confirmed'){$("physical-status").textContent=`Human reported outcome recorded. Next step ${f.next_step}. No physical command was sent.`;$("physical-outcome").disabled=true;return;}
   if(f.type === "error"){$("swarm-status").textContent=f.reason;$("physical-status").textContent=f.reason;return;}
   if(f.type === "dry_run_command"){
     const text=`Dry run step ${f.step} of ${f.steps}: ${f.target} → ${f.bin} bag. Set tilt ${f.tilt_deg}° by hand, then ${f.commands.join(" · ")} (logged, not sent to hardware).`;
@@ -751,47 +731,24 @@ $("silence").onclick = () => {
   send({ cmd: silenced ? "unsilence" : "silence" });
 };
 $("replan").onclick = () => send({ cmd: "replan" });
-$("send").onclick = () => {
-  const f = lastFrame;
-  if (f?.protocol !== "gekko-swarm-v1") { send({ cmd: "execute" }); return; }
-  const step = f.best?.plan?.actions?.[(f.execution?.next_step ?? 1) - 1];
-  if (!step) return;
-  const name = objectLabel(step.target, f);
-  const ok = confirm(`Send step ${f.execution.next_step} of ${f.execution.steps}: ${name} → ${f.task?.goals?.[step.target] ?? "?"} bag?\n\n` +
-    `Set the tilt to ${step.tilt_deg}° by hand first.\nDRY RUN: the servo commands are logged on the server, not sent to the Arduino.`);
-  if (ok) send({ cmd: "execute" });
-};
+$("send").onclick = () => send({cmd:"execute"});
 $("swarm-demo").onclick=()=>send({cmd:"load_demo"});
 $("swarm-stop").onclick=()=>send({cmd:'stop_live'});
 $("swarm-saved").onclick=()=>send({cmd:'load_saved'});
 $("swarm-replay").onclick=()=>send({cmd:'replay_plan'});
-$("physical-connect").onclick=()=>{
-  $("physical-connect").disabled=true;$("physical-connect").textContent='Connecting…';
-  $("physical-status").textContent='Connecting to UNO Q. Close Serial Monitor and external servo_keys.py first.';
-  send({cmd:'hardware_connect'});
+$("calibration-arm").onclick=()=>{
+  $("physical-status").textContent='Arming manual control…';
+  send({cmd:'hardware_manual_arm',confirmed:true});
 };
-$("calibration-arm").onclick=()=>send({cmd:'hardware_calibration_arm',confirmed:$("calibration-present").checked});
 $("calibration-center").onclick=()=>send({cmd:'hardware_calibration_move',key:'C'});
 $("calibration-left").onclick=()=>send({cmd:'hardware_calibration_move',key:'L'});
 $("calibration-right").onclick=()=>send({cmd:'hardware_calibration_move',key:'R'});
-$("physical-arm").onclick=()=>{
-  $("physical-status").textContent='Checking hardware calibration…';
-  $("physical-arm").textContent='Checking calibration…';
-  send({cmd:'hardware_arm',armed:true});
-};
 $("servo-demo-start").onclick=()=>{
-  $("physical-status").textContent='Starting AUTOMATIC REAL SERVO DEMO. Adjust tilt manually; box sorting is unverified.';
-  send({cmd:'hardware_start',mode:'servo_demo',manual_tilt:true});
+  $("physical-status").textContent='Connecting, arming and sending…';
+  $("servo-demo-start").disabled=true;
+  send({cmd:'hardware_send',armed:true,manual_tilt:true});
 };
-$("physical-step").onclick=()=>send({cmd:'hardware_start',mode:'hardware'});
-$("physical-dry").onclick=()=>{
-  $("physical-status").textContent='Starting stored MuJoCo dry run — no hardware commands.';
-  $("observer-overlay").checked=true;swarmOverlay.visible=true;
-  send({cmd:'hardware_start',mode:'dry_run'});
-};
-$("physical-stop").onclick=()=>{send({cmd:'hardware_stop'});$("physical-status").textContent='STOP requested. Disconnect servo power physically for an immediate stop.';};
-$("physical-failed").onclick=()=>send({cmd:"confirm_outcome",success:false});
-$("physical-outcome").onclick=()=>{if(confirm('Confirm you have observed the actual box in its expected bin. This is a human report, not hardware acknowledgement.'))send({cmd:'confirm_outcome',success:true});};
+$("physical-stop").onclick=()=>{send({cmd:'hardware_stop'});$("physical-status").textContent='Stopping…';};
 // "Start agents": plan whatever is placed on the bench (the sweeper plus at least one box).
 function benchReady() {
   const objects = workbenchState.snapshot().objects;

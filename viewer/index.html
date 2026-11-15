@@ -213,34 +213,23 @@
         <div id="saved-attribution" role="status" hidden></div>
         <div id="rows"></div><div id="swarm-activity" aria-label="Agent activity"></div>
         <div id="swarm-plan-details"></div>
-        <div class="physical-controls" aria-label="Saved-plan hardware playback">
-          <strong id="playback-title">Load a saved plan for playback</strong>
-          <p>MANUAL TILT — GEKKO does not adjust the can. In servo-demo mode, you handle tilt. Verified sorting mode additionally requires measured tilt positioning.</p>
-          <p id="playback-step" role="status"></p>
-          <p id="playback-tilt"></p>
-          <p id="playback-connection" role="status">Hardware disconnected · not armed</p>
-          <p id="physical-status" role="status">Physical execution disabled by default. Timed dry run sends no sweep commands.</p>
-          <button id="physical-connect" type="button">Connect UNO Q</button>
-          <div class="calibration-controls">
-            <strong>Supervised REAL servo tests · 0–180° operator-tested</strong>
-            <p>These controls move the physical servo. Center first. L → RED/LEFT bin; R → BLUE/RIGHT bin, viewed from behind the sweeper. Tilt remains manual.</p>
-            <label><input id="calibration-present" type="checkbox"> I am at the rig and ready to stop/disconnect servo power.</label>
-            <button id="calibration-arm" type="button" disabled>Arm supervised tests</button>
-            <button id="calibration-center" type="button" disabled>Center · C</button>
-            <button id="calibration-left" type="button" disabled>L · RED bin</button>
-            <button id="calibration-right" type="button" disabled>R · BLUE bin</button>
-          </div>
-          <button id="physical-arm" type="button" disabled>Arm Hardware Once</button>
-          <p><strong>AUTOMATIC SERVO DEMO</strong> — one Start follows the saved L/R order, waits for DONE + 3 seconds, and may centre first. You adjust tilt manually. Box sorting is unverified.</p>
-          <p id="servo-demo-setup" role="status"></p>
-          <button id="servo-demo-start" class="primary" type="button" disabled>Start Automatic Servo Demo</button>
-          <p id="automatic-status" role="status"></p>
-          <button id="physical-step" type="button" disabled>Start Verified Sorting Playback</button>
-          <p id="dry-run-status" role="status"></p>
-          <button id="physical-dry" type="button" disabled>Start Timed Dry Run · no servo movement</button>
+        <div class="physical-controls" aria-label="Arduino controls">
+          <div class="arduino-heading"><strong>Arduino</strong><span id="playback-connection">Disconnected</span></div>
+          <button id="servo-demo-start" class="primary" type="button" disabled>Arm &amp; Send to Arduino</button>
+          <p id="servo-demo-setup" class="arduino-hint"></p>
+          <p id="playback-step" role="status" hidden></p>
+          <p id="playback-tilt" hidden></p>
+          <p id="physical-status" role="status">Load a saved plan to send.</p>
+          <section class="manual-controls" aria-label="Manual control">
+            <button id="calibration-arm" type="button" disabled>Arm manual control</button>
+            <div class="manual-directions">
+              <button id="calibration-left" type="button" disabled>Left · L</button>
+              <button id="calibration-center" type="button" disabled>Center · C</button>
+              <button id="calibration-right" type="button" disabled>Right · R</button>
+            </div>
+          </section>
           <button id="physical-stop" type="button">STOP</button>
-          <p>For an immediate physical stop, disconnect servo power. Close Serial Monitor and external servo_keys.py; keyboard commands must use GEKKO's single serial owner.</p>
-          <div hidden><button id="physical-outcome" type="button" disabled></button><button id="physical-failed" type="button" disabled></button></div>
+          <p class="arduino-hint">Manual tilt · box sorting unverified. Disconnect servo power for an immediate stop.</p>
         </div></div>
       <div class="view" id="view-outcomes" role="tabpanel" aria-labelledby="tab-outcomes" hidden>
         <div class="metric"><span class="k">Attempts tested</span><span class="v mono" id="m-attempts">0</span></div>
@@ -302,7 +291,7 @@
 </dialog>
 <script type="module" src="./inventory.mjs"></script>
 <script type="module" src="./model-preview.mjs"></script>
-<script type="module" src="./workshop.mjs?v=automatic-servo-demo-1"></script>
+<script type="module" src="./workshop.mjs?v=compact-arduino-1"></script>
 <script type="module" src="./sim-preview.mjs"></script>
 </body>
 </html>

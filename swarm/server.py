@@ -33,7 +33,12 @@ async def run(args):
                     if cmd in ('load_demo','start_agents','plan_workbench','invalidate','replan','load_saved') and playback.running:
                         playback.stop()
                         if playback.job:await playback.job
-                    if cmd == 'hardware_connect':
+                    if cmd == 'hardware_send':
+                        await playback.arm_and_send(message.get('armed'),message.get('manual_tilt'))
+                        playback_owner=ws
+                    elif cmd == 'hardware_manual_arm':
+                        await playback.arm_manual_control(message.get('confirmed'))
+                    elif cmd == 'hardware_connect':
                         await playback.connect()
                     elif cmd == 'hardware_status':
                         await ws.send(json.dumps(dict(type='hardware_status',status=await playback.status())))
