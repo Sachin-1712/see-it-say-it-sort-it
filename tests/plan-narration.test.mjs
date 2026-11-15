@@ -21,8 +21,9 @@ test("compact plan narration reads saved routes in order and cancels on disconne
   ]);
   connection.classList.add("on");
   await Promise.resolve();
-  const button = [...window.document.querySelectorAll(".demo-controls button")].find(b => b.textContent === "Say it");
+  const button = [...window.document.querySelectorAll(".plan-actions button")].find(b => b.textContent === "Say it");
   assert.ok(button, "voice control stays visible outside the hidden details panel");
+  assert.equal(button.nextElementSibling.id,"swarm-sort","Say it sits beside the sorting simulation control");
   button.click();
   assert.equal(spoken.length, 1);
   assert.match(spoken[0].text, /Box A to the left bin\. Box B to the right bin\. Box C to the left bin\./);

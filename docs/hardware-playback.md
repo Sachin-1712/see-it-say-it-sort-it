@@ -218,3 +218,11 @@ strict-validation APIs remain available.
 
 Wire commands: `hardware_send` with `armed:true, manual_tilt:true`, and
 `hardware_manual_arm` with `confirmed:true`. Neither silently retries after errors.
+
+## Saved-plan visuals
+
+**Preview** outlines only the active saved target, in the plan's actual order.
+**Play sorting**, beside **Say it**, replays the stored MuJoCo body and servo
+trajectories on the solid 3D models. It runs no new search or physics and sends
+no Arduino commands. **End preview** restores the setup; the replay leaves the
+validated scenario and evidence unchanged.

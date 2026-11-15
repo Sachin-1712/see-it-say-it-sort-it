@@ -1,10 +1,10 @@
 import {recoveryText} from "./demo-state.mjs?v=timed-replay-1";
 import { SwarmFrames } from "./swarm-state.mjs";
-import { SwarmOverlay } from "./swarm-overlay.mjs?v=timed-replay-1";
+import { SwarmOverlay } from "./swarm-overlay.mjs?v=sorting-playback-1";
 import { workbenchState } from "./workbench-state.mjs";
 import { selectTab } from "./tabs.mjs";
 import { toThree, fromThree } from "./frame.mjs";
-import { Workbench } from "./workbench.mjs?v=demo-labels-1";
+import { Workbench } from "./workbench.mjs?v=sorting-playback-1";
 import { sweeperPositionFromConfig } from "./workbench-state.mjs";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import { OBB } from "three/addons/math/OBB.js";
@@ -655,11 +655,15 @@ function renderSwarmFrame(f) {
   $("swarm-status").hidden=saved;
   $("agent-filter").hidden=saved;
   $("swarm-stop").hidden=!!f.live_search_stopped;
-  $("swarm-preview-stop").hidden=!swarmOverlay.preview;
+  if(workbench?.savedPlayback && (!saved || workbench.savedPlayback.plan.id!==f.best.plan.id || workbench.savedPlayback.task.scene_version!==f.task.scene_version))workbench.stopSavedPlan();
+  $("swarm-preview-stop").hidden=!swarmOverlay.preview&&!workbench?.savedPlayback;
   $("swarm-stop").disabled=!connected()||!f.task||f.live_search_stopped;
   $("swarm-saved").disabled=!connected()||!f.task||!f.live_search_stopped;
   $("swarm-replay").disabled=!connected()||!f.best;
   const hw=f.hardware_playback??{connection:'Disconnected',message:'Physical execution disabled by default'};
+  $("swarm-sort").hidden=!saved;
+  $("swarm-sort").disabled=!connected()||hw.running||loadingSwarmScene||!workbench?.instances.size;
+  if(hw.running)workbench?.stopSavedPlan();
   const firstDemoStep=f.best?.plan?.actions?.[0];
   $("servo-demo-setup").textContent=firstDemoStep?`Start tilt ${firstDemoStep.tilt_deg}° · 3s between commands`:'Load a saved plan to send.';
   $("servo-demo-start").disabled=!connected()||!saved||hw.running;
@@ -695,6 +699,7 @@ function renderSwarmFrame(f) {
 }
 function renderFrame(f) {
   if(f.type === "plan_replay"){
+    if(workbench?.savedPlayback)return;
     if(lastFrame?.task?.task_id===f.task_id && lastFrame.task.scene_version===f.scene_version){swarmOverlay.playSequence(f.results,lastFrame.task);$("world-message").textContent=`${f.label} · yellow outlines: stored MuJoCo simulation. Solid objects: workbench setup, not physical state.`;}
     return;
   }
@@ -733,8 +738,16 @@ $("send").onclick = () => send({cmd:"execute"});
 $("swarm-demo").onclick=()=>send({cmd:"load_demo"});
 $("swarm-stop").onclick=()=>send({cmd:'stop_live'});
 $("swarm-saved").onclick=()=>send({cmd:'load_saved'});
-$("swarm-replay").onclick=()=>send({cmd:'replay_plan'});
-$("swarm-preview-stop").onclick=()=>{swarmOverlay.stopSequence();$("swarm-preview-stop").hidden=true;};
+$("swarm-replay").onclick=()=>{workbench?.stopSavedPlan();send({cmd:'replay_plan'});};
+$("swarm-preview-stop").onclick=()=>{swarmOverlay.stopSequence();workbench?.stopSavedPlan();$("swarm-preview-stop").hidden=true;$("world-message").textContent='Simulation preview stopped.';};
+$("swarm-sort").onclick=()=>{
+  try{
+    if(lastFrame?.best?.attribution!=='previously_validated'||lastFrame.hardware_playback?.running)throw new Error('Load a saved plan and stop hardware playback first.');
+    swarmOverlay.stopSequence();
+    workbench.playSavedPlan(lastFrame.best.plan,lastFrame.task);
+    $("swarm-preview-stop").hidden=false;
+  }catch(error){$("world-message").textContent=error.message;}
+};
 $("calibration-arm").onclick=()=>{
   $("physical-status").textContent='Arming manual control…';
   send({cmd:'hardware_manual_arm',confirmed:true});
@@ -743,6 +756,7 @@ $("calibration-center").onclick=()=>send({cmd:'hardware_calibration_move',key:'C
 $("calibration-left").onclick=()=>send({cmd:'hardware_calibration_move',key:'L'});
 $("calibration-right").onclick=()=>send({cmd:'hardware_calibration_move',key:'R'});
 $("servo-demo-start").onclick=()=>{
+  workbench?.stopSavedPlan();swarmOverlay.stopSequence();
   $("physical-status").textContent='Connecting, arming and sending…';
   $("servo-demo-start").disabled=true;
   send({cmd:'hardware_send',armed:true,manual_tilt:true});
@@ -959,6 +973,14 @@ renderer.setAnimationLoop(() => {
   const now = performance.now() / 1000;
   swarmOverlay.update(now);
   workbench.update(now - previousTime); previousTime = now;
+  if(workbench.savedPlayback)swarmOverlay.group.visible=false;
+  if(swarmOverlay.preview?.target){
+    const preview=swarmOverlay.preview,key=`${preview.started}:${preview.step}`;
+    if(preview.labelKey!==key){
+      preview.labelKey=key;
+      $("world-message").textContent=`Preview ${preview.step}/${preview.results.length} · ${objectLabel(preview.target)} → ${(lastFrame?.task?.goals?.[preview.target]??'').toUpperCase()} · stored simulation`;
+    }
+  }
   updateGhosts(now);
   updateBest(now, lastFrame?.phase);
   if (DEBUG.on) { updateDebugLabels(); updateDebugCollisions(); }

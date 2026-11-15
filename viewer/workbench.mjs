@@ -5,6 +5,7 @@ import { workbenchState as state } from "./workbench-state.mjs";
 
 import { simulate } from "./world-physics.mjs";
 import { toThree as framePoint } from "./frame.mjs";
+import {sampleTrack,sequenceAt} from "./plan-replay.mjs";
 
 const rotation = (pose, target) => {
   target.identity();
@@ -26,6 +27,7 @@ export class Workbench {
     });
     state.subscribe(() => this.synchronise());
     $("world-clear").onclick = () => {
+      this.stopSavedPlan();
       this.abort?.abort(); this.playback = null; this.busy = false;
       state.clear(); this.onBoundsChanged();
       $("world-message").textContent = "Workbench cleared. Your inventory is kept.";
@@ -63,6 +65,7 @@ export class Workbench {
     this.synchronise(); state.setReady(true);
   }
   async loadSnapshot(snapshot) {
+    this.stopSavedPlan();
     this.abort?.abort(); this.playback=null;this.busy=false;state.clear();
     const epoch=state.epoch;
     const loaded=await Promise.all(snapshot.objects.map(async item=>[item,await assetRouter.instantiate({type:item.type,modelKey:item.type})]));
@@ -179,7 +182,50 @@ export class Workbench {
     rotation(pose, instance.root.quaternion);
     instance.root.position.fromArray(framePoint(pose)).sub(new THREE.Vector3(0, item.dimensionsMm.height / 2, 0).applyQuaternion(instance.root.quaternion));
   }
+  playSavedPlan(plan,task) {
+    if(this.busy && !this.savedPlayback)throw new Error('Wait for the current simulation to finish.');
+    this.stopSavedPlan();
+    const sweeper=task.snapshot.objects.find(item=>item.type==='sweeper');
+    if(!sweeper || !this.instances.get(sweeper.instanceId)?.joints.servo)throw new Error('Load the matching demo scene first.');
+    if(!plan.actions?.length || plan.results?.length!==plan.actions.length || plan.results.some((result,index)=>
+      !result.engine_ran || result.target?.id!==plan.actions[index].target || !Number.isFinite(result.realized_tilt_deg) || !result.servo_trajectory?.length ||
+      task.snapshot.objects.some(item=>item.type==='box'&&(!this.instances.has(item.instanceId)||!result.trajectories[item.instanceId]?.length))))
+      throw new Error('Saved MuJoCo movement tracks are unavailable. Reload the validated plan.');
+    this.savedPlayback={plan,task,sweeperId:sweeper.instanceId,elapsed:0,finished:false};
+    this.busy=true;
+    this.update(0);
+  }
+  stopSavedPlan() {
+    if(!this.savedPlayback)return;
+    this.savedPlayback=null;this.busy=false;
+    for(const item of this.items??[]){
+      const instance=this.instances.get(item.instanceId);if(!instance)continue;
+      if(item.type==='box')this.applyBoxPose(instance,item,{...item,...item.position});
+      if(instance.joints.tilt){
+        instance.currentTilt=item.tiltDeg;instance.currentServo=item.servoDeg;
+        applyJoint(instance.joints.tilt,item.tiltDeg);applyJoint(instance.joints.servo,item.servoDeg);
+      }
+    }
+  }
   update(dt) {
+    if(this.savedPlayback){
+      const replay=this.savedPlayback;replay.elapsed+=Math.max(0,dt);
+      const {index,time,complete}=sequenceAt(replay.plan.results,replay.elapsed),result=replay.plan.results[index];
+      const sweeper=this.instances.get(replay.sweeperId);
+      sweeper.currentTilt=result.realized_tilt_deg;sweeper.currentServo=sampleTrack(result.servo_trajectory,time)[1];
+      applyJoint(sweeper.joints.tilt,sweeper.currentTilt);applyJoint(sweeper.joints.servo,sweeper.currentServo);
+      for(const item of replay.task.snapshot.objects.filter(item=>item.type==='box')){
+        const [,x,y,z,roll,pitch,yaw]=sampleTrack(result.trajectories[item.instanceId],time);
+        this.applyBoxPose(this.instances.get(item.instanceId),item,{x,y,z,roll,pitch,yaw});
+      }
+      if(replay.step!==index || replay.finished!==complete){
+        replay.step=index;replay.finished=complete;
+        const action=replay.plan.actions[index],item=replay.task.snapshot.objects.find(item=>item.instanceId===action.target);
+        $("world-message").textContent=complete?'Saved sorting simulation complete · End preview restores the setup.':
+          `Sorting simulation ${index+1}/${replay.plan.actions.length} · ${item.name??item.instanceId} → ${replay.task.goals[action.target].toUpperCase()}`;
+      }
+      return;
+    }
     if (this.playback) {
       const playback = this.playback;
       playback.time = Math.min(playback.duration, playback.time + dt);

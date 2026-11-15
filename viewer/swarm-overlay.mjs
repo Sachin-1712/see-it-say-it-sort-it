@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import {toThree} from "./frame.mjs";
+import {sampleTrack,sequenceAt} from "./plan-replay.mjs";
 
 const YELLOW=0xf5c518;
 const pose = (sample, mesh) => {
@@ -25,6 +26,7 @@ export class SwarmOverlay {
     const stick=new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(d.lengthMm,d.thicknessMm,d.widthMm)),new THREE.LineBasicMaterial({color:YELLOW}));
     group.add(stick);meshes.set("stick",stick);
     this.preview={group,results,meshes,started:performance.now()/1000};
+    this.update(this.preview.started);
   }
   syncDryRun(frame) {
     const playback=frame.hardware_playback;
@@ -83,14 +85,13 @@ export class SwarmOverlay {
   update(now) {
     this.group.visible=this.visible && !this.preview;
     if(this.preview){
-      const preview=this.preview;let t=now-preview.started,index=0;
-      while(index<preview.results.length-1){const duration=preview.results[index].trajectories.stick.at(-1)[0];if(t<=duration)break;t-=duration;index++;}
+      const preview=this.preview,{index,time:t}=sequenceAt(preview.results,now-preview.started);
       const result=preview.results[index];
+      preview.step=index+1;preview.target=result.target?.id;
+      for(const [id,mesh] of preview.meshes)mesh.visible=id==='stick'||!preview.target||id===preview.target;
       for(const [id,path] of Object.entries(result.trajectories)){
         const mesh=preview.meshes.get(id);if(!mesh || !path.length)continue;
-        let i=0;while(i+1<path.length && path[i+1][0]<t)i++;
-        const a=path[i],b=path[Math.min(i+1,path.length-1)],f=b===a?0:THREE.MathUtils.clamp((t-a[0])/(b[0]-a[0]),0,1);
-        pose(a.map((v,k)=>v+(b[k]-v)*f),mesh);
+        pose(sampleTrack(path,t),mesh);
       }
     }
     for(const [id,agent] of [...this.agents]) {

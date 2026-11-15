@@ -199,3 +199,64 @@ test('timed dry run animates stored tracks, holds the previous result during cou
  frame.hardware_playback.status='interrupted';overlay.syncDryRun(frame);
  assert.equal(overlay.preview,null);
 });
+
+function savedSortingSequence(){
+ const objects=[0,1,2].map(index=>({type:'box',instanceId:`box${index}`,name:`Box ${['C','B','A'][index]}`,color:index===1?'blue':'red',position:{x:100,y:100,z:50+20*index},baseZ:40+20*index,dimensionsMm:{width:50,depth:35,height:20}}));
+ objects.push({type:'sweeper',instanceId:'sweeper',position:{x:100,y:240,z:40},baseZ:40,tiltDeg:0,servoDeg:0});
+ const task={task_id:'saved',scene_version:1,snapshot:{objects},goals:{box0:'left',box1:'right',box2:'left'},config:{models:{sweeper:{stick:{lengthMm:100,widthMm:10,thicknessMm:3}}}}};
+ const poses=Object.fromEntries(objects.filter(o=>o.type==='box').map(o=>[o.instanceId,[0,o.position.x,o.position.y,o.position.z,0,0,0]]));
+ const actions=['box2','box1','box0'].map((target,index)=>({target,tilt_deg:5+index*5,direction:index===1?'right':'left'}));
+ const results=actions.map((action,index)=>{
+  const trajectories=Object.fromEntries(Object.entries(poses).map(([id,p])=>[id,[[...p],[1,...p.slice(1)]]]));
+  const end=[1,index===1?300:-100,100,10,0,0,0];
+  trajectories[action.target][1]=end;poses[action.target]=[0,...end.slice(1)];
+  trajectories.stick=[[0,100,170,70,0,0,0],[1,100,170,70,0,0,180]];
+  return {engine_ran:true,target:{id:action.target},realized_tilt_deg:action.tilt_deg,servo_trajectory:[[0,index===1?180:0],[1,index===1?0:180]],trajectories};
+ });
+ return {task,plan:{id:'validated',actions,results}};
+}
+
+test('saved preview highlights only top, middle, then bottom by saved target ID',async t=>{
+ const app=await harness(t),{SwarmOverlay}=await app.evaluate('swarm-overlay.mjs');
+ const overlay=new SwarmOverlay(new THREE.Scene()),{task,plan}=savedSortingSequence(),before=structuredClone(task);
+ overlay.playSequence(plan.results,task);const start=overlay.preview.started;
+ const visible=()=>[...overlay.preview.meshes].filter(([id,mesh])=>id!=='stick'&&mesh.visible).map(([id])=>id);
+ assert.deepEqual(visible(),['box2']);assert.equal(overlay.preview.meshes.get('box2').position.y,90);
+ overlay.update(start+.5);assert.equal(overlay.preview.meshes.get('box2').position.x,0);
+ overlay.update(start+1);assert.deepEqual(visible(),['box1']);
+ overlay.update(start+2);assert.deepEqual(visible(),['box0']);
+ overlay.update(start+20);assert.deepEqual(visible(),['box0']);
+ assert.deepEqual(task,before,'preview never changes the scenario');
+});
+
+test('saved sorting moves solid models with recorded joints, retains final poses and restores on End preview',async t=>{
+ const app=await harness(t,{instantiate:async record=>{
+  const instance=boxInstance();
+  if(record.type==='sweeper'){
+   for(const name of ['tilt','servo']){
+    const node=new THREE.Group();instance.root.add(node);
+    instance.joints[name]={node,base:new THREE.Quaternion(),axis:new THREE.Vector3(0,1,0),limitsDeg:[0,180],restDeg:0,direction:1};
+   }
+   instance.metadata.joints={tilt:{restDeg:0,limitsDeg:[0,27]},servo:{restDeg:0,limitsDeg:[0,180]}};
+  }
+  return instance;
+ }});
+ const {Workbench}=await app.evaluate('workbench.mjs'),{workbenchState:state}=await app.evaluate('workbench-state.mjs');
+ const workbench=new Workbench({scene:new THREE.Scene(),camera:new THREE.PerspectiveCamera(),canvas:app.document.createElement('canvas'),toThree:p=>({pos:new THREE.Vector3(p.x,p.z,-p.y)}),onBoundsChanged(){},table:{height:40},setup:SETUP,simulateImpl:()=>assert.fail('saved playback must not rerun physics')});
+ const {task,plan}=savedSortingSequence();await workbench.loadSnapshot(task.snapshot);
+ const before=state.snapshot(),top=workbench.instances.get('box2').root,middle=workbench.instances.get('box1').root,sweeper=workbench.instances.get('sweeper');
+ const initial=top.position.clone();workbench.playSavedPlan(plan,task);workbench.update(.5);
+ assert.equal(top.position.x,0);assert.equal(middle.position.x,100);
+ assert.equal(sweeper.currentServo,90);assert.equal(sweeper.currentTilt,5);
+ assert.ok(Math.abs(sweeper.joints.servo.node.quaternion.angleTo(new THREE.Quaternion()))>1);
+ workbench.update(1);assert.equal(top.position.x,-100);assert.equal(middle.position.x,200);
+ assert.equal(sweeper.currentTilt,10);assert.equal(workbench.savedPlayback.step,1);
+ workbench.update(1.5);assert.equal(workbench.savedPlayback.finished,true);
+ assert.equal(workbench.instances.get('box0').root.position.x,-100);assert.equal(middle.position.x,300);
+ assert.deepEqual(state.snapshot(),before,'rendered replay cannot invalidate the saved scenario or change evidence');
+ workbench.stopSavedPlan();assert.deepEqual(top.position.toArray(),initial.toArray());assert.equal(sweeper.currentServo,0);assert.equal(workbench.busy,false);
+ const missing=structuredClone(plan);delete missing.results[0].servo_trajectory;
+ assert.throws(()=>workbench.playSavedPlan(missing,task),/tracks are unavailable/);
+ workbench.playSavedPlan(plan,task);app.document.getElementById('world-clear').click();workbench.update(20);
+ assert.equal(workbench.savedPlayback,null);assert.equal(workbench.instances.size,0);
+});

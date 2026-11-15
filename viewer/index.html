@@ -137,7 +137,7 @@
   }
 </style>
 <link rel="stylesheet" href="./inventory.css">
-<link rel="stylesheet" href="./demo.css?v=compact-plan-2">
+<link rel="stylesheet" href="./demo.css?v=sorting-playback-1">
 <script>
   // The import map is written before any module loads, so this choice applies to every import.
   { const base = window.GEKKO_OFFLINE ? "./vendor/three/" : "https://cdn.jsdelivr.net/npm/three@0.170.0/";
@@ -210,6 +210,7 @@
           <button id="swarm-replay" type="button" disabled>Preview</button>
           <button id="swarm-preview-stop" type="button" hidden>End preview</button>
         </div>
+        <div class="plan-actions"><button id="swarm-sort" type="button" hidden title="Replay the saved MuJoCo pushes in the 3D scene; no Arduino commands">Play sorting</button></div>
         <div id="recovery-banner" role="status" hidden></div>
         <div id="recovery-timeline" aria-label="Recovery timeline"></div>
         <div id="saved-attribution" role="status" hidden></div>
@@ -294,8 +295,8 @@
 </dialog>
 <script type="module" src="./inventory.mjs"></script>
 <script type="module" src="./model-preview.mjs"></script>
-<script type="module" src="./workshop.mjs?v=compact-narration-1"></script>
+<script type="module" src="./workshop.mjs?v=sorting-playback-1"></script>
 <script type="module" src="./sim-preview.mjs"></script>
-<script type="module" src="../scripts/plan-narration.mjs?v=compact-panel-1"></script>
+<script type="module" src="../scripts/plan-narration.mjs?v=sorting-playback-1"></script>
 </body>
 </html>

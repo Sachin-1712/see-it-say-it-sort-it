@@ -1,7 +1,7 @@
 // Read the validated routes already shown by the viewer. The planner and its
 // WebSocket protocol stay independent of speech.
 const panel = document.getElementById("swarm-plan-details");
-const controls = document.querySelector(".demo-controls");
+const controls = document.querySelector(".plan-actions");
 const connection = document.getElementById("conn");
 const speech = window.speechSynthesis;
 if (panel && controls && connection && speech && typeof SpeechSynthesisUtterance === "function") {
@@ -44,7 +44,7 @@ function installNarration() {
       button.textContent = "Say it";
     }
     if (!next) button.remove();
-    else if (!controls.contains(button)) controls.append(button);
+    else if (!controls.contains(button)) controls.prepend(button);
   }
 
   button.onclick = () => {
