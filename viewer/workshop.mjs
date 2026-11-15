@@ -4,7 +4,7 @@ import { SwarmOverlay } from "./swarm-overlay.mjs?v=timed-replay-1";
 import { workbenchState } from "./workbench-state.mjs";
 import { selectTab } from "./tabs.mjs";
 import { toThree, fromThree } from "./frame.mjs";
-import { Workbench } from "./workbench.mjs";
+import { Workbench } from "./workbench.mjs?v=demo-labels-1";
 import { sweeperPositionFromConfig } from "./workbench-state.mjs";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import { OBB } from "three/addons/math/OBB.js";

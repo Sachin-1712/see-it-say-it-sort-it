@@ -72,6 +72,11 @@ export class Workbench {
       instance.root.userData.worldInstanceId=item.instanceId;
       instance.root.traverse(node=>{if(node.isMesh)node.castShadow=node.receiveShadow=true;});
       if(item.type === "box"){
+        const label=instance.root.getObjectByName("shipping_label");
+        if(label && item.color && this.tagColour){
+          label.material=label.material.clone();
+          label.material.color.set(this.tagColour(item.color));
+        }
         const a=instance.metadata.dimensionsMm,b=item.dimensionsMm;
         instance.root.scale.multiply(new THREE.Vector3(b.width/a.width,b.height/a.height,b.depth/a.depth));
         this.applyBoxPose(instance,item,{...item,...item.position});
