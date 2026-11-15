@@ -1,0 +1,13 @@
+{
+  "name": "dry-run-inventory-tests",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --experimental-vm-modules --test *.test.mjs"
+  },
+  "devDependencies": {
+    "gltf-validator": "^2.0.0-dev.3.10",
+    "jsdom": "^31.0.1",
+    "three": "^0.170.0"
+  }
+}

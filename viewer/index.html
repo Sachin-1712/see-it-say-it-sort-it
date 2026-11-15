@@ -49,9 +49,6 @@
   /* ---- scene ------------------------------------------------------------ */
   #scene { position: fixed; top: var(--top-h); left: 0; right: var(--col-w); bottom: 0; }
   #scene canvas { display: block; width: 100%; height: 100%; }
-  #freecam { position: absolute; left: 12px; bottom: 12px; z-index: 1; padding: 4px 10px; font-size: 12px; font-weight: 600;
-             background: var(--panel); color: var(--dim); }
-  #freecam[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
 
   /* ---- right column ----------------------------------------------------- */
   #side { position: fixed; top: var(--top-h); right: 0; bottom: 0; width: var(--col-w); padding: var(--gap);
@@ -139,6 +136,7 @@
     #send { margin-top: 0; }
   }
 </style>
+<link rel="stylesheet" href="./inventory.css">
 <script type="importmap">
 {
   "imports": {
@@ -163,19 +161,50 @@
   </div>
 </header>
 
-<main id="scene">
-  <button id="freecam" aria-pressed="false" title="Free camera (O). Drag to rotate, scroll to zoom, right-drag to pan. Double-click the scene to go back.">Free camera</button>
-</main>
+<main id="scene" aria-label="Interactive workbench"></main>
+<div id="workbench-toolbar" class="panel">
+  <div><b>Workbench</b><span id="world-count">0 objects · Visual placement</span></div>
+  <div class="world-actions"><button id="world-reset-view" type="button">Reset view</button><button id="world-clear" type="button">Clear workbench</button></div>
+  <label class="observer-toggle"><input id="observer-overlay" type="checkbox"> Show observer rehearsals</label>
+  <label class="sr-only" for="world-selection">Select placed object</label><select id="world-selection" aria-label="Select placed object"><option value="">No object selected</option></select>
+  <p id="world-message" role="status">Capture an object, then click its inventory card to place it.</p>
+</div>
+<section id="world-tilt-panel" class="panel" hidden aria-labelledby="world-tilt-title">
+  <div class="inventory-heading"><h2 id="world-tilt-title">Sweeper setup</h2><button id="world-deselect" aria-label="Close sweeper setup" type="button">✕</button></div>
+  <label for="world-tilt">Manual tilt <output id="world-tilt-value">0°</output></label><input id="world-tilt" type="range" step="1">
+  <label for="world-servo">Stick rotation <output id="world-servo-value">0°</output></label><input id="world-servo" type="range" step="1">
+  <p>Visual setup only · no hardware commands</p>
+</section>
 
 <aside id="side">
+  <section class="panel inventory-intro" aria-labelledby="inventory-title">
+    <div class="inventory-heading"><h1 id="inventory-title">Object Inventory</h1><span class="chip">Capture & place</span></div>
+    <p id="inventory-progress" aria-live="polite">No objects captured yet</p>
+    <button id="capture-object" class="primary" type="button">＋ Capture Object</button>
+  </section>
   <section id="tabs-panel" class="panel">
-    <div class="tabs" role="tablist">
-      <button class="tab" role="tab" id="tab-agents" aria-selected="true" aria-controls="view-agents">Agents</button>
-      <button class="tab" role="tab" id="tab-outcomes" aria-selected="false" aria-controls="view-outcomes">Outcomes</button>
+    <div class="tabs" role="tablist" aria-label="Workshop panels">
+      <button class="tab" role="tab" id="tab-inventory" aria-selected="true" aria-controls="view-inventory">Inventory</button>
+      <button class="tab" role="tab" id="tab-agents" aria-selected="false" aria-controls="view-agents" tabindex="-1">Agents</button>
+      <button class="tab" role="tab" id="tab-outcomes" aria-selected="false" aria-controls="view-outcomes" tabindex="-1">Outcomes</button>
     </div>
     <div class="tab-body">
-      <div class="view" id="view-agents" role="tabpanel"><div id="rows"></div></div>
-      <div class="view" id="view-outcomes" role="tabpanel" hidden>
+      <div class="view" id="view-inventory" role="tabpanel" aria-labelledby="tab-inventory">
+        <section id="model-preview-panel" aria-labelledby="model-preview-title" hidden>
+          <div class="model-preview-heading"><div><span class="heading">Object preview</span><h2 id="model-preview-title">Your object</h2></div><button id="model-reset" type="button" disabled>Reset view</button></div>
+          <label class="sr-only" for="model-select">Preview object</label><select id="model-select" aria-label="Preview object"></select>
+          <div id="model-canvas" tabindex="0" role="img" aria-label="Interactive object preview. Drag to rotate; scroll or pinch to zoom."></div>
+          <p id="model-load-status" role="status"></p><button id="model-retry" type="button" hidden>Retry preview</button>
+          <p class="model-gestures">Drag to rotate · Scroll or pinch to zoom</p>
+          <div id="model-photo-row" hidden><img id="model-captured-photo" alt="Your captured object"><p id="model-photo-label"></p></div>
+          <p id="model-dimensions"></p><button id="model-replay" type="button">Replay transition</button>
+          <p class="model-measurement-note">Visual model. Verify dimensions before physical simulation.</p>
+        </section>
+        <div id="inventory-grid"></div>
+        <p class="inventory-note">Click a captured object to place it on the workbench. Box clicks extend the stack. Photos and placement stay in this tab only.</p>
+      </div>
+      <div class="view" id="view-agents" role="tabpanel" aria-labelledby="tab-agents" hidden><div id="rows"></div></div>
+      <div class="view" id="view-outcomes" role="tabpanel" aria-labelledby="tab-outcomes" hidden>
         <div class="metric"><span class="k">Attempts tested</span><span class="v mono" id="m-attempts">0</span></div>
         <div class="metric"><span class="k">Successful pushes found</span><span class="v mono" id="m-success">0</span></div>
         <div class="metric"><span class="k">Best score</span><span class="v mono" id="m-best">–</span></div>
@@ -185,1056 +214,56 @@
   </section>
 
   <section id="items" class="panel">
-    <div class="heading">Items</div>
+    <div class="heading">Observer parcels</div>
   </section>
 
   <button id="send" disabled>Waiting for a plan above 80%</button>
 </aside>
 
-<script type="module">
-import * as THREE from "three";
-import { OrbitControls } from "three/addons/controls/OrbitControls.js";
-import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
-import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
-import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
-import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
-import { GTAOPass } from "three/addons/postprocessing/GTAOPass.js";
-import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
-import { ShaderPass } from "three/addons/postprocessing/ShaderPass.js";
-import { Pass, FullScreenQuad } from "three/addons/postprocessing/Pass.js";
-import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
-import { Line2 } from "three/addons/lines/Line2.js";
-import { LineGeometry } from "three/addons/lines/LineGeometry.js";
-import { LineMaterial } from "three/addons/lines/LineMaterial.js";
-import { LineSegments2 } from "three/addons/lines/LineSegments2.js";
-import { LineSegmentsGeometry } from "three/addons/lines/LineSegmentsGeometry.js";
-
-const WS_URL = "ws://localhost:8765";
-const DEG = Math.PI / 180;
-const EXECUTE_MIN = 0.8;
-const C = { accent: 0xF5C518, success: 0x3DDC84, bg: 0xE9EAEC };
-const QUERY = new URLSearchParams(location.search);
-const PLAIN = QUERY.get("plain") === "1";          // ?plain=1: no postprocessing at all
-const USE_AO = !PLAIN && QUERY.get("ao") !== "0";         // ?ao=0: drop ambient occlusion only
-const USE_BLOOM = !PLAIN && QUERY.get("bloom") !== "0";   // ?bloom=0: drop bloom only
-const AO_SCALE = 0.5;                              // occlusion buffers at half resolution
-const CALM = matchMedia("(prefers-reduced-motion: reduce)").matches;   // no intro move, no drift
-
-// ---------------------------------------------------------------------------
-// The ONLY place the simulation's z-up table frame becomes three.js y-up.
-// Table frame: x right, y away from the front edge, z up (mm, degrees CCW from above).
-// three.js:    X = x, Y = z, Z = -y. A CCW rotation about z is the same rotation about Y.
-function toThree({ x = 0, y = 0, z = 0, theta = 0 }) {
-  return { pos: new THREE.Vector3(x, z, -y), yaw: theta * DEG };
-}
-// ---------------------------------------------------------------------------
-
-const rig = await (await fetch("../config/rig.json")).json();
-const { table, arm } = rig;
-const zones = rig.zones ?? {};
-const bags = rig.bags ?? {};
-const parcelSize = id => rig.parcels?.find(p => p.id === id) ?? rig.parcels?.[0] ?? { width: 50, depth: 35, height: 20 };
-await Promise.race([document.fonts.load("700 48px Inter"), new Promise(r => setTimeout(r, 1500))]).catch(() => {});
-
-const TAG = { red: "#D9473A", blue: "#3D74D9", green: "#2FAE66", yellow: "#E8C547", orange: "#E8862F",
-              purple: "#8A55D8", white: "#F2F2F2", black: "#2A2A2A", pink: "#E86AA6" };
-const tagColour = name => TAG[name] ?? name ?? "#999999";
-const bagColour = Object.fromEntries(Object.entries(rig.colour_to_bag ?? {}).map(([c, b]) => [b, c]));
-
-// ---- renderer: sRGB out, ACES filmic, soft shadows -----------------------------
-const host = document.getElementById("scene");
-const PIXEL_RATIO = Math.min(devicePixelRatio, 2);
-// With postprocessing the antialiasing is MSAA on the composer's buffer, not on the canvas.
-const renderer = new THREE.WebGLRenderer({ antialias: PLAIN, powerPreference: "high-performance" });
-renderer.setPixelRatio(PIXEL_RATIO);
-renderer.outputColorSpace = THREE.SRGBColorSpace;
-renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.0;
-renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-renderer.shadowMap.autoUpdate = false;           // refreshed once per frame, not once per pass
-host.appendChild(renderer.domElement);
-
-const scene = new THREE.Scene();
-scene.background = new THREE.Color(C.bg);
-const world = new THREE.Group();                 // everything except the lights
-scene.add(world);
-
-// ---- helpers ---------------------------------------------------------------
-const std = (color, roughness = 0.9, metalness = 0, extra = {}) =>
-  new THREE.MeshStandardMaterial({ color, roughness, metalness, ...extra });
-function rbox(w, d, h, r, material) {    // w along table x, d along table y, h along z
-  const m = new THREE.Mesh(new RoundedBoxGeometry(w, h, d, 3, Math.min(r, w / 2, d / 2, h / 2)), material);
-  m.castShadow = m.receiveShadow = true;
-  return m;
-}
-function place(obj, pose) {
-  const t = toThree(pose);
-  obj.position.copy(t.pos);
-  obj.rotation.y = t.yaw;
-}
-const onTable = (x, y) => x >= 0 && x <= table.width && y >= 0 && y <= table.depth;
-const inRect = (x, y, r) => Math.abs(x - r.x) <= r.width / 2 && Math.abs(y - r.y) <= r.depth / 2;
-
-function floorText(text, heightMM, color = "#5E636C") {
-  const px = 96, c = document.createElement("canvas"), ctx = c.getContext("2d");
-  const font = `700 ${px}px Inter, ui-sans-serif, system-ui, sans-serif`;
-  ctx.font = font;
-  c.width = Math.ceil(ctx.measureText(text).width + px * 0.5); c.height = Math.ceil(px * 1.3);
-  ctx.font = font; ctx.fillStyle = color; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-  ctx.fillText(text, c.width / 2, c.height / 2);
-  const tex = new THREE.CanvasTexture(c);
-  tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 8;
-  const w = heightMM * c.width / c.height;
-  const m = new THREE.Mesh(new THREE.PlaneGeometry(w, heightMM),
-    std(0xffffff, 1, 0, { map: tex, transparent: true, depthWrite: false, polygonOffset: true,
-                          polygonOffsetFactor: -2, polygonOffsetUnits: -2 }));
-  m.rotation.x = -Math.PI / 2;
-  m.receiveShadow = true;
-  m.renderOrder = -5;
-  m.userData.noAO = true;
-  m.userData.width = w;
-  return m;
-}
-
-// Rounded rectangle in a flat plane (shape x = table x, shape y = table y), extruded upwards.
-function roundedRect(w, d, r, Ctor = THREE.Shape) {
-  const s = new Ctor(), x = -w / 2, y = -d / 2;
-  s.moveTo(x + r, y);
-  s.lineTo(x + w - r, y);     s.absarc(x + w - r, y + r, r, -Math.PI / 2, 0);
-  s.lineTo(x + w, y + d - r); s.absarc(x + w - r, y + d - r, r, 0, Math.PI / 2);
-  s.lineTo(x + r, y + d);     s.absarc(x + r, y + d - r, r, Math.PI / 2, Math.PI);
-  s.lineTo(x, y + r);         s.absarc(x + r, y + r, r, Math.PI, Math.PI * 1.5);
-  return s;
-}
-function ringShape(w, d, r, t) {
-  const s = roundedRect(w, d, r);
-  s.holes.push(roundedRect(w - 2 * t, d - 2 * t, Math.max(0.2, r - t), THREE.Path));
-  return s;
-}
-function extrudeUp(shape, h, bevel = 0) {
-  const g = new THREE.ExtrudeGeometry(shape, { depth: h - 2 * bevel, bevelEnabled: bevel > 0, bevelThickness: bevel,
-                                               bevelSize: bevel, bevelSegments: 4, curveSegments: 8 });
-  g.translate(0, 0, bevel);
-  g.rotateX(-Math.PI / 2);               // flat plane -> floor plane, extrusion -> up
-  return g;
-}
-
-// ---- light: image-based fill from a neutral room, plus one soft key -------------
-const centre = toThree({ x: table.width / 2, y: table.depth / 2, z: table.height }).pos;
-const span = Math.max(table.width, table.depth);
-{
-  const pmrem = new THREE.PMREMGenerator(renderer);
-  scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-  scene.environmentIntensity = 0.55;
-  pmrem.dispose();
-}
-const key = new THREE.DirectionalLight(0xfff4e6, 2.6);
-// From the left and a little behind, so shadows fall towards the camera's side of things.
-key.position.copy(centre).add(new THREE.Vector3(-span * 1.1, span * 2.2, -span * 0.45));
-key.target.position.copy(centre);
-key.castShadow = true;
-key.shadow.mapSize.set(4096, 4096);
-key.shadow.bias = -0.0003;
-key.shadow.normalBias = 0.6;
-{
-  const s = key.shadow.camera;
-  s.left = s.bottom = -span * 1.25; s.right = s.top = span * 1.25; s.near = span; s.far = span * 5;
-}
-scene.add(key, key.target);
-
-// ---- floor: soft grey, with a grid that dissolves into the background ----------
-const floorFade = { value: new THREE.Vector2(span * 1.5, span * 5.2) };     // start, end radius in mm
-{
-  const mat = std(0xB9BDC4, 0.96, 0, { transparent: true });
-  mat.onBeforeCompile = sh => {
-    sh.uniforms.uCentre = { value: new THREE.Vector2(centre.x, centre.z) };
-    sh.uniforms.uFade = floorFade;
-    sh.uniforms.uStep = { value: 40 };
-    sh.vertexShader = sh.vertexShader
-      .replace("#include <common>", "#include <common>\nvarying vec3 vFloorPos;")
-      .replace("#include <begin_vertex>", "#include <begin_vertex>\nvFloorPos = (modelMatrix * vec4(position, 1.0)).xyz;");
-    sh.fragmentShader = sh.fragmentShader
-      .replace("#include <common>", "#include <common>\nvarying vec3 vFloorPos;\nuniform vec2 uCentre;\nuniform vec2 uFade;\nuniform float uStep;")
-      .replace("#include <color_fragment>", `#include <color_fragment>
-        {
-          vec2 g = vFloorPos.xz / uStep;
-          vec2 w = max(fwidth(g), vec2(1e-5));
-          vec2 d = abs(fract(g - 0.5) - 0.5) / w;
-          float line = 1.0 - clamp(min(d.x, d.y) - 0.25, 0.0, 1.0);
-          line *= 1.0 - smoothstep(0.12, 0.45, max(w.x, w.y));          // no shimmer far away
-          float dist = distance(vFloorPos.xz, uCentre);
-          float fade = 1.0 - smoothstep(uFade.x, uFade.y, dist);
-          diffuseColor.rgb = mix(diffuseColor.rgb, vec3(1.0), line * 0.75 * fade);
-          diffuseColor.a *= fade * fade;
-        }`);
-  };
-  const floor = new THREE.Mesh(new THREE.PlaneGeometry(span * 12, span * 12), mat);
-  floor.rotation.x = -Math.PI / 2;
-  floor.position.set(centre.x, 0, centre.z);
-  floor.receiveShadow = true;
-  floor.renderOrder = -10;                         // under every other see-through thing
-  world.add(floor);
-}
-
-// ---- table: matte light laminate with a faint grain, edges slightly bevelled ----
-function grainTexture() {
-  const c = document.createElement("canvas"); c.width = c.height = 512;
-  const g = c.getContext("2d");
-  g.fillStyle = "#D8BC90"; g.fillRect(0, 0, 512, 512);
-  let seed = 11; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
-  for (let i = 0; i < 260; i++) {
-    g.fillStyle = rnd() < 0.55 ? `rgba(128, 92, 50, ${0.02 + rnd() * 0.06})` : `rgba(255, 244, 220, ${0.03 + rnd() * 0.06})`;
-    g.fillRect(0, rnd() * 512, 512, 0.6 + rnd() * 2.4);
-  }
-  const tex = new THREE.CanvasTexture(c);
-  tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 8;
-  return tex;
-}
-const tableMesh = rbox(table.width, table.depth, table.height, 1.6, std(0xffffff, 0.82, 0, { map: grainTexture() }));
-place(tableMesh, { x: table.width / 2, y: table.depth / 2, z: table.height / 2 });
-world.add(tableMesh);
-
-// ---- zones: thin lines inlaid flush with the table top, small labels -----------
-const TOP = table.height + 0.04;
-for (const [name, z] of Object.entries(zones)) {
-  const t = 1.1;
-  const ink = std(0x6E6A62, 0.7, 0, { polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
-  for (const [w, d, dx, dy] of [[z.width + t, t, 0, z.depth / 2], [z.width + t, t, 0, -z.depth / 2],
-                                [t, z.depth - t, z.width / 2, 0], [t, z.depth - t, -z.width / 2, 0]]) {
-    const s = new THREE.Mesh(new THREE.PlaneGeometry(w, d), ink);
-    s.rotation.x = -Math.PI / 2;
-    s.position.copy(toThree({ x: z.x + dx, y: z.y + dy, z: TOP }).pos);
-    s.receiveShadow = true;
-    s.userData.noAO = true;
-    world.add(s);
-  }
-  const label = floorText(name.toUpperCase(), 6, "#6E6A62");        // left of the zone, clear of parcels
-  label.position.copy(toThree({ x: z.x - z.width / 2 - 14 - label.userData.width / 2, y: z.y, z: TOP }).pos);
-  world.add(label);
-}
-
-// ---- bags: thin-walled open crates in the colour they accept --------------------
-// See-through sides so a landed parcel shows; solid rounded rim and base.
-const CRATE = { wall: 1.6, base: 2, rim: 3, corner: 5 };
-const bagLabelPoints = [];
-for (const [side, b] of Object.entries(bags)) {
-  const colour = new THREE.Color(tagColour(bagColour[side] ?? "white"));
-  const at = z => toThree({ x: b.x, y: b.y, z }).pos;
-
-  const base = new THREE.Mesh(extrudeUp(roundedRect(b.width, b.depth, CRATE.corner), CRATE.base),
-                              std(colour.clone().multiplyScalar(0.4), 0.7));
-  base.position.copy(at(0));
-  base.castShadow = base.receiveShadow = true;
-
-  const walls = new THREE.Mesh(extrudeUp(ringShape(b.width, b.depth, CRATE.corner, CRATE.wall), b.height - CRATE.base),
-    new THREE.MeshPhysicalMaterial({ color: colour, roughness: 0.5, metalness: 0, transparent: true, opacity: 0.5,
-                                     depthWrite: false }));
-  walls.position.copy(at(CRATE.base));
-  walls.renderOrder = 1;
-
-  const rim = new THREE.Mesh(extrudeUp(ringShape(b.width + 2.4, b.depth + 2.4, CRATE.corner + 1.2, CRATE.wall + 2.4), CRATE.rim, 1.1),
-                             std(colour, 0.42));
-  rim.position.copy(at(b.height));
-  rim.castShadow = rim.receiveShadow = true;
-  world.add(base, walls, rim);
-
-  const label = floorText(`${side.toUpperCase()} BAG`, 9);
-  // The camera looks from the front-left, so the table hides the floor in front of the
-  // right bag: that label moves forward past the table's front edge.
-  const ly = b.x > table.width ? Math.min(b.y - b.depth / 2 - 14, -14) : b.y - b.depth / 2 - 14;
-  label.position.copy(toThree({ x: b.x, y: ly, z: 0.1 }).pos);
-  world.add(label);
-  bagLabelPoints.push([b.x - label.userData.width / 2, ly - 6], [b.x + label.userData.width / 2, ly + 6]);
-}
-
-// ---- arm: servo block at the pivot, dark anodised stick, yellow rubber tip -------
-const armGroup = new THREE.Group();
-{
-  const plastic = std(0x1A2233, 0.42), metal = std(0x2A2D35, 0.36, 0.9), steel = std(0xB9BEC6, 0.3, 1);
-  const stickW = 8, stickT = 2.6, tipL = 13;
-  const bodyH = Math.max(8, arm.height - stickT / 2 - 2.4);              // servo case stops below the stick
-  // FS90-style case: the output shaft sits near one end, so the case hangs back from the pivot.
-  const servo = new THREE.Group();
-  const body = rbox(12.4, 23, bodyH, 1, plastic);
-  place(body, { x: 0, y: 5.6, z: bodyH / 2 });
-  const ears = rbox(12.4, 32.5, 2.2, 0.6, plastic);
-  place(ears, { x: 0, y: 5.6, z: bodyH * 0.68 });
-  const boss = new THREE.Mesh(new THREE.CylinderGeometry(5.9, 5.9, 2.2, 32), plastic);
-  boss.position.copy(toThree({ z: bodyH + 0.6 }).pos);
-  boss.castShadow = true;
-  servo.add(body, ears, boss);
-  place(servo, { x: arm.pivot_x, y: arm.pivot_y, z: table.height });
-  world.add(servo);
-
-  const stick = rbox(arm.length - tipL + 5.5, stickW, stickT, 1, metal);   // local +X = along the stick
-  stick.position.set((arm.length - tipL - 5.5) / 2, 0, 0);
-  const tip = rbox(tipL, stickW + 1.6, stickT + 1.6, 2, std(C.accent, 0.88));
-  tip.position.set(arm.length - tipL / 2, 0, 0);
-  const hub = new THREE.Mesh(new THREE.CylinderGeometry(5.6, 5.6, stickT + 1.4, 32), metal);
-  const screw = new THREE.Mesh(new THREE.CylinderGeometry(1.7, 1.7, stickT + 2.6, 16), steel);
-  hub.castShadow = screw.castShadow = true;
-  armGroup.add(stick, tip, hub, screw);
-  world.add(armGroup);
-}
-// The arm eases towards the latest angle from the observer instead of jumping to it.
-const armState = { angle: arm.rest_angle, target: arm.rest_angle, vel: 0 };
-function setArmAngle(angle) { armState.target = angle; }
-function updateArm(dt) {
-  // critically damped spring (smooth start and stop), about 0.1 s behind the data
-  const w = 2 / 0.1, x = w * dt, k = 1 / (1 + x + 0.48 * x * x + 0.235 * x * x * x);
-  const change = armState.angle - armState.target, temp = (armState.vel + w * change) * dt;
-  armState.vel = (armState.vel - w * temp) * k;
-  armState.angle = armState.target + (change + temp) * k;
-  const heading = arm.heading_at_zero + arm.direction * armState.angle;
-  place(armGroup, { x: arm.pivot_x, y: arm.pivot_y, z: table.height + arm.height, theta: heading });
-}
-updateArm(0);
-
-// ---- parcels: cardboard boxes with a coloured label patch on top ----------------
-const cardboard = std(0xC9A26B, 0.93);
-const parcelGeoms = new Map();
-function parcelGeom(id) {
-  if (!parcelGeoms.has(id)) {
-    const s = parcelSize(id);
-    parcelGeoms.set(id, {
-      body: new RoundedBoxGeometry(s.width, s.height, s.depth, 4, Math.min(1.8, s.height / 5)),
-      label: new RoundedBoxGeometry(s.width * 0.6, 0.5, s.depth * 0.6, 2, 0.24),
-    });
-  }
-  return parcelGeoms.get(id);
-}
-const DROP_TIME = 0.95;       // s: slide to the edge, tip over it, drop
-const DROP_TILT = 48 * DEG;
-const FOLLOW = 14;            // 1/s: how tightly a parcel follows the 10 Hz poses
-const UP = new THREE.Vector3(0, 1, 0);
-const parcels = new Map();    // id -> {group, label, size, x, y, theta, target, drop}
-
-// Where the parcel rests at this spot: the table top, the bottom of a crate, or the floor.
-function restZ(x, y, h) {
-  if (onTable(x, y)) return table.height + h / 2;
-  return (Object.values(bags).some(b => inRect(x, y, b)) ? CRATE.base : 0) + h / 2;
-}
-function renderParcels(items = []) {
-  const ids = new Set(items.map(i => i.id));
-  for (const [id, p] of parcels) if (!ids.has(id)) { world.remove(p.group); parcels.delete(id); }
-  for (const it of items) {
-    let p = parcels.get(it.id);
-    if (!p) {
-      const g = parcelGeom(it.id), size = parcelSize(it.id);
-      const group = new THREE.Group();
-      const body = new THREE.Mesh(g.body, cardboard);
-      body.castShadow = body.receiveShadow = true;
-      const label = new THREE.Mesh(g.label, std(0xffffff, 0.5));
-      label.position.y = size.height / 2 + 0.12;
-      label.receiveShadow = true;
-      group.add(body, label);
-      group.visible = false;
-      world.add(group);
-      p = { group, label, size, x: 0, y: 0, theta: 0, target: null, drop: null };
-      parcels.set(it.id, p);
-    }
-    p.label.material.color.set(tagColour(it.color));
-    if (!it.pose) continue;
-    const fresh = !p.target;
-    p.target = { x: it.pose.x, y: it.pose.y, theta: it.pose.theta ?? 0 };
-    const off = !onTable(p.target.x, p.target.y);
-    if (fresh || (p.drop && !off)) {               // first sight, or back from a bag: no travel
-      Object.assign(p, p.target);
-      p.drop = off ? { done: true } : null;
-    } else if (off && !p.drop) {                   // just left the table: start the fall
-      p.drop = { t0: performance.now() / 1000, x: p.x, y: p.y, theta: p.theta, done: false };
-    }
-    p.group.visible = true;
-  }
-}
-function updateParcels(now, dt) {
-  const k = 1 - Math.exp(-FOLLOW * dt);
-  for (const p of parcels.values()) {
-    const t = p.target, h = p.size.height;
-    if (!t) continue;
-    let z = restZ(t.x, t.y, h), tilt = 0, dir = null;
-    if (p.drop && !p.drop.done) {
-      const d = p.drop, u = Math.min(1, (now - d.t0) / DROP_TIME);
-      // fraction of the straight run at which the centre passes the table edge
-      let sEdge = 1;
-      if (t.x < 0) sEdge = Math.min(sEdge, d.x / (d.x - t.x));
-      if (t.x > table.width) sEdge = Math.min(sEdge, (table.width - d.x) / (t.x - d.x));
-      if (t.y < 0) sEdge = Math.min(sEdge, d.y / (d.y - t.y));
-      if (t.y > table.depth) sEdge = Math.min(sEdge, (table.depth - d.y) / (t.y - d.y));
-      sEdge = Math.min(1, Math.max(0, sEdge));
-      const s = (1 - Math.cos(Math.PI * u)) / 2;                       // slide: ease in and out
-      const uEdge = Math.acos(1 - 2 * sEdge) / Math.PI;
-      const v = uEdge >= 1 ? 1 : Math.min(1, Math.max(0, (u - uEdge) / (1 - uEdge)));   // 0 at the edge, 1 landed
-      p.x = d.x + (t.x - d.x) * s; p.y = d.y + (t.y - d.y) * s; p.theta = d.theta + (t.theta - d.theta) * s;
-      const top = table.height + h / 2;
-      z = top + (z - top) * v * v;                                     // falls faster and faster
-      tilt = DROP_TILT * Math.sin(Math.PI * Math.min(1, v * 1.15)) * (1 - v * 0.3);     // tips, then lands flat
-      dir = toThree({ x: t.x, y: t.y }).pos.sub(toThree({ x: d.x, y: d.y }).pos);
-      if (u >= 1) d.done = true;
-    } else {
-      p.x += (t.x - p.x) * k; p.y += (t.y - p.y) * k; p.theta += (t.theta - p.theta) * k;
-    }
-    const tt = toThree({ x: p.x, y: p.y, z, theta: p.theta });
-    p.group.position.copy(tt.pos);
-    p.group.quaternion.setFromAxisAngle(UP, tt.yaw);
-    if (tilt > 1e-4 && dir.lengthSq() > 1e-6) {      // leading edge dips: turn about (up x travel)
-      const axis = new THREE.Vector3().crossVectors(UP, dir.normalize());
-      p.group.quaternion.premultiply(new THREE.Quaternion().setFromAxisAngle(axis, tilt));
-    }
-  }
-}
-
-// ---- ghosts: one fat line (Line2) per attempt, so it has real width -------------------------------------
-// Agent colours avoid yellow (accent), green (success) and red (danger).
-const PALETTE = ["#3B7DDD", "#8E5CF0", "#13A3C2", "#E0559F", "#6B7280", "#B0703A", "#4F5BD5", "#9C6B98"];
-function agentColour(id) {
-  const n = parseInt(String(id).replace(/\D/g, ""), 10);
-  if (!Number.isNaN(n)) return PALETTE[(n - 1 + PALETTE.length) % PALETTE.length];
-  let h = 0; for (const ch of String(id)) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
-  return PALETTE[h % PALETTE.length];
-}
-
-const GHOST_CAP = 40;
-const GHOST_DRAW = 0.5;       // s for the line to draw out to its end point
-const FAIL_FADE = 1.5;        // s for a failed attempt to fade
-const SUCCESS_HOLD = 3.0;     // s a success stays green
-const SUCCESS_FADE = 0.4;
-const GHOST_OPACITY = 0.42;
-const lineMaterials = new Set();          // need the canvas size for pixel line widths
-function lineMat(opts) {
-  const m = new LineMaterial({ transparent: true, depthWrite: false, ...opts });
-  m.resolution.set(host.clientWidth, host.clientHeight);
-  lineMaterials.add(m);
-  return m;
-}
-const ghostGroup = new THREE.Group();
-world.add(ghostGroup);
-const dotGeom = new THREE.SphereGeometry(2.4, 12, 8);
-let ghosts = [];
-let seenKeys = new Set();
-let successCount = 0;
-
-const ghostKey = g => `${g.agent}|${g.parcel}|${g.path.length}|${g.path[1]}|${g.path.at(-1)}`;
-const pathPositions = path => path.flatMap(p => toThree({ x: p[0], y: p[1], z: p[2] }).pos.toArray());
-
-function spawnGhost(g) {
-  if (!g.path || g.path.length < 2) return;
-  while (ghosts.length >= GHOST_CAP) removeGhost(ghosts[0]);
-  const geom = new LineGeometry();
-  geom.setPositions(pathPositions(g.path));
-  geom.instanceCount = 1;
-  const colour = agentColour(g.agent);
-  const line = new Line2(geom, lineMat({ color: colour, linewidth: 2.2, opacity: GHOST_OPACITY }));
-  const dot = new THREE.Mesh(dotGeom, new THREE.MeshBasicMaterial({ color: colour, transparent: true, opacity: 0.8, depthWrite: false }));
-  dot.userData.noAO = true;
-  ghostGroup.add(line, dot);
-  const gh = { line, dot, path: g.path, success: !!g.success, born: performance.now() / 1000, green: false };
-  ghosts.push(gh);
-  setGhostProgress(gh, 0);
-}
-function removeGhost(g) {
-  ghostGroup.remove(g.line, g.dot);
-  g.line.geometry.dispose(); lineMaterials.delete(g.line.material); g.line.material.dispose(); g.dot.material.dispose();
-  ghosts = ghosts.filter(x => x !== g);
-}
-function clearGhosts() { [...ghosts].forEach(removeGhost); }
-
-function pointAlong(path, s) {            // table-frame point at fraction s of the path's points
-  const f = s * (path.length - 1), i = Math.min(Math.floor(f), path.length - 2), t = f - i;
-  const a = path[i], b = path[i + 1], l = (u, v) => u + (v - u) * t;
-  return { x: l(a[0], b[0]), y: l(a[1], b[1]), z: l(a[2], b[2]), theta: l(a[3], b[3]) };
-}
-function setGhostProgress(g, s) {
-  const segs = g.path.length - 1;
-  g.line.geometry.instanceCount = Math.max(1, Math.ceil(s * segs));
-  g.dot.position.copy(toThree(pointAlong(g.path, s)).pos);
-}
-function setGhostOpacity(g, k) {
-  g.line.material.opacity = GHOST_OPACITY * k * (g.green ? 2 : 1);
-  g.dot.material.opacity = 0.8 * k;
-}
-
-function updateGhosts(now) {
-  for (const g of [...ghosts]) {
-    const age = now - g.born;
-    setGhostProgress(g, Math.min(1, age / GHOST_DRAW));
-    if (age < GHOST_DRAW) continue;
-    const after = age - GHOST_DRAW;
-    if (g.success) {
-      if (!g.green) {
-        g.green = true;
-        g.line.material.color.set(C.success); g.dot.material.color.set(C.success);
-      }
-      const fade = after - SUCCESS_HOLD;
-      setGhostOpacity(g, fade > 0 ? 1 - fade / SUCCESS_FADE : 1);
-      if (fade >= SUCCESS_FADE) removeGhost(g);
-    } else {
-      setGhostOpacity(g, 1 - after / FAIL_FADE);
-      if (after >= FAIL_FADE) removeGhost(g);
-    }
-  }
-}
-function ingestGhosts(list = [], live) {
-  const keys = new Set();
-  for (const g of list) {
-    const k = ghostKey(g);
-    keys.add(k);
-    if (live && !seenKeys.has(k)) {        // don't replay old attempts after a reconnect
-      spawnGhost(g);
-      if (g.success) successCount++;
-    }
-  }
-  seenKeys = keys;
-}
-
-// ---- the current best: thick yellow line, outlined box sliding along it on a loop ----
-// The frame's "best" has no path, so the viewer takes the path of the newest successful
-// ghost from the best agent for that parcel, seen when the best changed.
-// Unlit, so it reads as emissive; userData.glow puts it in the bloom pass. The filmic curve
-// washes bright yellows out, so this is a deeper yellow that lands near the accent on screen.
-const GLOW_YELLOW = new THREE.Color().setRGB(1.1, 0.5, 0.0);
-const bestLine = new Line2(new LineGeometry(), lineMat({ color: GLOW_YELLOW, linewidth: 4.5, opacity: 1, transparent: false }));
-bestLine.visible = false;
-bestLine.renderOrder = 2;
-bestLine.userData.glow = true;
-world.add(bestLine);
-let bestBox = null, bestPath = null, bestSig = null, bestBoxFor = null;
-const BEST_LOOP = 2.4;        // s per slide along the best path
-function setBestPath(path, parcelId) {
-  bestPath = path;
-  if (!path) { bestLine.visible = false; if (bestBox) bestBox.visible = false; return; }
-  const pos = pathPositions(path).map((v, i) => (i % 3 === 1 ? v + 0.6 : v));   // lift off the surface a touch
-  bestLine.geometry.dispose();
-  bestLine.geometry = new LineGeometry();
-  bestLine.geometry.setPositions(pos);
-  bestLine.visible = true;
-  if (bestBoxFor !== parcelId) {
-    if (bestBox) { world.remove(bestBox); bestBox.geometry.dispose(); }
-    const s = parcelSize(parcelId);
-    const edges = new THREE.EdgesGeometry(new THREE.BoxGeometry(s.width, s.height, s.depth));
-    bestBox = new LineSegments2(new LineSegmentsGeometry().fromEdgesGeometry(edges),
-                                lineMat({ color: GLOW_YELLOW, linewidth: 2, opacity: 1, transparent: false }));
-    bestBox.renderOrder = 2;
-    bestBox.userData.glow = true;
-    world.add(bestBox);
-    bestBoxFor = parcelId;
-  }
-}
-function trackBest(f) {
-  const b = f.best;
-  const sig = b ? `${b.agent}|${b.robust}|${b.goal?.parcel}` : null;
-  if (!b) { bestSig = null; setBestPath(null); return; }
-  if (sig === bestSig && bestPath) return;
-  const parcel = b.goal?.parcel;
-  const cand = (f.ghosts ?? []).filter(g => g.success && g.agent === b.agent && (!parcel || g.parcel === parcel));
-  if (cand.length) { setBestPath(cand.at(-1).path, parcel ?? cand.at(-1).parcel); bestSig = sig; }
-}
-function updateBest(now, phase) {
-  if (!bestBox) return;
-  const slide = bestPath && (phase === "searching" || phase === "ready");
-  bestBox.visible = !!slide;
-  if (!slide) return;
-  const p = pointAlong(bestPath, (now % BEST_LOOP) / BEST_LOOP);
-  place(bestBox, p);
-}
-
-// ---- camera: fixed three-quarter view from the front-left ---------------------
-// Modes: "intro" (wide shot into the demo angle), "demo" (fixed angle with a faint drift),
-// "free" (orbit controls), "return" (easing back to the demo angle).
-const camera = new THREE.PerspectiveCamera(30, 1, 20, 9000);
-const controls = new OrbitControls(camera, renderer.domElement);
-controls.enableDamping = true;
-controls.dampingFactor = 0.08;
-controls.maxPolarAngle = 86 * DEG;             // never down to floor level
-controls.enabled = false;
-
-const AZIMUTH = -28 * DEG;                     // negative = from the left
-const ELEVATION = 34 * DEG;
-const VIEW_DIR = new THREE.Vector3(Math.cos(ELEVATION) * Math.sin(AZIMUTH), Math.sin(ELEVATION),
-                                   Math.cos(ELEVATION) * Math.cos(AZIMUTH));
-const TABLE_SHARE = 0.6;                       // table width as a share of the scene width
-const EDGE = 0.06;                             // keep everything this far inside each edge
-const INTRO_TIME = 2.0, RETURN_TIME = 1.0;     // s
-const DRIFT = { az: 2.2 * DEG, el: 0.6 * DEG, azPeriod: 44, elPeriod: 61 };   // s per full swing
-
-const tablePoints = [], allPoints = [];
-{
-  const add = (list, x, y, z) => list.push(toThree({ x, y, z }).pos);
-  for (const x of [0, table.width]) for (const y of [0, table.depth]) for (const z of [0, table.height]) {
-    add(tablePoints, x, y, z); add(allPoints, x, y, z);
-  }
-  for (const b of Object.values(bags))
-    for (const sx of [-1, 1]) for (const sy of [-1, 1]) for (const z of [0, b.height + 3])
-      add(allPoints, b.x + sx * b.width / 2, b.y + sy * b.depth / 2, z);
-  for (const [x, y] of bagLabelPoints) add(allPoints, x, y, 0);
-  for (let a = 0; a <= 180; a += 15) {
-    const h = (arm.heading_at_zero + arm.direction * a) * DEG;
-    add(allPoints, arm.pivot_x + Math.cos(h) * arm.length, arm.pivot_y + Math.sin(h) * arm.length, table.height + arm.height);
-  }
-  add(allPoints, arm.pivot_x, arm.pivot_y, table.height + 25);
-}
-
-const home = { pos: new THREE.Vector3(), target: new THREE.Vector3() };   // the fixed demo angle
-function fitCamera() {
-  const w = host.clientWidth, h = host.clientHeight;
-  if (!w || !h) return;
-  camera.aspect = w / h;
-  camera.updateProjectionMatrix();
-  const fwd = VIEW_DIR.clone().negate();
-  const right = new THREE.Vector3().crossVectors(fwd, new THREE.Vector3(0, 1, 0)).normalize();
-  const up = new THREE.Vector3().crossVectors(right, fwd);
-  const fy = (h / 2) / Math.tan(camera.fov * DEG / 2);           // focal length in px
-  const target = new THREE.Box3().setFromPoints(allPoints).getCenter(new THREE.Vector3());
-
-  const extent = (pts, d) => {
-    const eye = target.clone().addScaledVector(VIEW_DIR, d);
-    let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
-    for (const p of pts) {
-      const v = p.clone().sub(eye), depth = v.dot(fwd);
-      const sx = fy * v.dot(right) / depth, sy = fy * v.dot(up) / depth;
-      x0 = Math.min(x0, sx); x1 = Math.max(x1, sx); y0 = Math.min(y0, sy); y1 = Math.max(y1, sy);
-    }
-    return { x0, x1, y0, y1 };
-  };
-  const ok = d => {
-    const t = extent(tablePoints, d), a = extent(allPoints, d);
-    return t.x1 - t.x0 <= TABLE_SHARE * w &&
-           a.x1 - a.x0 <= (1 - 2 * EDGE) * w && a.y1 - a.y0 <= (1 - 2 * EDGE) * h;
-  };
-  let d = 0;
-  for (let pass = 0; pass < 3; pass++) {
-    let lo = 50, hi = 60000;
-    for (let i = 0; i < 40; i++) { const mid = (lo + hi) / 2; ok(mid) ? (hi = mid) : (lo = mid); }
-    d = hi;
-    const a = extent(allPoints, d);                                  // centre the content
-    target.addScaledVector(right, ((a.x0 + a.x1) / 2) * d / fy).addScaledVector(up, ((a.y0 + a.y1) / 2) * d / fy);
-  }
-  home.target.copy(target);
-  home.pos.copy(target).addScaledVector(VIEW_DIR, d);
-
-  // Free-camera limits: stay outside a sphere that holds everything, and keep the pivot near it.
-  const reach = Math.max(...allPoints.map(p => p.distanceTo(target)));
-  controls.minDistance = reach * 1.5;
-  controls.maxDistance = Math.max(d * 2.6, reach * 3);
-  cam.panRadius = reach * 0.42;
-}
-
-const cam = { mode: CALM ? "demo" : "intro", t0: null, from: null, look: new THREE.Vector3(), panRadius: 100 };
-const easeInOut = k => (k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2);
-const _sa = new THREE.Spherical(), _sb = new THREE.Spherical(), _v = new THREE.Vector3();
-// Camera on the arc between two poses: k = 0 is a, k = 1 is b.
-function blendPose(a, b, k) {
-  _sa.setFromVector3(_v.subVectors(a.pos, a.target));
-  _sb.setFromVector3(_v.subVectors(b.pos, b.target));
-  const dth = Math.atan2(Math.sin(_sb.theta - _sa.theta), Math.cos(_sb.theta - _sa.theta));
-  _sa.radius += (_sb.radius - _sa.radius) * k; _sa.phi += (_sb.phi - _sa.phi) * k; _sa.theta += dth * k;
-  cam.look.lerpVectors(a.target, b.target, k);
-  camera.position.setFromSpherical(_sa).add(cam.look);
-  camera.lookAt(cam.look);
-}
-// The demo pose turned a little about its target: (azimuth, elevation) offsets in radians.
-function homeTurned(dAz, dEl, zoom = 1) {
-  _sa.setFromVector3(_v.subVectors(home.pos, home.target));
-  _sa.theta += dAz; _sa.phi -= dEl; _sa.radius *= zoom;
-  return { pos: new THREE.Vector3().setFromSpherical(_sa).add(home.target), target: home.target };
-}
-function updateCamera(now) {
-  if (cam.t0 === null) cam.t0 = now;
-  const age = now - cam.t0;
-  if (cam.mode === "free") {
-    // keep the pivot near the rig and above the floor, moving the camera with it
-    _v.subVectors(controls.target, home.target).clampLength(0, cam.panRadius).add(home.target);
-    _v.y = Math.max(_v.y, 0);
-    _v.sub(controls.target);
-    controls.target.add(_v); camera.position.add(_v);
-    controls.update();
-    cam.look.copy(controls.target);
-    return;
-  }
-  if (cam.mode === "intro") {
-    const k = Math.min(1, age / INTRO_TIME);
-    blendPose(homeTurned(-34 * DEG, 13 * DEG, 1.9), home, easeInOut(k));
-    if (k >= 1) { cam.mode = "demo"; cam.t0 = now; }
-  } else if (cam.mode === "return") {
-    const k = Math.min(1, age / RETURN_TIME);
-    blendPose(cam.from, home, easeInOut(k));
-    if (k >= 1) { cam.mode = "demo"; cam.t0 = now; }
-  } else {
-    const t = CALM ? 0 : age;                    // drift starts from the exact demo angle
-    blendPose(home, homeTurned(DRIFT.az * Math.sin(2 * Math.PI * t / DRIFT.azPeriod),
-                               DRIFT.el * Math.sin(2 * Math.PI * t / DRIFT.elPeriod)), 1);
-  }
-}
-
-// ---- free camera toggle: button in the corner, "O" key, double-click to go back ----
-const freeBtn = document.getElementById("freecam");
-function setFreeCamera(on) {
-  if (on === (cam.mode === "free")) return;
-  if (on) {
-    controls.target.copy(cam.look);
-    cam.mode = "free";
-  } else {
-    cam.from = { pos: camera.position.clone(), target: controls.target.clone() };
-    cam.mode = "return"; cam.t0 = null;
-  }
-  controls.enabled = on;
-  freeBtn.setAttribute("aria-pressed", String(on));
-}
-freeBtn.onclick = () => { setFreeCamera(cam.mode !== "free"); freeBtn.blur(); };
-host.addEventListener("dblclick", e => { if (e.target !== freeBtn) setFreeCamera(false); });
-addEventListener("keydown", e => {
-  if (e.key !== "o" && e.key !== "O") return;
-  if (e.metaKey || e.ctrlKey || e.altKey) return;
-  setFreeCamera(cam.mode !== "free");
-});
-
-// ---- postprocessing: ambient occlusion, bloom on glowing things only, output ----
-// Order of passes: scene -> GTAO -> add bloom -> tone mapping and sRGB.
-// Antialiasing: the scene is drawn into its own multisampled buffer and copied into the
-// composer. Multisampling the composer's own buffers would resolve them after every pass.
-const COPY_VERTEX = "varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }";
-class SceneMsaaPass extends Pass {
-  constructor() {
-    super();
-    this.needsSwap = false;
-    this.target = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4 });
-    this.quad = new FullScreenQuad(new THREE.ShaderMaterial({
-      uniforms: { tDiffuse: { value: this.target.texture } }, vertexShader: COPY_VERTEX, depthTest: false, depthWrite: false,
-      fragmentShader: "uniform sampler2D tDiffuse; varying vec2 vUv; void main() { gl_FragColor = texture2D(tDiffuse, vUv); }",
-    }));
-  }
-  setSize(w, h) { this.target.setSize(w, h); }
-  render(renderer, writeBuffer, readBuffer) {
-    renderer.setRenderTarget(this.target);
-    renderer.render(scene, camera);
-    renderer.setRenderTarget(readBuffer);
-    this.quad.render(renderer);
-  }
-}
-let composer = null, bloomComposer = null, bloomMix = null;
-if (!PLAIN) {
-  composer = new EffectComposer(renderer);
-  composer.addPass(new SceneMsaaPass());
-
-  if (USE_AO) {
-    const gtao = new GTAOPass(scene, camera, 1, 1);
-    gtao.blendIntensity = 0.55;                                      // low strength
-    gtao.updateGtaoMaterial({ radius: 16, distanceExponent: 1.4, thickness: 1.5, scale: 1, samples: 8,
-                              distanceFallOff: 1, screenSpaceRadius: false });   // radius in mm
-    gtao.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: 6, rings: 2, samples: 8 });
-    // Fat lines, labels and inlays are not solid: keep them out of the occlusion buffers.
-    const base = gtao.overrideVisibility.bind(gtao);
-    gtao.overrideVisibility = () => {
-      base();
-      scene.traverse(o => { if (o.isLineSegments2 || o.userData.noAO) o.visible = false; });
-    };
-    // Occlusion is soft by nature: half resolution costs a quarter and looks the same.
-    const setSize = gtao.setSize.bind(gtao);
-    gtao.setSize = (w, h) => setSize(Math.ceil(w * AO_SCALE), Math.ceil(h * AO_SCALE));
-    composer.addPass(gtao);
-  }
-
-  if (USE_BLOOM) {
-    // Bloom sees a copy of the frame in which everything that does not glow is black,
-    // so only glowing things (userData.glow, or an emissive material) can bleed light.
-    bloomComposer = new EffectComposer(renderer);
-    bloomComposer.renderToScreen = false;
-    bloomComposer.addPass(new RenderPass(scene, camera, null, new THREE.Color(0), 1));
-    bloomComposer.addPass(new UnrealBloomPass(new THREE.Vector2(1, 1), 0.2, 0.25, 0));   // very subtle
-    bloomMix = new ShaderPass(new THREE.ShaderMaterial({
-      uniforms: { tDiffuse: { value: null }, tBloom: { value: null }, uOn: { value: 0 } },
-      vertexShader: COPY_VERTEX,
-      fragmentShader: `uniform sampler2D tDiffuse; uniform sampler2D tBloom; uniform float uOn; varying vec2 vUv;
-        void main() { vec4 c = texture2D(tDiffuse, vUv); gl_FragColor = vec4(c.rgb + uOn * texture2D(tBloom, vUv).rgb, c.a); }`,
-    }), "tDiffuse");
-    composer.addPass(bloomMix);
-  }
-  composer.addPass(new OutputPass());
-}
-
-const glows = o => o.userData.glow || (o.material?.emissive && o.material.emissiveIntensity > 0 && o.material.emissive.getHex() !== 0);
-const blackout = new THREE.MeshBasicMaterial({ color: 0x000000 });
-const _swapped = [];
-function renderBloom() {
-  let any = false;
-  scene.traverse(o => { if (o.isMesh && o.visible && glows(o)) any = true; });
-  bloomMix.uniforms.uOn.value = any ? 1 : 0;
-  if (!any) return;                                  // nothing glowing: skip the whole pass
-  scene.traverse(o => {
-    if (!o.isMesh || glows(o)) return;
-    if (o.isLineSegments2 || o.material.transparent) { if (o.visible) { _swapped.push(o, null); o.visible = false; } }
-    else { _swapped.push(o, o.material); o.material = blackout; }
-  });
-  const bg = scene.background;
-  scene.background = null;
-  bloomComposer.render();
-  scene.background = bg;
-  for (let i = 0; i < _swapped.length; i += 2) {
-    if (_swapped[i + 1]) _swapped[i].material = _swapped[i + 1]; else _swapped[i].visible = true;
-  }
-  _swapped.length = 0;
-  bloomMix.uniforms.tBloom.value = bloomComposer.readBuffer.texture;
-}
-
-function renderScene() {
-  if (bloomComposer) renderBloom();
-  renderer.shadowMap.needsUpdate = true;
-  if (composer) composer.render(); else renderer.render(scene, camera);
-}
-
-function resize() {
-  const w = host.clientWidth, h = host.clientHeight;
-  if (!w || !h) return;
-  renderer.setSize(w, h, false);
-  composer?.setSize(w, h);
-  if (bloomComposer) { bloomComposer.setPixelRatio(Math.max(0.5, PIXEL_RATIO / 2)); bloomComposer.setSize(w, h); }
-  for (const m of lineMaterials) m.resolution.set(w, h);
-  fitCamera();
-}
-new ResizeObserver(resize).observe(host);
-
-// The page background is #E9EAEC and the scene must meet it without a seam, but tone
-// mapping shifts flat colours. Nudge the scene's background until the canvas shows it.
-function matchBackground() {
-  const gl = renderer.getContext(), px = new Uint8Array(4);
-  const want = new THREE.Color(C.bg).convertLinearToSRGB();          // the bytes the canvas should show
-  const prev = { r: null, g: null, b: null };
-  world.visible = false;
-  for (let i = 0; i < 14; i++) {
-    renderScene();
-    gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
-    const got = { r: px[0] / 255, g: px[1] / 255, b: px[2] / 255 };
-    if (["r", "g", "b"].every(ch => Math.abs(got[ch] - want[ch]) < 0.6 / 255)) break;
-    for (const ch of ["r", "g", "b"]) {                              // secant step per channel, in log space
-      const x = Math.log(scene.background[ch]), y = Math.log(Math.max(got[ch], 1e-3));
-      const slope = prev[ch] && Math.abs(x - prev[ch].x) > 1e-6 ? (y - prev[ch].y) / (x - prev[ch].x) : 1;
-      prev[ch] = { x, y };
-      scene.background[ch] = Math.exp(x + (Math.log(want[ch]) - y) / Math.min(2, Math.max(0.15, slope)));
-    }
-  }
-  world.visible = true;
-}
-
-// ---- UI ----------------------------------------------------------------------
-const $ = id => document.getElementById(id);
-const pct = r => (typeof r === "number" ? `${Math.round(r * 100)}%` : "–");
-const mm = v => (typeof v === "number" ? v.toFixed(1) : "–");
-const cap = s => (s ? s[0].toUpperCase() + s.slice(1) : "");
-let ws = null, lastFrame = null, prevPhase = null, prevHadBest = false;
-const connected = () => ws?.readyState === WebSocket.OPEN;
-function send(msg) { if (connected()) ws.send(JSON.stringify(msg)); }
-
-function selectTab(name) {
-  for (const t of ["agents", "outcomes"]) {
-    $(`tab-${t}`).setAttribute("aria-selected", String(t === name));
-    $(`view-${t}`).hidden = t !== name;
-  }
-}
-$("tab-agents").onclick = () => selectTab("agents");
-$("tab-outcomes").onclick = () => selectTab("outcomes");
-
-const MUTE_SVG = `<svg class="mute" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"
-  stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="silenced"><path d="M2 6h3l4-3v10l-4-3H2z"/>
-  <path d="M11 6l4 4M15 6l-4 4"/></svg>`;
-
-const agentRows = new Map();   // id -> {el, role}
-function renderAgents(agents = []) {
-  const ids = new Set(agents.map(a => a.id));
-  for (const [id, r] of agentRows) if (!ids.has(id)) { r.el.remove(); agentRows.delete(id); }
-  for (const a of agents) {
-    let r = agentRows.get(a.id);
-    if (!r) {
-      const el = document.createElement("div");
-      el.className = "agent";
-      el.innerHTML = `<span class="dot"></span><span class="id"></span>
-        <span class="rolecell"><span class="chip role"></span><span class="deadlabel" hidden>dead</span></span>
-        <span class="tries mono"></span><span class="bar"><i></i></span><button class="kill">Kill</button>`;
-      el.querySelector(".dot").style.background = agentColour(a.id);
-      el.querySelector(".id").textContent = a.id;
-      el.querySelector(".kill").onclick = () => send({ cmd: "die", id: a.id });
-      $("rows").appendChild(el);
-      r = { el, role: null };
-      agentRows.set(a.id, r);
-    }
-    const { el } = r;
-    el.classList.toggle("dead", !a.alive);
-    const chip = el.querySelector(".role");
-    chip.hidden = !a.alive;
-    el.querySelector(".deadlabel").hidden = a.alive;
-    if (a.alive) {
-      if (r.role !== null && r.role !== a.role) {       // role changed: flash the chip
-        chip.classList.remove("flash"); void chip.offsetWidth; chip.classList.add("flash");
-      }
-      chip.textContent = cap(a.role);
-    }
-    r.role = a.role;
-    const mute = el.querySelector(".mute");
-    if (a.alive && a.silenced && !mute) el.querySelector(".rolecell").insertAdjacentHTML("beforeend", MUTE_SVG);
-    if (!(a.alive && a.silenced) && mute) mute.remove();
-    el.querySelector(".tries").textContent = (a.tries ?? 0).toLocaleString();
-    const robust = Math.max(0, Math.min(1, a.robust ?? 0));
-    const bar = el.querySelector(".bar");
-    bar.title = `robust ${pct(robust)}`;
-    bar.firstElementChild.style.width = `${robust * 100}%`;
-    bar.firstElementChild.style.background = robust >= EXECUTE_MIN ? "var(--success)" : agentColour(a.id);
-    const kill = el.querySelector(".kill");
-    kill.hidden = !a.alive;
-    kill.disabled = !connected();
-  }
-}
-
-function renderOutcomes(f) {
-  $("m-attempts").textContent = (f.agents ?? []).reduce((s, a) => s + (a.tries ?? 0), 0).toLocaleString();
-  $("m-success").textContent = successCount.toLocaleString();
-  $("m-best").textContent = pct(f.best?.robust);
-  const r = f.phase === "done" ? f.result : null;
-  const box = $("result");
-  if (!r) {
-    if (!box.querySelector(".placeholder"))
-      box.innerHTML = `<div class="placeholder">After a real push, predicted against actual appears here.</div>`;
-    return;
-  }
-  const p = r.predicted, a = r.actual;
-  box.innerHTML = `<div class="result">
-      <div class="verdict ${r.landed ? "hit" : "miss"}"></div>
-      <table>
-        <tr><th></th><th>x mm</th><th>y mm</th><th>θ°</th></tr>
-        <tr><td>Predicted</td><td class="mono">${mm(p.x)}</td><td class="mono">${mm(p.y)}</td><td class="mono">${mm(p.theta)}</td></tr>
-        <tr><td>Actual</td><td class="mono">${mm(a.x)}</td><td class="mono">${mm(a.y)}</td><td class="mono">${mm(a.theta)}</td></tr>
-      </table>
-      <div class="err"><span class="heading">Error</span><span><span class="v mono">${mm(Math.hypot(a.x - p.x, a.y - p.y))}</span> mm</span></div>
-    </div>`;
-  box.querySelector(".verdict").textContent = `${r.landed ? "Hit" : "Missed"} ${r.bin ?? "the"} bag`;
-}
-
-const itemRows = new Map();
-function renderItems(items = []) {
-  const ids = new Set(items.map(i => i.id));
-  for (const [id, el] of itemRows) if (!ids.has(id)) { el.remove(); itemRows.delete(id); }
-  for (const it of items) {
-    let el = itemRows.get(it.id);
-    if (!el) {
-      el = document.createElement("div");
-      el.className = "item";
-      el.innerHTML = `<span class="sw"></span><span class="id"></span><span class="route"></span><span class="chip status"></span>`;
-      el.querySelector(".id").textContent = it.id;
-      $("items").appendChild(el);
-      itemRows.set(it.id, el);
-    }
-    el.querySelector(".sw").style.background = tagColour(it.color);
-    el.querySelector(".sw").title = it.color ?? "";
-    const route = el.querySelector(".route");
-    route.textContent = `${cap(it.zone ?? "?")} → `;
-    const bag = document.createElement("b");
-    bag.textContent = it.bin ? `${it.bin} bag` : "no bag yet";
-    route.appendChild(bag);
-    const st = el.querySelector(".status");
-    st.textContent = it.status ?? "";
-    st.className = `chip status ${it.status ?? ""}`;
-  }
-}
-
-function renderTop(f) {
-  const ph = $("phase");
-  ph.textContent = f ? f.phase : "offline";
-  ph.className = f?.phase ?? "";
-  $("best").textContent = pct(f?.best?.robust);
-  const goal = $("goal");
-  goal.replaceChildren();
-  const target = f?.best?.goal?.parcel ?? (f?.items ?? []).find(i => i.zone === "pick")?.id;
-  const item = (f?.items ?? []).find(i => i.id === target);
-  const bin = f?.best?.goal?.bin ?? item?.bin;
-  if (!f) goal.innerHTML = `<span class="muted">Waiting for the observer</span>`;
-  else if (!item) goal.innerHTML = `<span class="muted">No parcel in the pick zone</span>`;
-  else {
-    const sw = document.createElement("span"); sw.className = "sw"; sw.style.background = tagColour(item.color);
-    const txt = document.createElement("span");
-    txt.textContent = `${item.id} (${item.color}) → ${bin ?? "?"} bag`;
-    goal.append(sw, txt);
-  }
-  const silenced = (f?.agents ?? []).some(a => a.alive && a.silenced);
-  $("silence").classList.toggle("on", silenced);
-  $("silence").textContent = silenced ? "Unsilence" : "Silence all";
-  $("silence").disabled = $("replan").disabled = !connected();
-}
-
-function renderSend(f) {
-  const b = $("send");
-  const robust = f?.best?.robust ?? 0;
-  const armed = connected() && robust >= EXECUTE_MIN && ["searching", "ready"].includes(f?.phase);
-  b.disabled = !armed;
-  b.classList.toggle("armed", armed);
-  b.textContent = f?.phase === "executing" ? "Pushing..." : armed ? "Send to Arduino" :
-                  f?.phase === "done" ? "Pushed · Replan for the next parcel" : "Waiting for a plan above 80%";
-}
-
-function renderFrame(f) {
-  const hasBest = !!f.best;
-  if ((f.phase === "searching" && prevPhase && !["searching", "ready"].includes(prevPhase)) || (prevHadBest && !hasBest)) {
-    clearGhosts(); seenKeys = new Set(); successCount = 0; bestSig = null; setBestPath(null);
-  }
-  if (f.phase === "done" && prevPhase && prevPhase !== "done") selectTab("outcomes");
-  prevPhase = f.phase; prevHadBest = hasBest;
-
-  renderParcels(f.items);
-  if (f.arm) setArmAngle(f.arm.angle);
-  ingestGhosts(f.ghosts, f.phase === "searching" || f.phase === "ready");
-  trackBest(f);
-
-  renderTop(f);
-  renderAgents(f.agents);
-  renderOutcomes(f);
-  renderItems(f.items);
-  renderSend(f);
-  lastFrame = f;
-}
-
-$("silence").onclick = () => {
-  const silenced = (lastFrame?.agents ?? []).some(a => a.alive && a.silenced);
-  send({ cmd: silenced ? "unsilence" : "silence" });
-};
-$("replan").onclick = () => send({ cmd: "replan" });
-$("send").onclick = () => send({ cmd: "execute" });
-
-function setConnected(on) {
-  $("conn").classList.toggle("on", on);
-  $("conn").title = on ? "observer connected" : "observer offline, retrying";
-  renderTop(on ? lastFrame : null);
-  renderSend(on ? lastFrame : null);
-  if (lastFrame) renderAgents(lastFrame.agents);
-}
-
-// ---- WebSocket -------------------------------------------------------------
-function connect() {
-  ws = new WebSocket(WS_URL);
-  ws.onopen = () => setConnected(true);
-  ws.onclose = () => { setConnected(false); setTimeout(connect, 1000); };
-  ws.onmessage = ev => renderFrame(JSON.parse(ev.data));
-}
-connect();
-
-// ---- loop ------------------------------------------------------------------
-resize();
-matchBackground();
-const stats = window.viewerStats = { fps: 0, worstMs: 0, ghosts: 0 };   // read from the console
-let lastTime = performance.now() / 1000, statT = lastTime, statN = 0, statWorst = 0;
-renderer.setAnimationLoop(() => {
-  const now = performance.now() / 1000, gap = now - lastTime, dt = Math.min(0.1, gap);
-  lastTime = now;
-  statN++; statWorst = Math.max(statWorst, gap);
-  if (now - statT >= 1) {
-    stats.fps = Math.round(statN / (now - statT) * 10) / 10; stats.worstMs = Math.round(statWorst * 1000);
-    stats.ghosts = ghosts.length;
-    statT = now; statN = 0; statWorst = 0;
-  }
-  updateArm(dt);
-  updateParcels(now, dt);
-  updateGhosts(now);
-  updateBest(now, lastFrame?.phase);
-  updateCamera(now);
-  renderScene();
-});
-</script>
+<p id="inventory-notice" class="sr-only" role="status"></p>
+<dialog id="capture-dialog" aria-labelledby="capture-title" aria-describedby="capture-description">
+  <div class="capture-header">
+    <div><span class="heading">Object capture</span><h2 id="capture-title">Photograph your object</h2></div>
+    <button id="capture-close" type="button" aria-label="Close camera">✕</button>
+  </div>
+  <p id="capture-description">One object at a time. Keep the full box or sweeper in the frame.</p>
+  <div class="capture-layout">
+    <div>
+      <div class="capture-stage">
+        <video id="camera-preview" autoplay muted playsinline hidden aria-label="Live camera preview"></video>
+        <img id="capture-photo" hidden alt="Your captured object">
+        <div id="camera-placeholder"><span aria-hidden="true">◎</span><p>Starting your camera…</p></div>
+        <span id="capture-source" class="source-badge" hidden></span>
+      </div>
+      <p id="camera-message" role="status" aria-live="polite"></p>
+      <div id="camera-controls">
+        <label id="camera-device-label" hidden>Camera<select id="camera-device"></select></label>
+        <div class="capture-actions"><button id="camera-retry" type="button" hidden>Retry camera</button><button id="take-picture" class="primary" type="button" disabled>Take Picture</button></div>
+      </div>
+      <div id="photo-controls" class="capture-actions" hidden><button id="retake-picture" type="button">Retake</button></div>
+      <div class="upload-row"><button id="upload-picture" type="button">Upload a photo</button><span>JPG, PNG or WebP · up to 20 MB</span></div>
+      <input id="photo-file" type="file" accept="image/jpeg,image/png,image/webp" hidden>
+    </div>
+    <form id="capture-form">
+      <span class="heading">Confirm identity</span>
+      <p class="capture-help">Choose which object you photographed. Identity is selected manually.</p>
+      <label for="capture-identity">Object</label><select id="capture-identity" required></select>
+      <div id="capture-color-field"><label for="capture-color">Routing colour</label><select id="capture-color"></select><p id="capture-destination"></p></div>
+      <fieldset id="capture-other-fields" hidden><legend>Approximate object</legend>
+        <label for="capture-object-name">Object name</label><input id="capture-object-name" type="text" maxlength="80" value="Other object">
+        <label for="capture-shape">Approximate shape</label><select id="capture-shape"><option value="cylinder">Cylinder</option><option value="bottle">Bottle</option><option value="mug">Mug</option><option value="cuboid">Cuboid</option></select>
+        <div class="dimension-inputs"><label>Width mm<input id="capture-width" type="number" min="1" max="2000" value="45"></label><label>Depth mm<input id="capture-depth" type="number" min="1" max="2000" value="45"></label><label>Height mm<input id="capture-height" type="number" min="1" max="2000" value="80"></label></div>
+        <p class="capture-help">A shape approximation using your measurements. The photograph does not reconstruct arbitrary geometry.</p>
+      </fieldset>
+      <p id="capture-replacement" hidden></p>
+      <p id="capture-identity-note">Take or upload a photo to continue.</p>
+      <button id="add-inventory" class="primary" type="submit" disabled>Add to Inventory</button>
+      <p class="capture-help">Photos stay in this browser tab. No image is sent to the observer.</p>
+    </form>
+  </div>
+</dialog>
+<script type="module" src="./inventory.mjs"></script>
+<script type="module" src="./model-preview.mjs"></script>
+<script type="module" src="./workshop.mjs"></script>
 </body>
 </html>

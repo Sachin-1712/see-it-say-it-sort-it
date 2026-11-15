@@ -1,0 +1,206 @@
+{
+  "schemaVersion": 1,
+  "assetUnits": "metres",
+  "assetAxes": "Y-up: x, z, -y from simulation",
+  "physicalUnits": "millimetres, grams, degrees",
+  "physicalAxes": "Z-up",
+  "models": {
+    "box": {
+      "name": "Box",
+      "url": "box.glb",
+      "type": "box",
+      "colour": "#969696",
+      "origin": "bottom-centre",
+      "dimensionsMm": {
+        "width": 50,
+        "depth": 35,
+        "height": 20
+      },
+      "massG": 25,
+      "collision": {
+        "shape": "box",
+        "sizeMm": [
+          50,
+          35,
+          20
+        ],
+        "centerMm": [
+          0,
+          0,
+          10.0
+        ]
+      },
+      "measurementSource": "config/rig.json parcels.p1",
+      "placeholderMeasurements": true,
+      "friction": null,
+      "nodes": {
+        "root": "box",
+        "body": "parcel_body"
+      }
+    },
+    "sweeper": {
+      "name": "Cylindrical Sweeper",
+      "url": "sweeper.glb",
+      "type": "sweeper",
+      "origin": "can-base-centre",
+      "dimensionsMm": {
+        "width": 205.6,
+        "depth": 67.2,
+        "height": 137.0
+      },
+      "placeholderMeasurements": true,
+      "measurementSource": "config/models.json sweeper",
+      "massG": 70,
+      "friction": null,
+      "geometry": {
+        "can": {
+          "radiusMm": 33,
+          "heightMm": 110,
+          "massG": 55
+        },
+        "servo": {
+          "pivotMm": [
+            0,
+            -8,
+            122
+          ],
+          "axisZup": [
+            0,
+            1,
+            0
+          ],
+          "mountRollDeg": 0,
+          "caseDimensionsLocalMm": [
+            23,
+            24,
+            12
+          ],
+          "restDeg": 0,
+          "direction": 1,
+          "limitsDeg": [
+            0,
+            180
+          ],
+          "massG": 9
+        },
+        "stick": {
+          "lengthMm": 180,
+          "widthMm": 9,
+          "thicknessMm": 3,
+          "pivotFromEndMm": 8,
+          "massG": 6
+        }
+      },
+      "collision": {
+        "shape": "compound",
+        "frame": "Z-up millimetres",
+        "parts": [
+          {
+            "node": "metal_can",
+            "shape": "cylinder",
+            "radiusMm": 33,
+            "heightMm": 110,
+            "centerMm": [
+              0,
+              0,
+              55.0
+            ],
+            "axisZup": [
+              0,
+              0,
+              1
+            ]
+          },
+          {
+            "node": "servo_case",
+            "shape": "box",
+            "sizeMm": [
+              23,
+              24,
+              12
+            ],
+            "frame": "servo_mount local",
+            "centerMm": [
+              0,
+              0,
+              -8.0
+            ]
+          },
+          {
+            "node": "wooden_stick",
+            "shape": "box",
+            "sizeMm": [
+              180,
+              9,
+              3
+            ],
+            "frame": "servo_output local",
+            "centerMm": [
+              82.0,
+              0,
+              4.5
+            ]
+          }
+        ]
+      },
+      "joints": {
+        "tilt": {
+          "node": "assembly_tilt",
+          "pivotMm": [
+            0,
+            0,
+            0
+          ],
+          "axisZup": [
+            1.0,
+            0.0,
+            0.0
+          ],
+          "axisGltfLocal": [
+            1.0,
+            0.0,
+            -0.0
+          ],
+          "limitsDeg": [
+            -35,
+            35
+          ],
+          "restDeg": 0,
+          "direction": 1
+        },
+        "servo": {
+          "node": "servo_output",
+          "parent": "servo_mount",
+          "pivotMm": [
+            0,
+            -8,
+            122
+          ],
+          "axisZup": [
+            0.0,
+            1.0,
+            0.0
+          ],
+          "axisGltfLocal": [
+            0,
+            1,
+            0
+          ],
+          "limitsDeg": [
+            0,
+            180
+          ],
+          "restDeg": 0,
+          "direction": 1
+        }
+      },
+      "nodes": {
+        "root": "sweeper",
+        "assembly": "assembly_tilt",
+        "mount": "servo_mount",
+        "servoOutput": "servo_output",
+        "stick": "wooden_stick"
+      }
+    }
+  }
+}

@@ -1,0 +1,94 @@
+{
+  "schemaVersion": 1,
+  "units": "millimetres, grams, degrees",
+  "coordinates": "right-handed Z-up: x right, y away, z up",
+  "note": "ALL geometry is provisional. rig.json itself labels its measurements PLACEHOLDER. Replace these values with measured hardware before physics or real motion.",
+  "boxes": [
+    {
+      "id": "box",
+      "name": "Box",
+      "rigParcel": "p1",
+      "fallbackDimensionsMm": [
+        50,
+        35,
+        20
+      ],
+      "fallbackMassG": 25,
+      "colour": "#969696"
+    }
+  ],
+  "sweeper": {
+    "id": "sweeper",
+    "name": "Cylindrical Sweeper",
+    "note": "Every sweeper measurement, axis, pivot, rest angle and limit below is an UNMEASURED PLACEHOLDER. Default shaft is horizontal (+Y), not vertical. Verify mounted servo orientation, direction and manual tilt pivot against the rig.",
+    "can": {
+      "radiusMm": 33,
+      "heightMm": 110,
+      "massG": 55
+    },
+    "assemblyTilt": {
+      "pivotMm": [
+        0,
+        0,
+        0
+      ],
+      "axisZup": [
+        1,
+        0,
+        0
+      ],
+      "limitsDeg": [
+        -35,
+        35
+      ]
+    },
+    "servo": {
+      "pivotMm": [
+        0,
+        -8,
+        122
+      ],
+      "axisZup": [
+        0,
+        1,
+        0
+      ],
+      "mountRollDeg": 0,
+      "caseDimensionsLocalMm": [
+        23,
+        24,
+        12
+      ],
+      "restDeg": 0,
+      "direction": 1,
+      "limitsDeg": [
+        0,
+        180
+      ],
+      "massG": 9
+    },
+    "stick": {
+      "lengthMm": 180,
+      "widthMm": 9,
+      "thicknessMm": 3,
+      "pivotFromEndMm": 8,
+      "massG": 6
+    },
+    "friction": null
+  },
+  "workbench": {
+    "stackPositionMm": {
+      "x": 145,
+      "y": 75
+    },
+    "sweeperPositionMm": {
+      "x": 52,
+      "y": 120
+    },
+    "otherPositionMm": {
+      "x": 55,
+      "y": 40
+    },
+    "note": "Visual setup positions; no collision or stability simulation. Sweeper geometry and pivots remain placeholders."
+  }
+}
