@@ -12,6 +12,19 @@ import uuid
 from pathlib import Path
 
 
+def resolve_device(config):
+    device=config.get('serial_port')
+    if device is None:
+        from serial.tools import list_ports
+        matches=[p.device for p in list_ports.comports() if 'uno q' in (p.description or '').lower()]
+        if len(matches)!=1:
+            raise ValueError('No single UNO Q detected. Plug it in, or set serial_port in config/uno-q.json.')
+        device=matches[0]
+    if not isinstance(device,str) or not device.startswith('/dev/'):
+        raise ValueError('Configure a local USB serial device under /dev/')
+    return device
+
+
 class SerialBridge:
     def __init__(self):
         self.port = None
@@ -25,9 +38,8 @@ class SerialBridge:
     def connect(self, config):
         import serial
         self.close()
-        device = config.get('serial_port')
-        if not isinstance(device,str) or not device.startswith('/dev/'):
-            raise ValueError('Configure a local USB serial device under /dev/')
+        device = resolve_device(config)
+        self.device = device
         # cu/tty names address the same macOS device. Cooperating GEKKO tools
         # share a lock; TIOCEXCL also excludes noncooperating future opens.
         canonical = os.path.realpath(device).replace('/dev/cu.', '/dev/tty.')
@@ -45,7 +57,7 @@ class SerialBridge:
             fcntl.ioctl(self.port.fileno(),termios.TIOCEXCL)
             self.port.reset_input_buffer()
             self.device, self.config = device, dict(config)
-            self.connection = 'Connected — not armed'
+            self.connection = f'Connected {device} — not armed'
         except Exception as error:
             self.close()
             self.connection = f'Connection failed: {error}'
@@ -72,7 +84,7 @@ class SerialBridge:
     def stop_now(self):
         if not self.port:return False
         try:
-            self.write('S',uuid.uuid4().hex)
+            self.write('S',str(uuid.uuid4().int))
             return True  # sent only: no claim of STOP acknowledgement
         except Exception as error:
             self.connection=f'Connection lost: {error}'
@@ -80,7 +92,8 @@ class SerialBridge:
 
     async def request(self, command, cancel, timeout=5, guard=lambda:None):
         async with self.requests:
-            token=uuid.uuid4().hex
+            # Digits cannot trigger legacy character-at-a-time L/R/S/C commands.
+            token=str(uuid.uuid4().int)
             guard()
             if cancel.is_set():raise InterruptedError('Playback interrupted')
             self.write(command,token)

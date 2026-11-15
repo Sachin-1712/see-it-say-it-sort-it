@@ -63,7 +63,10 @@ locally installed RouterBridge 0.4.4 and HardwareServo 0.0.1 libraries.
    endpoint sweep against that saved action, including timing. The initial servo
    angle must match the first profile; subsequent start angles must match the last
    endpoint. Hidden repositioning is refused. Do not mark an untested profile true.
-6. Set the USB device (`serial_port`, e.g. `/dev/cu.usbmodem...`), baud, and
+6. Connect auto-detects one attached UNO Q when `serial_port` is unset and
+   displays a persistent connecting/success/error message. Multiple devices require
+   an explicit selection in configuration. For real execution, set the calibrated
+   USB device (`serial_port`, e.g. `/dev/cu.usbmodem...`), baud, and
    `enabled:true`. Re-export after configuration changes, then reload the bundle.
    Close external `servo_keys.py` and Serial Monitor. Connect UNO Q → Arm Hardware
    Once → **Start Hardware Playback**. Arming is consumed by Start. No clicks are
@@ -79,7 +82,9 @@ client shares this service and cannot interrupt playback with a sweep:
 ```
 
 Raw firmware L/R/S/C keyboard control is preserved when calibration is enabled.
-Service commands use `@<unique-id> <L|R|S|C|?>\n`; no G/P is transmitted. Firmware
+Discovery uses digits-only IDs so legacy character-at-a-time firmware cannot
+interpret a `c` inside an ID as Centre. The status query itself never requests a
+sweep. Service commands use `@<unique-id> <L|R|S|C|?>\n`; no G/P is transmitted. Firmware
 replies with correlated `STATUS`, `DONE` or `ERROR`. STATUS includes angle, tilt
 (or NA), calibration ID, limits and verified-completion state. Stale DONE replies
 cannot complete a new action. STOP bypasses the running request and cancels future

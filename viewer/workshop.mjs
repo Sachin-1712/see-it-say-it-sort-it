@@ -664,6 +664,7 @@ function renderSwarmFrame(f) {
   $("physical-dry").disabled=!connected()||!saved||hw.running;
   $("physical-step").disabled=!connected()||!saved||!hw.armed||hw.running;
   $("physical-connect").disabled=!connected()||hw.running;
+  $("physical-connect").textContent=hw.status==="connecting"?"Connecting…":"Connect UNO Q";
   $("physical-arm").disabled=!connected()||!saved||hw.running||!hw.connection.startsWith('Connected');
   $("playback-title").textContent=saved?'SAVED PLAN LOADED · PREVIOUSLY VALIDATED PLAN':'Load a saved plan for playback';
   $("playback-connection").textContent=`${hw.connection} · ${hw.armed?'ARMED FOR ONE START':'NOT ARMED'} · ${hw.mode==='hardware'?'PHYSICAL PLAYBACK':'DRY RUN / IDLE'}`;
@@ -751,7 +752,11 @@ $("swarm-demo").onclick=()=>send({cmd:"load_demo"});
 $("swarm-stop").onclick=()=>send({cmd:'stop_live'});
 $("swarm-saved").onclick=()=>send({cmd:'load_saved'});
 $("swarm-replay").onclick=()=>send({cmd:'replay_plan'});
-$("physical-connect").onclick=()=>send({cmd:'hardware_connect'});
+$("physical-connect").onclick=()=>{
+  $("physical-connect").disabled=true;$("physical-connect").textContent='Connecting…';
+  $("physical-status").textContent='Connecting to UNO Q. Close Serial Monitor and external servo_keys.py first.';
+  send({cmd:'hardware_connect'});
+};
 $("physical-arm").onclick=()=>send({cmd:'hardware_arm',armed:true});
 $("physical-step").onclick=()=>send({cmd:'hardware_start',mode:'hardware'});
 $("physical-dry").onclick=()=>send({cmd:'hardware_start',mode:'dry_run'});

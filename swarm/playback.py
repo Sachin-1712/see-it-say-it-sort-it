@@ -43,11 +43,17 @@ class Playback:
 
     async def connect(self):
         self.require_idle();self.armed=False;self.control_busy=True;self.cancel.clear()
+        self.state.update(status='connecting',message='Connecting to UNO Q; checking port ownership and firmware. No sweep requested.')
         try:
             await asyncio.to_thread(self.bridge.connect,self.config_reader())
-            await self.status()
-        except Exception:
-            self.bridge.close();raise
+            try:await self.status()
+            except TimeoutError as error:
+                raise ValueError('UNO Q did not answer the status probe. Upload firmware/gekko_playback/gekko_playback.ino, close Serial Monitor, then reconnect. No sweep was requested.') from error
+            self.state.update(status='connected',message='UNO Q connected; movement remains disabled until calibration and arming.')
+        except Exception as error:
+            self.bridge.close()
+            self.state.update(status='failed',message=str(error))
+            raise
         finally:self.control_busy=False
 
     async def status(self,guard=lambda:None):
@@ -71,6 +77,7 @@ class Playback:
         tolerance=tilt.get('tolerance_deg')
         if not isinstance(tolerance,(int,float)) or not math.isfinite(tolerance) or not 0<tolerance<=1:
             raise ValueError('Tilt tolerance must be calibrated and at most 1 degree')
+        if not config.get('serial_port'):raise ValueError('Set the calibrated serial_port explicitly before physical playback')
         profiles=[]
         for action in bundle['plan']['actions']:
             prepared=prepare(action,config)
