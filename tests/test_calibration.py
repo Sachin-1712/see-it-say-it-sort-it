@@ -46,3 +46,25 @@ def test_supervised_tests_require_confirmed_range_and_matching_firmware():
             assert not any(c in 'LRC' for c,_ in fw.events)
         finally:p.bridge.close();fw.close()
     asyncio.run(run())
+
+
+def test_device_arming_does_not_claim_manual_tilt_is_ready_for_automatic_playback():
+    async def run():
+        fw,cfg,p=setup();fw.completion='VERIFIED'
+        cfg.update(enabled=True,calibration_verified=True,completion_verified=True,acknowledgement_verified=True)
+        cfg['tilt_verification']={'mode':'none','verified':False}
+        # This test concerns device arming, not simulation evidence generation.
+        # Reuse validation only as a supplied precondition; no physical success is fabricated.
+        import swarm.playback as module
+        original=module.check_plan
+        module.check_plan=lambda *args:None
+        p.swarm.task={}
+        p.bundle=lambda:{'plan':{}}
+        try:
+            await p.connect();await p.arm()
+            assert p.armed and not p.snapshot()['automatic_ready']
+            assert 'tilt' in p.snapshot()['automatic_reason']
+            assert not any(c in 'LRC' for c,_ in fw.events)
+            with pytest.raises(ValueError,match='tilt'):await p.start(dry_run=False)
+        finally:module.check_plan=original;p.bridge.close();fw.close()
+    asyncio.run(run())

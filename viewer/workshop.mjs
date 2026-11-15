@@ -664,13 +664,15 @@ function renderSwarmFrame(f) {
   const dry=dryRunAvailability(f,connected());
   $("physical-dry").disabled=!dry.enabled;$("physical-dry").title=dry.reason;
   $("dry-run-status").textContent=dry.reason;
-  $("physical-step").disabled=!connected()||!saved||!hw.armed||hw.running;
+  $("physical-step").disabled=!connected()||!saved||!hw.armed||!hw.automatic_ready||hw.running;
+  $("physical-step").title=hw.automatic_reason??"Automatic playback requires verified tilt and action profiles";
+  $("automatic-status").textContent=hw.armed?`Device armed. Automatic playback: ${hw.automatic_reason}`:"";
   $("physical-connect").disabled=!connected()||hw.running;
   $("physical-connect").textContent=hw.status==="connecting"?"Connecting…":"Connect UNO Q";
   $("calibration-arm").disabled=!connected()||hw.running||!hw.connection.startsWith('Connected')||!$("calibration-present").checked;
   for(const id of ['calibration-center','calibration-left','calibration-right'])$(id).disabled=!connected()||hw.running||!hw.calibration_armed;
   $("physical-arm").disabled=!connected()||!saved||hw.running||!hw.connection.startsWith('Connected');
-  $("physical-arm").textContent=hw.armed?'Hardware armed for one Start':hw.status==='failed'?'Arm Hardware Once · BLOCKED':'Arm Hardware Once';
+  $("physical-arm").textContent=hw.armed?'Device armed for one Start':hw.status==='failed'?'Arm Hardware Once · BLOCKED':'Arm Hardware Once';
   $("physical-arm").title=hw.status==='failed'?hw.message:'Check measured hardware calibration and arm for one playback';
   $("physical-status").dataset.error=String(hw.status==='failed');
   $("playback-title").textContent=saved?'SAVED PLAN LOADED · PREVIOUSLY VALIDATED PLAN':'Load a saved plan for playback';

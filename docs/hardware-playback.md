@@ -29,8 +29,7 @@ does not verify tilt or servo completion.
 
 ## Real hardware prerequisites
 
-Defaults stay disabled. No physical UNO Q was commanded or flashed during this
-implementation. The supplied sketch compiled for `arduino:zephyr:unoq` with the
+The current rig has now been flashed and its endpoint tests observed by the operator; see the confirmation record below. Movement still requires explicit arming. The supplied sketch compiled for `arduino:zephyr:unoq` with the
 locally installed RouterBridge 0.4.4 and HardwareServo 0.0.1 libraries.
 
 1. Measure real travel and direction with servo power readily disconnectable.
@@ -158,3 +157,19 @@ arduino-cli upload --fqbn arduino:zephyr:unoq \
   --port /dev/cu.usbmodem42325750942 \
   --build-path /tmp/gekko-operator-calibration-build firmware/gekko_playback
 ```
+
+
+## Endpoint calibration confirmed for this UNO Q
+
+On 2026-11-15 the operator reported that C centres and stops, and both L/R endpoint
+sweeps fully stop before their command-ramp acknowledgement. The recorded range is
+0–180°, L routes toward RED/LEFT, and R toward BLUE/RIGHT. This rig's firmware and
+configuration use calibration ID `gekko-unoq-20261115-endpoints-v1`.
+
+Device arming now checks that endpoint calibration, limits, completion evidence,
+USB configuration and firmware ID match. It does not claim tilt or three-box
+sorting is verified. Automatic-plan readiness is a separate check, with its reason
+shown beside Start Hardware Playback. Manual tilt without a sensor still prevents
+unattended playback; no physical three-box action profiles have been certified.
+The firmware flags in this checkout describe this specific tested rig, not a
+factory calibration suitable for another servo.

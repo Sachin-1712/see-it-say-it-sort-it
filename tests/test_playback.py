@@ -128,7 +128,8 @@ def test_timed_dry_run_uses_saved_order_and_full_three_second_gaps(validated):
 
 def test_unverified_hardware_cannot_arm_or_start(validated):
     async def run():
-        cfg=configuration();p=controller_from(validated,cfg,SerialBridge())
+        cfg=configuration();cfg.update(enabled=False,calibration_verified=False,completion_verified=False,acknowledgement_verified=False)
+        p=controller_from(validated,cfg,SerialBridge())
         with pytest.raises(ValueError,match='disabled'):await p.arm()
         with pytest.raises(ValueError,match='Arm'):await p.start(dry_run=False)
         cfg.update(enabled=True,calibration_verified=True,acknowledgement_verified=True,completion_verified=True,calibration_id='test',completion_verification_id='test')

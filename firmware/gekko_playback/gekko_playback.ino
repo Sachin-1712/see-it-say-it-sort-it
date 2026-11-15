@@ -5,11 +5,12 @@
 #define GEKKO_OPERATOR_CALIBRATION 0
 #endif
 
-// Match these to measured rig calibration before enabling any movement.
-// Merely changing a flag is NOT a measurement. Defaults cannot move the servo.
-const bool MOTION_CALIBRATED = false;
-const bool COMPLETION_TIME_VERIFIED = false;
-const char CALIBRATION_ID[] = "UNVERIFIED";
+// THIS RIG ONLY: operator confirmed 0–180 travel, L toward RED/LEFT, and
+// both endpoint sweeps stopped before acknowledgement on 2026-11-15.
+// This does not verify tilt or complete physical three-box sorting.
+const bool MOTION_CALIBRATED = true;
+const bool COMPLETION_TIME_VERIFIED = true;
+const char CALIBRATION_ID[] = "gekko-unoq-20261115-endpoints-v1";
 const int SERVO_PIN = 9;
 const int CALIBRATED_MIN_PULSE_US = 500, CALIBRATED_MAX_PULSE_US = 2500;
 const int MIN_ANGLE = 0, MAX_ANGLE = 180, CENTER_ANGLE = 90;

@@ -29,7 +29,13 @@ class Playback:
     def running(self):return self.control_busy or bool(self.job and not self.job.done())
 
     def snapshot(self):
-        return dict(self.state,connection=self.bridge.connection,armed=self.armed,calibration_armed=self.calibration_armed,running=self.running,
+        automatic_ready=False
+        reason='Arm the calibrated device first.'
+        if self.armed:
+            try:
+                self.profiles(self.bundle(),self.config_reader());automatic_ready=True;reason='Automatic plan checks passed.'
+            except (ValueError,KeyError,TypeError) as error:reason=str(error)
+        return dict(self.state,automatic_ready=automatic_ready,automatic_reason=reason,connection=self.bridge.connection,armed=self.armed,calibration_armed=self.calibration_armed,running=self.running,
                     remaining_s=max(0,math.ceil(self.state.get('next_at',0)-time.monotonic())),
                     replay_elapsed_s=min(self.state.get('replay_duration_s',0),max(0,time.monotonic()-self.state.get('replay_started_at',time.monotonic()))))
 
@@ -69,11 +75,20 @@ class Playback:
             raise ValueError('Invalid firmware position/tilt')
         return dict(angle=angle,tilt=tilt,calibration=calibration,limits=[low,high],completion=completion)
 
-    def profiles(self, bundle, config):
+    def verify_device_config(self, config):
         if not all(config.get(k) is True for k in ('enabled','calibration_verified','acknowledgement_verified','completion_verified')):
             raise ValueError('Physical execution disabled: verify mapping, servo limits and completion mechanism')
         if not config.get('calibration_id') or not config.get('completion_verification_id'):
             raise ValueError('Missing measured calibration/completion evidence IDs')
+        limits=config.get('servo_limits_deg')
+        if not isinstance(limits,list) or len(limits)!=2 or not all(isinstance(v,(int,float)) and math.isfinite(v) for v in limits) or not 0<=limits[0]<limits[1]<=180:
+            raise ValueError('Missing verified servo travel limits')
+        if set(config.get('direction_commands',{}).values())!={'L','R'}:
+            raise ValueError('Missing measured L/R mapping')
+        if not config.get('serial_port'):raise ValueError('Set the calibrated USB device explicitly')
+
+    def profiles(self, bundle, config):
+        self.verify_device_config(config)
         tilt=config.get('tilt_verification',{})
         if tilt.get('verified') is not True or tilt.get('mode') not in ('sensor','fixed') or not tilt.get('calibration_id'):
             raise ValueError('Manual tilt is unverified: use timed dry-run playback')
@@ -105,7 +120,7 @@ class Playback:
         self.require_idle();self.armed=False;self.cancel.clear();self.control_busy=True
         try:
             b=self.bundle();check_plan(self.swarm.task,b['plan'])
-            config=self.config_reader();self.profiles(b,config)
+            config=self.config_reader();self.verify_device_config(config)
             status=await self.status()
             self.verify_status(status,config)
             if self.cancel.is_set():raise InterruptedError('Arming stopped')
@@ -210,7 +225,7 @@ class Playback:
         try:
             status=await self.status()
             if self.cancel.is_set():raise InterruptedError('Calibration arming stopped')
-            if status['completion']!='CALIBRATION' or status['limits']!=config['servo_limits_deg']:
+            if status['completion'] not in ('CALIBRATION','VERIFIED') or status['limits']!=config['servo_limits_deg']:
                 raise ValueError('Upload the operator-calibration build first; reported test limits must match')
             self.calibration_armed=True
             self.state.update(status='calibration_ready',mode='calibration',message='Supervised servo tests armed. Center first, then choose L or R. These buttons move real hardware; automatic playback remains disabled.')
@@ -232,7 +247,7 @@ class Playback:
             if self.config_reader()!=config:raise ValueError('Calibration configuration changed')
         try:
             status=await self.status(guard)
-            if status['completion']!='CALIBRATION' or status['limits']!=config['servo_limits_deg']:
+            if status['completion'] not in ('CALIBRATION','VERIFIED') or status['limits']!=config['servo_limits_deg']:
                 raise ValueError('Firmware is not in the expected supervised test mode')
             if status['angle'] is None and command!='C':raise ValueError('Press Center first to establish the commanded start position')
             self.state.update(status='calibration_moving',mode='calibration',command=command,acknowledged=False,message=f'REAL SERVO TEST: {command} toward {end}°. Waiting for firmware ramp acknowledgement; watch the physical servo.')
