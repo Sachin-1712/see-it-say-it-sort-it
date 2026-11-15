@@ -64,30 +64,37 @@ test("fitted GLB parts match the config sizes, with the can lying along y and th
   sizeIs(root.getObjectByName("metal_can"), [2 * can.radiusMm, can.heightMm, 2 * can.radiusMm]);   // axis along y
   sizeIs(root.getObjectByName("servo_case"), [23, 12, 23]);
   sizeIs(root.getObjectByName("wooden_stick"), [stick.lengthMm, stick.widthMm, stick.thicknessMm]); // flat, along +x at servo 0
-  // Rests on its rims; the case sits on the can's top line near the front end; shaft 2 mm above the case.
+  // Rests on its rims; the case sits on a riser on the can's top line near the front end; shaft 2 mm above the case.
   near(Math.min(tableBox(root.getObjectByName("bottom_rim")).min.z, tableBox(root.getObjectByName("top_rim")).min.z), 0, 1e-4);
   const caseBox = tableBox(root.getObjectByName("servo_case")), canBox = tableBox(root.getObjectByName("metal_can"));
-  near(caseBox.min.z, canBox.max.z, 1e-4);
+  near(tableBox(root.getObjectByName("servo_mount_bracket")).min.z, canBox.max.z, 1e-4);
+  near(caseBox.min.z, canBox.max.z + servo.riserMm, 1e-4);
+  // At tilt 0 the stick's underside is 10 mm above a 3-box stack.
+  near(tableBox(root.getObjectByName("wooden_stick")).min.z, 3 * rig.parcels[0].height + 10, 1e-4);
   assert.ok(caseBox.min.y >= canBox.min.y && caseBox.min.y - canBox.min.y < 10, "servo is near the can's front end");
   const shaft = fromThree(root.getObjectByName("servo_output").getWorldPosition(new THREE.Vector3()).toArray());
   near(shaft.z, caseBox.max.z + 2, 1e-4); assert.deepEqual(servo.axisZup, [0, 0, 1]);
 });
 
-test("servo 0/90/180 point right/forward/left; positive tilt about the bottom-back edge lowers the tip", async () => {
+test("servo 0/90/180 point right/forward/left; positive tilt about the front-bottom edge lifts the back and lowers the tip", async () => {
   const { root, joints, metadata } = await fitted("sweeper"), stick = root.getObjectByName("wooden_stick");
-  assert.deepEqual(metadata.joints.tilt.limitsDeg, [-20, 35]); assert.deepEqual(metadata.joints.servo.limitsDeg, [0, 180]);
+  assert.deepEqual(metadata.joints.tilt.limitsDeg, [0, 35]); assert.deepEqual(metadata.joints.servo.limitsDeg, [0, 180]);
   const shaft = () => fromThree(joints.servo.node.getWorldPosition(new THREE.Vector3()).toArray());
   const heading = s => { applyJoint(joints.servo, s); root.updateMatrixWorld(true); const t = tipOf(stick), o = shaft(); return [t.x - o.x, t.y - o.y]; };
   const [rx, ry] = heading(0), [fx, fy] = heading(90), [lx, ly] = heading(180);
   assert.ok(rx > 100 && Math.abs(ry) < 1e-6, "0 deg points right (+x)");
   assert.ok(fy < -100 && Math.abs(fx) < 1e-6, "90 deg points forward (-y)");
   assert.ok(lx < -100 && Math.abs(ly) < 1e-6, "180 deg points left (-x)");
-  const can = root.getObjectByName("metal_can"), edge = new THREE.Vector3(...toThree({ x: 0, y: 57.5, z: 0 }));
-  const local = can.worldToLocal(edge.clone()), before = tipOf(stick).z;
+  const can = root.getObjectByName("metal_can"), front = models.sweeper.assemblyTilt.pivotMm;
+  assert.equal(front[1], -models.sweeper.can.heightMm / 2, "pivot is on the front end"); assert.equal(front[2], 0, "pivot is on the bench");
+  const edge = new THREE.Vector3(...toThree({ x: front[0], y: front[1], z: front[2] }));
+  applyJoint(joints.servo, 90); root.updateMatrixWorld(true);              // stick forward, over the stack
+  const local = can.worldToLocal(edge.clone()), back = can.localToWorld(new THREE.Vector3(0, 0, 0)).clone(), before = tipOf(stick).z;
   applyJoint(joints.tilt, 20); root.updateMatrixWorld(true);
   near(can.localToWorld(local.clone()).distanceTo(edge), 0, 1e-6);
+  assert.ok(fromThree(can.localToWorld(new THREE.Vector3(0, 0, 0)).toArray()).z > fromThree(back.toArray()).z + 10, "positive tilt lifts the back");
   assert.ok(tipOf(stick).z < before - 10, "positive tilt lowers the tip");
-  assert.equal(applyJoint(joints.tilt, -90), -20);
+  assert.equal(applyJoint(joints.tilt, -90), 0);
 });
 
 test("the can sits behind the stack on the centreline, on the bench, 15 mm behind it; boxes rest exactly", async () => {
@@ -101,6 +108,17 @@ test("the can sits behind the stack on the centreline, on the bench, 15 mm behin
   near(can.min.y - bodies[2].max.y, models.workbench.sweeperGapToStackMm);
   near(Math.min(tableBox(sweeper.root.getObjectByName("bottom_rim")).min.z, tableBox(sweeper.root.getObjectByName("top_rim")).min.z), rig.table.height, 1e-4);
   assert.ok(can.max.y <= rig.table.depth + 1e-6, "can stays on the bench");
+  // Zero penetration: over the whole tilt range no vertex of the can, its rims or the servo goes below the bench top.
+  const { root, joints } = sweeper, v = new THREE.Vector3();
+  for (let tilt = 0; tilt <= 35; tilt += 0.5) {
+    applyJoint(joints.tilt, tilt); root.updateMatrixWorld(true);
+    for (const name of ["metal_can", "bottom_rim", "top_rim", "servo_case", "servo_mount_bracket"]) {
+      const mesh = root.getObjectByName(name), pos = mesh.geometry.attributes.position;
+      for (let i = 0; i < pos.count; i++) assert.ok(fromThree(v.fromBufferAttribute(pos, i).applyMatrix4(mesh.matrixWorld).toArray()).z >= rig.table.height - 1e-6,
+        `${name} goes below the bench top at tilt ${tilt}`);
+    }
+  }
+  applyJoint(joints.tilt, 0); root.updateMatrixWorld(true);
   for (const [side, bag] of Object.entries(rig.bags)) {
     const inner = side === "left" ? bag.x + bag.width / 2 : bag.x - bag.width / 2;
     near(inner, side === "left" ? 0 : rig.table.width);                     // bins just below the bench edges
@@ -120,74 +138,77 @@ test("manifest collision primitives and joints match config", async () => {
     assert.deepEqual(manifest.models.sweeper.joints[joint][field], metadata.joints[joint][field]);
 });
 
-// Kinematic check only: the box is assumed to slide straight sideways at its own y and
-// height. Rotation, friction and toppling are for the physics simulation.
-test("sideways sort: the stick contacts the top box's side face and carries it past both bench edges", async () => {
+// Kinematic check only: the pushed box is assumed to slide straight sideways at its own y
+// and height. Rotation, friction and toppling are for the physics simulation.
+// Zero penetration: no stick sample (2 mm along the stick, both faces and edges) may be
+// below the bench top or more than 1 mm inside any box other than the one being pushed;
+// first contact must also be outside the pushed box. "Contact" means within 1 mm of its face.
+async function sweepReport() {
   const { sweeper, boxes } = await buildScene();
   const { root, joints } = sweeper, stick = root.getObjectByName("wooden_stick");
-  const [bottom, middle, top] = boxes.map(box => tableBox(box.root.getObjectByName("parcel_body")));
+  const bodies = boxes.map(box => tableBox(box.root.getObjectByName("parcel_body")));
   stick.geometry.computeBoundingBox();
   const g = stick.geometry.boundingBox, samples = [];
   for (let x = g.min.x; x <= g.max.x + 1e-9; x += 0.002) for (const z of [g.min.z, 0, g.max.z]) for (const y of [g.min.y, g.max.y]) samples.push(new THREE.Vector3(x, y, z));
   const W = rig.table.width, tol = 1;
-  const inBand = p => p.y >= top.min.y && p.y <= top.max.y && p.z >= top.min.z && p.z <= top.max.z;
   const strictlyIn = (p, b) => p.x > b.min.x + tol && p.x < b.max.x - tol && p.y > b.min.y + tol && p.y < b.max.y - tol && p.z > b.min.z + tol && p.z < b.max.z - tol;
-  const sides = { left: { face: top.max.x, past: p => -p.x }, right: { face: top.min.x, past: p => p.x - W } };
-  const perTilt = [];
   const [tMin, tMax] = models.sweeper.assemblyTilt.limitsDeg, [sMin, sMax] = models.sweeper.servo.limitsDeg;
-  for (let tilt = tMin; tilt <= tMax; tilt += 0.5) {
-    const row = { tilt, left: { contact: null, margin: -Infinity, carry: null, xs: [] }, right: { contact: null, margin: -Infinity, carry: null, xs: [] } };
-    for (let servo = sMin; servo <= sMax; servo += 0.5) {
-      applyJoint(joints.tilt, tilt); applyJoint(joints.servo, servo); root.updateMatrixWorld(true);
-      const pts = samples.map(s => fromThree(s.clone().applyMatrix4(stick.matrixWorld).toArray()));
-      if (pts.some(p => strictlyIn(p, middle) || strictlyIn(p, bottom))) continue;   // never through the boxes below
-      const insideTop = pts.some(p => strictlyIn(p, top));
+  const poses = [];
+  for (let tilt = tMin; tilt <= tMax; tilt += 0.5) for (let servo = sMin; servo <= sMax; servo += 0.5) {
+    applyJoint(joints.tilt, tilt); applyJoint(joints.servo, servo); root.updateMatrixWorld(true);
+    poses.push({ tilt, servo, pts: samples.map(s => fromThree(s.clone().applyMatrix4(stick.matrixWorld).toArray())) });
+  }
+  const names = ["bottom", "middle", "top"], report = {};
+  for (let k = 2; k >= 0; k--) {
+    const target = bodies[k], others = bodies.filter((_, i) => i !== k);
+    const inBand = p => p.y >= target.min.y && p.y <= target.max.y && p.z >= target.min.z && p.z <= target.max.z;
+    const sides = { left: { face: target.max.x, past: p => -p.x }, right: { face: target.min.x, past: p => p.x - W } };
+    const rows = new Map();
+    let alignTilt = null, alignBlockedBy = null;
+    for (const { tilt, servo, pts } of poses) {
+      const touchesFace = pts.some(p => inBand(p) && Math.abs(p.x - sides.left.face) <= tol);
+      const blocked = pts.some(p => p.z < rig.table.height - 1e-9) ? "the bench" :
+        others.map((b, i) => pts.some(p => strictlyIn(p, b)) ? names[bodies.indexOf(b)] + " box" : null).find(Boolean);
+      if (touchesFace && alignTilt === null) { alignTilt = tilt; alignBlockedBy = blocked ?? (pts.some(p => strictlyIn(p, target)) ? `${names[k]} box itself` : null); }
+      if (blocked) continue;
+      if (!rows.has(tilt)) rows.set(tilt, { left: { contact: null, margin: -Infinity, carry: null, xs: [] }, right: { contact: null, margin: -Infinity, carry: null, xs: [] } });
+      const row = rows.get(tilt), insideTarget = pts.some(p => strictlyIn(p, target));
       for (const [name, side] of Object.entries(sides)) {
         const r = row[name];
-        if (!insideTop && r.contact === null && pts.some(p => inBand(p) && Math.abs(p.x - side.face) <= tol)) r.contact = servo;
+        if (!insideTarget && r.contact === null && pts.some(p => inBand(p) && Math.abs(p.x - side.face) <= tol)) r.contact = servo;
         for (const p of pts) if (inBand(p)) { r.xs.push(p.x); const past = side.past(p); if (past > r.margin) { r.margin = past; r.carry = servo; } }
       }
     }
-    perTilt.push(row);
+    const gapOf = (r, name) => {
+      const xs = r.xs.sort((a, b) => a - b), from = name === "left" ? -r.margin : sides[name].face, to = name === "left" ? sides[name].face : W + r.margin;
+      let gap = 0; const span = xs.filter(x => x >= from - 1e-6 && x <= to + 1e-6);
+      for (let i = 1; i < span.length; i++) gap = Math.max(gap, span[i] - span[i - 1]);
+      return gap;
+    };
+    const working = [...rows.entries()].filter(([, row]) => ["left", "right"].every(n => row[n].contact !== null && row[n].margin > 0 && gapOf(row[n], n) <= 3));
+    const best = working.sort((a, b) => Math.min(b[1].left.margin, b[1].right.margin) - Math.min(a[1].left.margin, a[1].right.margin))[0];
+    report[names[k]] = { alignTilt, alignBlockedBy, workingTilts: working.map(([t]) => t).sort((a, b) => a - b),
+      best: best && { tilt: best[0], left: best[1].left, right: best[1].right } };
   }
-  const report = {};
-  for (const name of ["left", "right"]) {
-    const best = perTilt.filter(row => row[name].contact !== null).sort((a, b) => b[name].margin - a[name].margin)[0];
-    assert.ok(best, `no tilt lets the stick touch the top box's ${name === "left" ? "right" : "left"} face`);
-    const r = best[name], xs = r.xs.sort((a, b) => a - b);
-    // Continuity: every face position from the start to past the edge is reachable at this tilt.
-    const from = name === "left" ? -r.margin : sides[name].face, to = name === "left" ? sides[name].face : W + r.margin;
-    let gap = 0; const span = xs.filter(x => x >= from - 1e-6 && x <= to + 1e-6);
-    for (let i = 1; i < span.length; i++) gap = Math.max(gap, span[i] - span[i - 1]);
-    report[name] = { tilt: best.tilt, contactServo: r.contact, carryServo: r.carry, margin: r.margin, largestGap: gap };
-  }
-  // How far the can goes below the bench top at the sweep tilt (it pivots on its bottom-back edge).
-  applyJoint(joints.tilt, report.left.tilt); applyJoint(joints.servo, 90); root.updateMatrixWorld(true);
-  let lowest = Infinity; const v = new THREE.Vector3();
-  for (const name of ["metal_can", "bottom_rim", "top_rim"]) {
-    const mesh = root.getObjectByName(name), pos = mesh.geometry.attributes.position;
-    for (let i = 0; i < pos.count; i++) lowest = Math.min(lowest, fromThree(v.fromBufferAttribute(pos, i).applyMatrix4(mesh.matrixWorld).toArray()).z);
-  }
-  report.canBelowBenchMm = rig.table.height - lowest;
-  for (const name of ["left", "right"]) {
+  return report;
+}
+
+test("sideways sort per box: tilt to line up, servo angles into each bag, margin past the bench edge", async () => {
+  const report = await sweepReport();
+  for (const name of ["top", "middle", "bottom"]) {
     const r = report[name];
-    console.log(`SWEEP ${name.toUpperCase()} (${name === "left" ? "red" : "blue"}): tilt ${r.tilt}°, first contact on the top box's ${name === "left" ? "right" : "left"} face at servo ${r.contactServo}°, ` +
-      `contact carried ${r.margin.toFixed(1)} mm past the ${name} bench edge at servo ${r.carryServo}° (largest reach gap ${r.largestGap.toFixed(1)} mm)`);
-  }
-  console.log(`SWEEP CAN: at tilt ${report.left.tilt}° the can's lowest point is ${report.canBelowBenchMm.toFixed(1)} mm below the bench top`);
-  const works = perTilt.filter(row => ["left", "right"].every(n => row[n].contact !== null && row[n].margin > 0));
-  if (works.length) {
-    const t = works[0].tilt; applyJoint(joints.tilt, t); applyJoint(joints.servo, 90); root.updateMatrixWorld(true);
-    let low = Infinity;
-    for (const name of ["metal_can", "bottom_rim", "top_rim"]) {
-      const mesh = root.getObjectByName(name), pos = mesh.geometry.attributes.position;
-      for (let i = 0; i < pos.count; i++) low = Math.min(low, fromThree(v.fromBufferAttribute(pos, i).applyMatrix4(mesh.matrixWorld).toArray()).z);
+    if (r.best) {
+      const t = r.workingTilts;
+      console.log(`SWEEP ${name.toUpperCase()}: works for tilt ${t[0]}..${t.at(-1)}°; at ${r.best.tilt}°: ` +
+        `red -> left bag: contact on the right face at servo ${r.best.left.contact}°, sweep to ${r.best.left.carry}°, ${r.best.left.margin.toFixed(1)} mm past the left edge; ` +
+        `blue -> right bag: contact on the left face at servo ${r.best.right.contact}°, sweep to ${r.best.right.carry}°, ${r.best.right.margin.toFixed(1)} mm past the right edge`);
+    } else {
+      console.log(`SWEEP ${name.toUpperCase()}: NOT REACHABLE without penetration. ` +
+        (r.alignTilt === null ? "No tilt within limits brings the stick to this box's side face at all." :
+          `The stick first reaches its side face at tilt ${r.alignTilt}°, but every such pose passes through ${r.alignBlockedBy ?? "an obstacle"}.`));
     }
-    console.log(`SWEEP RANGE: both sides work at tilt ${works.map(r => r.tilt).join(", ")}°; at the smallest, ${t}°, margins are ` +
-      `${works[0].left.margin.toFixed(1)} / ${works[0].right.margin.toFixed(1)} mm and the can goes ${(rig.table.height - low).toFixed(1)} mm below the bench top`);
   }
-  for (const name of ["left", "right"]) {
-    assert.ok(report[name].margin > 0, `${name}: contact point stops ${(-report[name].margin).toFixed(1)} mm short of the bench edge`);
-    assert.ok(report[name].largestGap <= 3, `${name}: sweep has a ${report[name].largestGap.toFixed(1)} mm gap in reach`);
-  }
+  // The top box must stay sortable both ways; middle and bottom are reported as found.
+  assert.ok(report.top.best, "the top box can no longer be swept into both bags");
+  assert.ok(report.top.best.left.margin > 0 && report.top.best.right.margin > 0);
 });

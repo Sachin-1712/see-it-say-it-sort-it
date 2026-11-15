@@ -243,24 +243,30 @@ x × y × z because it stands on its 10 mm edge with 3 mm along the shaft.
 
 ## Lying-can sweeper and the sideways sort
 
-The can lies on its side along y, behind the stack on the bench centreline, its front
-end 15 mm behind the stack (`sweeperGapToStackMm`). It rests on its rolled rims. The
-servo sits on top near the front end with its shaft straight up; servo 0° points the
-stick right (+x), 90° forward over the stack, 180° left. Manual tilt turns the whole
-assembly about an x axis through the can's bottom-back edge; positive tilt lowers the
-tip (limits -20° to 35°). The GLB was baked upright with a horizontal shaft:
-`model-fit.mjs` turns the can frame, re-parents `servo_mount` to `assembly_tilt` and
-sets the shaft vertical at load time. Blender has not been rerun.
+The can (diameter 50, length 90, placeholder) lies on its side along y, behind the stack
+on the bench centreline, its front end 15 mm behind the stack, resting on its rims. The
+servo sits on a 6.4 mm riser on top of the can near its front end, shaft straight up, so
+at tilt 0 the stick's underside is 10 mm above a 3-box stack. Servo 0° points the stick
+right (+x), 90° forward over the stack, 180° left. Manual tilt turns the assembly about
+an x axis through the can's front-bottom edge: positive tilt lifts the back of the can
+and lowers the stick tip. The limits are 0° to 35°; negative tilt would push the back
+into the bench. The GLB was baked upright with a horizontal shaft; `model-fit.mjs` turns
+the can, rescales its rims and ribs, turns the bracket into the riser, re-parents
+`servo_mount` to `assembly_tilt` and sets the shaft vertical at load time.
 
-Reach (kinematic, `tests/fit.test.mjs`): with a 420 mm bench the 120 mm stick left the
-contact point about 95 mm short of each edge. Narrowing the bench to its 250 mm minimum
-left it 10 mm short; changing the gap did not help (a larger gap pushes the can off the
-back). The stick is lengthened to 140 mm (135 mm is the bare minimum). Both sides then
-work for tilts 7° to 13.5°; at 13.5° the stick first touches the top box's side face at
-servo 0° (red) or 180° (blue) and carries the contact point 10 mm past the bench edge.
-This assumes the box slides straight sideways; rotation and friction are for the
-physics simulation.
+Reach (kinematic, `tests/fit.test.mjs`, zero penetration of the bench and of any box
+other than the one pushed; contact within 1 mm):
 
-Known physical problem: with the pivot on the bottom-back edge, lowering the tip drives
-the can's front end into the bench (14 mm at 7°, 27 mm at 13.5°). A real rig needs the
-can's back end raised, or the pivot moved to the front-bottom edge.
+- Top box: works for tilt 11.5° to 32°. At 31.5°, red goes left with first contact on
+  the right face at servo 0° and the sweep to 176°; blue goes right with contact at 179°
+  and the sweep to 4°. The contact point passes each bench edge by 10.0 mm.
+- Middle box: not reachable. The stick first reaches its side face at tilt 29.5°, but
+  tipping about the front edge also throws the servo forward over the stack, so every
+  such pose cuts through the top box.
+- Bottom box: not reachable. No tilt within limits brings the stick to its side face.
+
+The stick's swing plane stays 86.5 mm from the pivot line, so at the stack's back face,
+15 mm in front of the pivot, it can never come lower than about 85 mm above the bench.
+Analytic trials found the middle box reachable only with the stack moved forward into
+the scan zone, a 95 mm gap and a 160 mm stick, and the bottom box in none of them.
+The kinematic check assumes the pushed box slides straight sideways.

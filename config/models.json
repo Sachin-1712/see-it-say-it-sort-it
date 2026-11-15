@@ -16,13 +16,13 @@
     "name": "Cylindrical Sweeper",
     "note": "Every value is an UNMEASURED PLACEHOLDER. Sweeper frame: origin on the bench top directly under the can's centre, x right, y away from the front, z up. The can lies on its side with its axis along y; its open/top end faces the boxes (-y).",
     "can": {
-      "radiusMm": 33,
-      "heightMm": 115,
-      "massG": 55,
+      "radiusMm": 25,
+      "heightMm": 90,
+      "massG": 40,
       "baseCentreMm": [
         0,
-        57.5,
-        33.6
+        45,
+        25.6
       ],
       "axisZup": [
         0,
@@ -30,12 +30,12 @@
         0
       ],
       "measured": false,
-      "_note": "diameter 66, length 115 along y. It rests on its rolled rims (radius 33.6), so the axis is 33.6 above the bench. baseCentreMm is the centre of the back (closed) end; axisZup points from the back end to the front end, towards the boxes."
+      "_note": "diameter 50, length 90 along y. It rests on its rolled rims (radius 25.6), so the axis is 25.6 above the bench. baseCentreMm is the centre of the back (closed) end; axisZup points from the back end to the front end, towards the boxes."
     },
     "assemblyTilt": {
       "pivotMm": [
         0,
-        57.5,
+        -45,
         0
       ],
       "axisZup": [
@@ -44,17 +44,17 @@
         0
       ],
       "limitsDeg": [
-        -20,
+        0,
         35
       ],
       "measured": false,
-      "_note": "x axis through the can's bottom-back edge. Positive tilt lowers the stick tip (and the can's front end)."
+      "_note": "x axis through the can's front-bottom edge (the end facing the boxes, where its rim touches the bench). Positive tilt lifts the back of the can and lowers the stick tip. The lower limit is 0: any negative tilt would push the back of the can into the bench."
     },
     "servo": {
       "pivotMm": [
         0,
-        -48.5,
-        91.6
+        -36,
+        82
       ],
       "axisZup": [
         0,
@@ -67,6 +67,7 @@
         12,
         23
       ],
+      "riserMm": 6.4,
       "restDeg": 0,
       "direction": -1,
       "limitsDeg": [
@@ -75,7 +76,7 @@
       ],
       "massG": 9,
       "measured": false,
-      "_note": "On top of the lying can near its front end, shaft straight up. Case 23 wide (x) x 12 deep (y) x 23 tall along the shaft (caseDimensionsLocalMm is servo-local x, y, shaft); its centre is 9 mm behind the can's front end, it sits on the can's top line (z 66.6) and the shaft centre is 2 mm above the case. Servo 0 = stick to the right (+x), 90 = forward (-y), 180 = left (-x): direction -1 turns clockwise seen from above."
+      "_note": "On top of the lying can near its front end, shaft straight up. The shaft centre is at z 82 so the stick's underside (shaft + 3 mm horn) is 85 above the bench: 10 mm above a 3-box stack (75) at tilt 0. The 23 mm case sits on a 6.4 mm riser on the can's top line (z 50.6): 50.6 + 6.4 + 23 + 2 = 82. Case centre 9 mm behind the can's front end. Servo 0 = stick to the right (+x), 90 = forward (-y), 180 = left (-x)."
     },
     "stick": {
       "lengthMm": 140,

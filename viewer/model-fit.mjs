@@ -67,9 +67,14 @@ function fitSweeper(THREE, instance, { models }) {
   canFrame.quaternion.setFromUnitVectors(UP, dir(can.axisZup));
   scaleMeshTo(node(root, "metal_can"), [2 * can.radiusMm, h, 2 * can.radiusMm]);
   node(root, "metal_can").position.set(0, h / 2 * MM, 0);
+  // Rims and ribs keep the generator's lip over the can radius (0.6 and 0.15 mm).
+  for (const name of ["bottom_rim", "top_rim"]) scaleMeshTo(node(root, name), [2 * (can.radiusMm + 0.6), 2, 2 * (can.radiusMm + 0.6)]);
   node(root, "bottom_rim").position.set(0, 1 * MM, 0);
   node(root, "top_rim").position.set(0, (h - 1) * MM, 0);
-  for (let i = 0; i < 3; i++) node(root, `can_rib_${i}`).position.set(0, h * (0.3 + i * 0.16) * MM, 0);
+  for (let i = 0; i < 3; i++) {
+    scaleMeshTo(node(root, `can_rib_${i}`), [2 * (can.radiusMm + 0.15), 0.7, 2 * (can.radiusMm + 0.15)]);
+    node(root, `can_rib_${i}`).position.set(0, h * (0.3 + i * 0.16) * MM, 0);
+  }
 
   // Servo: re-parented beside the can (not inside its rotated frame), shaft turned to
   // servo.axisZup. Mount-local glTF axes: x, shaft, z.
@@ -82,7 +87,10 @@ function fitSweeper(THREE, instance, { models }) {
   const caseMesh = node(root, "servo_case");
   scaleMeshTo(caseMesh, [cx, cz, cy]);
   caseMesh.position.set(0, -(cz / 2 + 2) * MM, 0);
-  node(root, "servo_mount_bracket").position.set(0, -(cz / 2 + 2) * MM, (cy / 2 + 2) * MM);
+  // The bracket becomes the riser block between the can's top line and the case.
+  const riser = servo.riserMm ?? 0, bracket = node(root, "servo_mount_bracket");
+  bracket.visible = riser > 0;
+  if (riser > 0) { scaleMeshTo(bracket, [cx, riser, cy]); bracket.position.set(0, -(cz + 2 + riser / 2) * MM, 0); }
 
   // Stick: servo-output glTF axes are (length, shaft, width).
   const stickMesh = node(root, "wooden_stick");
@@ -111,6 +119,8 @@ function fitSweeper(THREE, instance, { models }) {
     collision: { shape: "compound", frame: "Z-up millimetres, sweeper frame", parts: [
       { node: "metal_can", shape: "cylinder", radiusMm: can.radiusMm, heightMm: h, centerMm: canCentre, axisZup: can.axisZup },
       { node: "servo_case", shape: "box", sizeMm: [cx, cy, cz], frame: "servo_mount local (shaft = local z)", centerMm: [0, 0, -(cz / 2 + 2)] },
+      ...(servo.riserMm > 0 ? [{ node: "servo_mount_bracket", shape: "box", sizeMm: [cx, cy, servo.riserMm], frame: "servo_mount local (shaft = local z)",
+        centerMm: [0, 0, -(cz + 2 + servo.riserMm / 2)], role: "riser" }] : []),
       { node: "wooden_stick", shape: "box", sizeMm: [stick.lengthMm, stick.widthMm, stick.thicknessMm], frame: "servo_output local",
         centerMm: [stick.lengthMm / 2 - stick.pivotFromEndMm, 0, 3 + stick.thicknessMm / 2] },
     ] },
