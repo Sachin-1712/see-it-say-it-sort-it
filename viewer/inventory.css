@@ -132,3 +132,7 @@
 
 .agent .kill {color:#bfc1c5;border-color:#666}
 .agent .deadlabel {color:#999}
+
+/* Plan summary: heading on its own line, actions in a row below (no wrapped text under buttons). */
+#swarm-plan-details > strong { display: block; margin-bottom: 8px; line-height: 1.35; }
+#swarm-plan-details > button { margin: 0 8px 8px 0; vertical-align: top; }

@@ -549,7 +549,7 @@ function renderOutcomes(f) {
 }
 
 const itemRows = new Map();
-function renderItems(items = []) {
+function renderItems(items = [], frame = lastFrame) {
   const ids = new Set(items.map(i => i.id));
   for (const [id, el] of itemRows) if (!ids.has(id)) { el.remove(); itemRows.delete(id); }
   for (const it of items) {
@@ -558,10 +558,12 @@ function renderItems(items = []) {
       el = document.createElement("div");
       el.className = "item";
       el.innerHTML = `<span class="sw"></span><span class="id"></span><span class="route"></span><span class="chip status"></span>`;
-      el.querySelector(".id").textContent = it.id;
       $("items").appendChild(el);
       itemRows.set(it.id, el);
     }
+    // Swarm IDs are long (world_box_0001); show the object's name and keep the ID as a tooltip.
+    const label = el.querySelector(".id"), name = frame?.task?.snapshot?.objects?.find(o => o.instanceId === it.id)?.name;
+    label.textContent = name ?? it.id; label.title = it.id;
     el.querySelector(".sw").style.background = tagColour(it.color);
     el.querySelector(".sw").title = it.color ?? "";
     const route = el.querySelector(".route");
@@ -607,7 +609,7 @@ function renderSend(f) {
 
 function renderSwarmFrame(f) {
   if(!swarmFrames.accept(f))return;
-  renderTop(f);renderAgents(f.agents);renderItems(f.items);renderSend(f);lastFrame=f;
+  renderTop(f);renderAgents(f.agents);renderItems(f.items, f);renderSend(f);lastFrame=f;
   $("swarm-demo").disabled=$("swarm-plan").disabled=!connected();
   const metrics=f.metrics??{};
   $("swarm-status").textContent=f.task?`${metrics.active??0} real processes · ${metrics.trials??0} MuJoCo trials · ${metrics.plan_trials??0} plan trials · scene ${f.task.scene_version} · ${f.task.task_id} · ${metrics.elapsed_s}s${f.agents.some(a=>a.silenced)?" · PEER NETWORK OFF: local checkpoints":""}${f.failure?` · ${f.failure}`:""}`:"No simulation data · load the three-box demo or plan your workbench.";

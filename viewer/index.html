@@ -104,11 +104,11 @@
   /* items */
   #items { flex: none; }
   #items .heading { margin-bottom: 6px; }
-  .item { height: 40px; display: grid; grid-template-columns: 14px 26px 1fr auto; gap: 10px; align-items: center;
+  .item { height: 40px; display: grid; grid-template-columns: 14px minmax(0, max-content) minmax(0, 1fr) auto; gap: 10px; align-items: center;
           border-top: 1px solid var(--border); }
   .item:nth-child(2) { border-top: none; }
   .item .sw { width: 14px; height: 14px; border-radius: 4px; }
-  .item .id { font-weight: 600; }
+  .item .id { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 14ch; }
   .item .route { color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .item .route b { color: var(--text); font-weight: 500; }
   .status.ready { border-color: var(--accent); color: var(--accent); }
