@@ -136,7 +136,7 @@
   }
 </style>
 <link rel="stylesheet" href="./inventory.css">
-<link rel="stylesheet" href="./demo.css">
+<link rel="stylesheet" href="./demo.css?v=compact-plan-1">
 <script>
   // The import map is written before any module loads, so this choice applies to every import.
   { const base = window.GEKKO_OFFLINE ? "./vendor/three/" : "https://cdn.jsdelivr.net/npm/three@0.170.0/";
@@ -202,16 +202,18 @@
       </div>
       <div class="view" id="view-agents" role="tabpanel" aria-labelledby="tab-agents" hidden><div id="swarm-status" role="status">No simulation data</div>
         <button id="swarm-start-tab" type="button" class="primary" hidden>▶ Start agents on my workbench</button>
-        <label for="swarm-isolate">Show agent</label><select id="swarm-isolate"><option value="">All agents</option></select>
+        <div id="agent-filter"><label class="sr-only" for="swarm-isolate">Show agent</label><select id="swarm-isolate"><option value="">All agents</option></select></div>
         <div class="demo-controls">
           <button id="swarm-stop" type="button">Stop Live Search</button>
           <button id="swarm-saved" type="button">Load Saved Plan</button>
           <button id="swarm-replay" type="button" disabled>Preview</button>
+          <button id="swarm-preview-stop" type="button" hidden>End preview</button>
         </div>
         <div id="recovery-banner" role="status" hidden></div>
         <div id="recovery-timeline" aria-label="Recovery timeline"></div>
         <div id="saved-attribution" role="status" hidden></div>
-        <div id="rows"></div><div id="swarm-activity" aria-label="Agent activity"></div>
+        <div id="rows"></div>
+        <details id="activity-details"><summary>Activity</summary><div id="swarm-activity" aria-label="Agent activity"></div></details>
         <div id="swarm-plan-details"></div>
         <div class="physical-controls" aria-label="Arduino controls">
           <div class="arduino-heading"><strong>Arduino</strong><span id="playback-connection">Disconnected</span></div>
@@ -291,7 +293,7 @@
 </dialog>
 <script type="module" src="./inventory.mjs"></script>
 <script type="module" src="./model-preview.mjs"></script>
-<script type="module" src="./workshop.mjs?v=compact-arduino-1"></script>
+<script type="module" src="./workshop.mjs?v=compact-plan-1"></script>
 <script type="module" src="./sim-preview.mjs"></script>
 </body>
 </html>

@@ -1,4 +1,4 @@
-import {resultLabel, recoveryText} from "./demo-state.mjs?v=timed-replay-1";
+import {recoveryText} from "./demo-state.mjs?v=timed-replay-1";
 import { SwarmFrames } from "./swarm-state.mjs";
 import { SwarmOverlay } from "./swarm-overlay.mjs?v=timed-replay-1";
 import { workbenchState } from "./workbench-state.mjs";
@@ -649,13 +649,19 @@ function renderSwarmFrame(f) {
   }
   for(const a of f.agents??[])agentRows.get(a.id)?.el.classList.toggle('taking-over',a.id===recovery?.successor && a.alive);
   const saved=f.best?.attribution==='previously_validated';
-  $("saved-attribution").hidden=!saved;$("saved-attribution").textContent=saved?`${resultLabel(f.best)} · saved ${f.best.saved_at} · simulated replay only`:'';
+  $("saved-attribution").hidden=!f.best;
+  $("saved-attribution").textContent=f.best?`${saved?'PREVIOUSLY VALIDATED PLAN':'VALIDATED LIVE'} · ${pct(f.best.robust)} · ${Object.keys(f.best.plan.evidence).length} trials`:'';
+  $("saved-attribution").title=saved?`Saved ${f.best.saved_at}. Previously validated in simulation; not this live run.`:'';
+  $("swarm-status").hidden=saved;
+  $("agent-filter").hidden=saved;
+  $("swarm-stop").hidden=!!f.live_search_stopped;
+  $("swarm-preview-stop").hidden=!swarmOverlay.preview;
   $("swarm-stop").disabled=!connected()||!f.task||f.live_search_stopped;
   $("swarm-saved").disabled=!connected()||!f.task||!f.live_search_stopped;
   $("swarm-replay").disabled=!connected()||!f.best;
   const hw=f.hardware_playback??{connection:'Disconnected',message:'Physical execution disabled by default'};
   const firstDemoStep=f.best?.plan?.actions?.[0];
-  $("servo-demo-setup").textContent=firstDemoStep?`Start tilt ${firstDemoStep.tilt_deg}° · saved sequence + extra L · DONE + 3s between commands.`:'Load Saved Plan to enable automatic sending.';
+  $("servo-demo-setup").textContent=firstDemoStep?`Start tilt ${firstDemoStep.tilt_deg}° · 3s between commands`:'Load a saved plan to send.';
   $("servo-demo-start").disabled=!connected()||!saved||hw.running;
   $("servo-demo-start").textContent=hw.running&&hw.mode==='servo_demo'?'Sending…':'Arm & Send to Arduino';
   $("calibration-arm").disabled=!connected()||hw.running||hw.calibration_armed;
@@ -673,18 +679,8 @@ function renderSwarmFrame(f) {
   $("m-attempts").textContent=(metrics.trials??0).toLocaleString();$("m-success").textContent=(metrics.successes??0).toLocaleString();$("m-best").textContent=pct(f.best?.robust);
   const feed=$("swarm-activity"),activity=(f.agents??[]).filter(a=>a.alive&&a.latest).map(a=>({agent:a.id,timestamp:a.latest.timestamp,type:a.latest.role,detail:`${a.latest.action.target} · tilt ${a.latest.action.tilt_deg}° · trial #${a.latest.trial_id.split(":").at(-1)} · score ${a.latest.score}`}));
   feed.replaceChildren(...[...(f.events??[]),...activity].sort((a,b)=>b.timestamp-a.timestamp).slice(0,20).map(event=>Object.assign(document.createElement("div"),{textContent:`${new Date(event.timestamp*1000).toLocaleTimeString()} · ${(event.agent??"swarm").toUpperCase()} · ${event.type.replaceAll("_"," ")}${event.detail?` · ${event.detail}`:""}${event.role?` → ${event.role}`:""}${event.failed_agent?` ${event.failed_agent.toUpperCase()}`:""}${event.checkpoint_id?` · ${event.checkpoint_id} (${event.recovered_trials??"shared"} trials)`:""}`})));
-  const panel=$("swarm-plan-details"),planKey=f.best?`${f.best.plan.id}:${f.best.robust}:${f.best.attribution}`:`none:${f.failure??""}`;
-  if(panel.dataset.planKey!==planKey){panel.dataset.planKey=planKey;panel.replaceChildren();
-  if(f.best?.plan){
-    panel.appendChild(Object.assign(document.createElement("strong"),{textContent:`${resultLabel(f.best)} · ${pct(f.best.robust)} (${Object.keys(f.best.plan.evidence).length} independent trials)`}));
-    const list=document.createElement("ol");
-    for(const step of f.best.plan.actions)list.appendChild(Object.assign(document.createElement("li"),{textContent:`${objectLabel(step.target,f)}: manual tilt ${step.tilt_deg}° → ${step.direction.toUpperCase()} · predicted ${f.task.goals[step.target]} bag. Simulation angles/timing are uncalibrated.`}));
-    const replay=Object.assign(document.createElement("button"),{type:"button",textContent:"Preview"});replay.onclick=()=>send({cmd:"replay_plan"});
-    const back=Object.assign(document.createElement("button"),{type:"button",textContent:"Back to agent trials"});back.onclick=()=>swarmOverlay.stopSequence();
-    panel.append(replay,back);
-    panel.append(list,Object.assign(document.createElement("p"),{textContent:"Stored simulation prediction. Physical playback requires verified calibration and one-time arming; box outcomes are not measured."}));
-  }else panel.textContent=f.failure??"No complete validated plan yet.";
-  }
+  $("swarm-plan-details").hidden=!f.failure;
+  $("swarm-plan-details").textContent=f.failure??'';
   swarmOverlay.visible=$("observer-overlay").checked;
   swarmOverlay.ingest(f);
   swarmOverlay.syncDryRun(f);
@@ -736,6 +732,7 @@ $("swarm-demo").onclick=()=>send({cmd:"load_demo"});
 $("swarm-stop").onclick=()=>send({cmd:'stop_live'});
 $("swarm-saved").onclick=()=>send({cmd:'load_saved'});
 $("swarm-replay").onclick=()=>send({cmd:'replay_plan'});
+$("swarm-preview-stop").onclick=()=>{swarmOverlay.stopSequence();$("swarm-preview-stop").hidden=true;};
 $("calibration-arm").onclick=()=>{
   $("physical-status").textContent='Arming manual control…';
   send({cmd:'hardware_manual_arm',confirmed:true});
@@ -760,7 +757,7 @@ function updateStartAgents(f = lastFrame) {
               !benchReady() ? "Place the sweeper and at least one box first" : "Plan the placed objects with independent MuJoCo agents";
   for (const id of ["swarm-plan", "swarm-start-tab"]) { $(id).disabled = !ready; $(id).title = why; }
   // In the Agents tab, offer it while nothing is running for this workbench.
-  $("swarm-start-tab").hidden = !!(f?.task && !f.live_search_stopped && f.phase !== "failed");
+  $("swarm-start-tab").hidden = f?.best?.attribution==='previously_validated' || !!(f?.task && !f.live_search_stopped && f.phase !== "failed");
 }
 $("swarm-start-tab").onclick = () => $("swarm-plan").click();
 $("swarm-plan").onclick=()=>{
