@@ -82,8 +82,7 @@ def build_scene(snapshot: dict, config_dir="config") -> Scene:
     config = {}
     for name in names:
         path = directory / f"{name}.json"
-        if name != "scoring" or path.exists():
-            config[name] = json.loads(path.read_text())
+        config[name] = json.loads(path.read_text())
     return Scene("", json.dumps(config, allow_nan=False)).with_snapshot(snapshot)
 
 

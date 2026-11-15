@@ -1,0 +1,14 @@
+{
+  "_note": "Scoring thresholds and a priori uncertainty ranges. Floor and bag regions begin at z=0.",
+  "displacement_tolerance_mm": 5,
+  "upright_tolerance_deg": 10,
+  "support_tolerance_mm": 2,
+  "settled_speed_mm_s": 5,
+  "initial_overlap_tolerance_mm": 0.2,
+  "robustness": {
+    "friction_fraction": 0.20,
+    "mass_fraction": 0.15,
+    "position_mm": 3,
+    "tilt_deg": 1
+  }
+}
