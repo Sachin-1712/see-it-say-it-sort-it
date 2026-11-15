@@ -131,3 +131,12 @@ def test_robustness_sequence_deterministic_and_immutable():
     invalid = rollout(scene, {**action, "tilt_deg": -1})
     assert invalid["invalid"] and apply_result(scene, invalid) is scene
     assert scene.snapshot == original
+
+
+def test_eight_processes_isolate_trials():
+    from scripts.sim_parallel_check import parallel_check
+
+    report = parallel_check(runs=2)
+    assert report["processes"] == 8
+    assert report["parallel_rollouts"] == 16
+    assert report["serial_replays"] == 16
