@@ -1,3 +1,4 @@
+#items,#world-tilt-panel {display:none;}
 .demo-controls,.physical-controls {display:flex;flex-wrap:wrap;gap:10px;padding:12px 0;}
 .physical-controls {border-top:1px solid #666;margin-top:16px;}
 .physical-controls p,.physical-controls strong {width:100%;margin:0;}
