@@ -219,12 +219,12 @@
           <p id="playback-step" role="status"></p>
           <p id="playback-tilt"></p>
           <p id="playback-connection" role="status">Hardware disconnected · not armed</p>
+          <p id="physical-status" role="status">Physical execution disabled by default. Timed dry run sends no sweep commands.</p>
           <button id="physical-connect" type="button">Connect UNO Q</button>
           <button id="physical-arm" type="button" disabled>Arm Hardware Once</button>
           <button id="physical-step" type="button" disabled>Start Hardware Playback</button>
           <button id="physical-dry" type="button" disabled>Start Timed Dry Run</button>
           <button id="physical-stop" type="button">STOP</button>
-          <p id="physical-status" role="status">Physical execution disabled by default. Timed dry run sends no sweep commands.</p>
           <p>For an immediate physical stop, disconnect servo power. Close Serial Monitor and external servo_keys.py; keyboard commands must use GEKKO's single serial owner.</p>
           <div hidden><button id="physical-outcome" type="button" disabled></button><button id="physical-failed" type="button" disabled></button></div>
         </div></div>

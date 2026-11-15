@@ -666,6 +666,9 @@ function renderSwarmFrame(f) {
   $("physical-connect").disabled=!connected()||hw.running;
   $("physical-connect").textContent=hw.status==="connecting"?"Connecting…":"Connect UNO Q";
   $("physical-arm").disabled=!connected()||!saved||hw.running||!hw.connection.startsWith('Connected');
+  $("physical-arm").textContent=hw.armed?'Hardware armed for one Start':hw.status==='failed'?'Arm Hardware Once · BLOCKED':'Arm Hardware Once';
+  $("physical-arm").title=hw.status==='failed'?hw.message:'Check measured hardware calibration and arm for one playback';
+  $("physical-status").dataset.error=String(hw.status==='failed');
   $("playback-title").textContent=saved?'SAVED PLAN LOADED · PREVIOUSLY VALIDATED PLAN':'Load a saved plan for playback';
   $("playback-connection").textContent=`${hw.connection} · ${hw.armed?'ARMED FOR ONE START':'NOT ARMED'} · ${hw.mode==='hardware'?'PHYSICAL PLAYBACK':'DRY RUN / IDLE'}`;
   $("playback-step").textContent=hw.step?`Step ${hw.step}/${hw.steps} — ${hw.box??hw.target??'Servo'} → ${(hw.destination??'').toUpperCase()}`:'';
@@ -757,7 +760,11 @@ $("physical-connect").onclick=()=>{
   $("physical-status").textContent='Connecting to UNO Q. Close Serial Monitor and external servo_keys.py first.';
   send({cmd:'hardware_connect'});
 };
-$("physical-arm").onclick=()=>send({cmd:'hardware_arm',armed:true});
+$("physical-arm").onclick=()=>{
+  $("physical-status").textContent='Checking hardware calibration…';
+  $("physical-arm").textContent='Checking calibration…';
+  send({cmd:'hardware_arm',armed:true});
+};
 $("physical-step").onclick=()=>send({cmd:'hardware_start',mode:'hardware'});
 $("physical-dry").onclick=()=>send({cmd:'hardware_start',mode:'dry_run'});
 $("physical-stop").onclick=()=>{send({cmd:'hardware_stop'});$("physical-status").textContent='STOP requested. Disconnect servo power physically for an immediate stop.';};
