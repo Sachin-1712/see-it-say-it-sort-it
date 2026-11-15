@@ -5,7 +5,9 @@ from xml.etree.ElementTree import Element, SubElement, tostring
 import mujoco
 import numpy as np
 
-from .geometry import mount_rotation, shaft_rotation, stick_shape, sweeper_origin, tilt_rotation, unit
+from .geometry import (
+    element_rotation, mount_rotation, shaft_rotation, stick_shape, sweeper_origin, tilt_rotation, unit,
+)
 
 MM = 0.001
 GRAM = 0.001
@@ -32,15 +34,6 @@ def box_friction(item, defaults):
             or any(not isinstance(v, (int, float)) or not np.isfinite(v) or v < 0 for v in value)):
         raise ValueError(f"{item['instanceId']}: friction must be a nonnegative coefficient or triplet")
     return value
-
-
-def element_rotation(item):
-    """Intrinsic yaw/pitch/roll (Rz @ Ry @ Rx), matching tabletop yaw."""
-    roll, pitch, yaw = np.deg2rad([item.get(axis, 0) for axis in ("roll", "pitch", "yaw")]) / 2
-    cr, cp, cy = np.cos([roll, pitch, yaw])
-    sr, sp, sy = np.sin([roll, pitch, yaw])
-    return (cy * cp * cr + sy * sp * sr, cy * cp * sr - sy * sp * cr,
-            cy * sp * cr + sy * cp * sr, sy * cp * cr - cy * sp * sr)
 
 
 def add_sweeper(root, world, item, spec, settings, tilt_deg):
