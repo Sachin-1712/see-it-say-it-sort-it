@@ -1,0 +1,267 @@
+{
+  "schemaVersion": 1,
+  "assetUnits": "metres",
+  "assetAxes": "Y-up: x, z, -y from simulation",
+  "physicalUnits": "millimetres, grams, degrees",
+  "physicalAxes": "Z-up",
+  "models": {
+    "box_1": {
+      "name": "Box 1",
+      "url": "box_1.glb",
+      "type": "box",
+      "colour": "#C65B48",
+      "origin": "bottom-centre",
+      "dimensionsMm": {
+        "width": 50,
+        "depth": 35,
+        "height": 20
+      },
+      "massG": 25,
+      "collision": {
+        "shape": "box",
+        "sizeMm": [
+          50,
+          35,
+          20
+        ],
+        "centerMm": [
+          0,
+          0,
+          10.0
+        ]
+      },
+      "measurementSource": "config/rig.json parcels.p1",
+      "placeholderMeasurements": true,
+      "friction": null,
+      "nodes": {
+        "root": "box_1",
+        "body": "parcel_body"
+      }
+    },
+    "box_2": {
+      "name": "Box 2",
+      "url": "box_2.glb",
+      "type": "box",
+      "colour": "#507CB1",
+      "origin": "bottom-centre",
+      "dimensionsMm": {
+        "width": 45,
+        "depth": 35,
+        "height": 22
+      },
+      "massG": 22,
+      "collision": {
+        "shape": "box",
+        "sizeMm": [
+          45,
+          35,
+          22
+        ],
+        "centerMm": [
+          0,
+          0,
+          11.0
+        ]
+      },
+      "measurementSource": "config/rig.json parcels.p2",
+      "placeholderMeasurements": true,
+      "friction": null,
+      "nodes": {
+        "root": "box_2",
+        "body": "parcel_body"
+      }
+    },
+    "box_3": {
+      "name": "Box 3",
+      "url": "box_3.glb",
+      "type": "box",
+      "colour": "#739461",
+      "origin": "bottom-centre",
+      "dimensionsMm": {
+        "width": 55,
+        "depth": 38,
+        "height": 24
+      },
+      "massG": 28,
+      "collision": {
+        "shape": "box",
+        "sizeMm": [
+          55,
+          38,
+          24
+        ],
+        "centerMm": [
+          0,
+          0,
+          12.0
+        ]
+      },
+      "measurementSource": "config/models.json fallbackDimensionsMm",
+      "placeholderMeasurements": true,
+      "friction": null,
+      "nodes": {
+        "root": "box_3",
+        "body": "parcel_body"
+      }
+    },
+    "sweeper": {
+      "name": "Cylindrical Sweeper",
+      "url": "sweeper.glb",
+      "type": "sweeper",
+      "origin": "can-base-centre",
+      "placeholderMeasurements": true,
+      "measurementSource": "config/models.json sweeper",
+      "massG": 70,
+      "friction": null,
+      "geometry": {
+        "can": {
+          "radiusMm": 33,
+          "heightMm": 110,
+          "massG": 55
+        },
+        "servo": {
+          "pivotMm": [
+            0,
+            -8,
+            122
+          ],
+          "axisZup": [
+            0,
+            1,
+            0
+          ],
+          "mountRollDeg": 0,
+          "caseDimensionsLocalMm": [
+            23,
+            24,
+            12
+          ],
+          "restDeg": 0,
+          "direction": 1,
+          "limitsDeg": [
+            0,
+            180
+          ],
+          "massG": 9
+        },
+        "stick": {
+          "lengthMm": 180,
+          "widthMm": 9,
+          "thicknessMm": 3,
+          "pivotFromEndMm": 8,
+          "massG": 6
+        }
+      },
+      "collision": {
+        "shape": "compound",
+        "frame": "Z-up millimetres",
+        "parts": [
+          {
+            "node": "metal_can",
+            "shape": "cylinder",
+            "radiusMm": 33,
+            "heightMm": 110,
+            "centerMm": [
+              0,
+              0,
+              55.0
+            ],
+            "axisZup": [
+              0,
+              0,
+              1
+            ]
+          },
+          {
+            "node": "servo_case",
+            "shape": "box",
+            "sizeMm": [
+              23,
+              24,
+              12
+            ],
+            "frame": "servo_mount local",
+            "centerMm": [
+              0,
+              0,
+              -8.0
+            ]
+          },
+          {
+            "node": "wooden_stick",
+            "shape": "box",
+            "sizeMm": [
+              180,
+              9,
+              3
+            ],
+            "frame": "servo_output local",
+            "centerMm": [
+              82.0,
+              0,
+              4.5
+            ]
+          }
+        ]
+      },
+      "joints": {
+        "tilt": {
+          "node": "assembly_tilt",
+          "pivotMm": [
+            0,
+            0,
+            0
+          ],
+          "axisZup": [
+            1.0,
+            0.0,
+            0.0
+          ],
+          "axisGltfLocal": [
+            1.0,
+            0.0,
+            -0.0
+          ],
+          "limitsDeg": [
+            -35,
+            35
+          ],
+          "restDeg": 0,
+          "direction": 1
+        },
+        "servo": {
+          "node": "servo_output",
+          "parent": "servo_mount",
+          "pivotMm": [
+            0,
+            -8,
+            122
+          ],
+          "axisZup": [
+            0.0,
+            1.0,
+            0.0
+          ],
+          "axisGltfLocal": [
+            0,
+            1,
+            0
+          ],
+          "limitsDeg": [
+            0,
+            180
+          ],
+          "restDeg": 0,
+          "direction": 1
+        }
+      },
+      "nodes": {
+        "root": "sweeper",
+        "assembly": "assembly_tilt",
+        "mount": "servo_mount",
+        "servoOutput": "servo_output",
+        "stick": "wooden_stick"
+      }
+    }
+  }
+}

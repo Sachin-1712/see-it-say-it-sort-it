@@ -136,6 +136,7 @@
     #send { margin-top: 0; }
   }
 </style>
+<link rel="stylesheet" href="./inventory.css">
 <script type="importmap">
 {
   "imports": {
@@ -163,14 +164,41 @@
 <main id="scene"></main>
 
 <aside id="side">
+  <section class="panel inventory-intro" aria-labelledby="inventory-title">
+    <div class="inventory-heading"><h1 id="inventory-title">Object Inventory</h1><span class="chip">Saved models</span></div>
+    <p id="inventory-progress" aria-live="polite">0 of 4 objects captured</p>
+    <button id="capture-object" class="primary" type="button">＋ Capture Object</button>
+  </section>
   <section id="tabs-panel" class="panel">
-    <div class="tabs" role="tablist">
-      <button class="tab" role="tab" id="tab-agents" aria-selected="true" aria-controls="view-agents">Agents</button>
-      <button class="tab" role="tab" id="tab-outcomes" aria-selected="false" aria-controls="view-outcomes">Outcomes</button>
+    <div class="tabs" role="tablist" aria-label="Workshop panels">
+      <button class="tab" role="tab" id="tab-inventory" aria-selected="true" aria-controls="view-inventory">Inventory</button>
+      <button class="tab" role="tab" id="tab-agents" aria-selected="false" aria-controls="view-agents" tabindex="-1">Agents</button>
+      <button class="tab" role="tab" id="tab-outcomes" aria-selected="false" aria-controls="view-outcomes" tabindex="-1">Outcomes</button>
     </div>
     <div class="tab-body">
-      <div class="view" id="view-agents" role="tabpanel"><div id="rows"></div></div>
-      <div class="view" id="view-outcomes" role="tabpanel" hidden>
+      <div class="view" id="view-inventory" role="tabpanel" aria-labelledby="tab-inventory">
+        <section id="model-preview-panel" aria-labelledby="model-preview-title">
+          <div class="model-preview-heading"><div><span class="heading">Saved 3D asset</span><h2 id="model-preview-title">Box 1</h2></div><button id="model-reset" type="button" disabled>Reset view</button></div>
+          <label class="sr-only" for="model-select">Preview object</label><select id="model-select" aria-label="Preview object"></select>
+          <div id="model-canvas" tabindex="0" role="img" aria-label="Interactive saved 3D model. Drag to rotate; scroll or pinch to zoom."></div>
+          <p id="model-load-status" role="status">Loading saved 3D preview. Camera capture remains available.</p>
+          <button id="model-retry" type="button" hidden>Retry model load</button>
+          <p class="model-gestures">Drag to rotate · Scroll or pinch to zoom</p>
+          <div id="model-photo-row" hidden><img id="model-captured-photo" alt="Captured photograph of the selected object"><p id="model-photo-label"></p></div>
+          <p id="model-dimensions"></p>
+          <div id="sweeper-controls" hidden>
+            <label for="model-tilt">Manual can tilt <output id="model-tilt-value">0°</output></label><input id="model-tilt" type="range" step="1" value="0">
+            <label for="model-servo">Servo stick rotation <output id="model-servo-value">0°</output></label><input id="model-servo" type="range" step="1" value="0">
+            <button id="model-reset-pose" type="button">Reset pose</button>
+            <p>Preview only. No commands are sent to hardware.</p>
+          </div>
+          <p class="model-measurement-note">Placeholder measurements. Verify dimensions and sweeper pivots against the physical objects.</p>
+        </section>
+        <div id="inventory-grid"></div>
+        <p class="inventory-note">Photographs of your objects, matched by you to predefined assets. Kept for this tab only; refreshing clears them.</p>
+      </div>
+      <div class="view" id="view-agents" role="tabpanel" aria-labelledby="tab-agents" hidden><div id="rows"></div></div>
+      <div class="view" id="view-outcomes" role="tabpanel" aria-labelledby="tab-outcomes" hidden>
         <div class="metric"><span class="k">Attempts tested</span><span class="v mono" id="m-attempts">0</span></div>
         <div class="metric"><span class="k">Successful pushes found</span><span class="v mono" id="m-success">0</span></div>
         <div class="metric"><span class="k">Best score</span><span class="v mono" id="m-best">–</span></div>
@@ -186,7 +214,46 @@
   <button id="send" disabled>Waiting for a plan above 80%</button>
 </aside>
 
+<p id="inventory-notice" class="sr-only" role="status"></p>
+<dialog id="capture-dialog" aria-labelledby="capture-title" aria-describedby="capture-description">
+  <div class="capture-header">
+    <div><span class="heading">Object capture</span><h2 id="capture-title">Photograph your object</h2></div>
+    <button id="capture-close" type="button" aria-label="Close camera">✕</button>
+  </div>
+  <p id="capture-description">One object at a time. Keep the full box or sweeper in the frame.</p>
+  <div class="capture-layout">
+    <div>
+      <div class="capture-stage">
+        <video id="camera-preview" autoplay muted playsinline hidden aria-label="Live camera preview"></video>
+        <img id="capture-photo" hidden alt="Your captured object">
+        <div id="camera-placeholder"><span aria-hidden="true">◎</span><p>Starting your camera…</p></div>
+        <span id="capture-source" class="source-badge" hidden></span>
+      </div>
+      <p id="camera-message" role="status" aria-live="polite"></p>
+      <div id="camera-controls">
+        <label id="camera-device-label" hidden>Camera<select id="camera-device"></select></label>
+        <div class="capture-actions"><button id="camera-retry" type="button" hidden>Retry camera</button><button id="take-picture" class="primary" type="button" disabled>Take Picture</button></div>
+      </div>
+      <div id="photo-controls" class="capture-actions" hidden><button id="retake-picture" type="button">Retake</button></div>
+      <div class="upload-row"><button id="upload-picture" type="button">Upload a photo</button><span>JPG, PNG or WebP · up to 20 MB</span></div>
+      <input id="photo-file" type="file" accept="image/jpeg,image/png,image/webp" hidden>
+    </div>
+    <form id="capture-form">
+      <span class="heading">Confirm identity</span>
+      <p class="capture-help">You choose the object and colour. This maps your photo to a predefined asset.</p>
+      <label for="capture-identity">Object</label><select id="capture-identity" required></select>
+      <div id="capture-color-field"><label for="capture-color">Box colour</label><select id="capture-color"></select><p id="capture-destination"></p></div>
+      <p id="capture-replacement" hidden></p>
+      <p id="capture-identity-note">Take or upload a photo to continue.</p>
+      <button id="add-inventory" class="primary" type="submit" disabled>Add to Inventory</button>
+      <p class="capture-help">Photos stay in this browser tab. No image is sent to the observer.</p>
+    </form>
+  </div>
+</dialog>
+<script type="module" src="./inventory.mjs"></script>
+<script type="module" src="./model-preview.mjs"></script>
 <script type="module">
+import { selectTab } from "./tabs.mjs";
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
@@ -661,6 +728,7 @@ function resize() {
 }
 new ResizeObserver(resize).observe(host);
 addEventListener("keydown", e => {
+  if (document.querySelector("dialog[open]") || /INPUT|SELECT|TEXTAREA/.test(e.target.tagName)) return;
   if (e.key !== "o" && e.key !== "O") return;
   controls.enabled = !controls.enabled;
   if (!controls.enabled) fitCamera();
@@ -674,15 +742,6 @@ const cap = s => (s ? s[0].toUpperCase() + s.slice(1) : "");
 let ws = null, lastFrame = null, prevPhase = null, prevHadBest = false;
 const connected = () => ws?.readyState === WebSocket.OPEN;
 function send(msg) { if (connected()) ws.send(JSON.stringify(msg)); }
-
-function selectTab(name) {
-  for (const t of ["agents", "outcomes"]) {
-    $(`tab-${t}`).setAttribute("aria-selected", String(t === name));
-    $(`view-${t}`).hidden = t !== name;
-  }
-}
-$("tab-agents").onclick = () => selectTab("agents");
-$("tab-outcomes").onclick = () => selectTab("outcomes");
 
 const MUTE_SVG = `<svg class="mute" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"
   stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="silenced"><path d="M2 6h3l4-3v10l-4-3H2z"/>
