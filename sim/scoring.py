@@ -6,7 +6,7 @@ import numpy as np
 
 
 def landed_bag(position, vertical_extent_mm, bags, floor_contact, tolerance):
-    if floor_contact and 0 <= position["z"] - vertical_extent_mm + tolerance:
+    if floor_contact and abs(position["z"] - vertical_extent_mm) <= tolerance:
         for name, bag in bags.items():
             if (abs(position["x"] - bag["x"]) <= bag["width"] / 2
                     and abs(position["y"] - bag["y"]) <= bag["depth"] / 2

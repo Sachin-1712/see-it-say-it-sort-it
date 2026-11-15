@@ -6,13 +6,17 @@ from typing import Any
 import mujoco
 import numpy as np
 
+from .geometry import contact_angles
 from .mjcf import MM, box_friction, compile_scene, initial_data
 from .scene import Scene, build_scene, number
 from .scoring import landed_bag, outcome, stack_stable
 
 type Result = dict[str, Any]
 
-__all__ = ["Result", "Scene", "build_scene", "rollout"]
+__all__ = [
+    "Result", "Scene", "apply_result", "build_scene", "feasible_tilts", "robust_score",
+    "rollout", "rollout_sequence",
+]
 
 
 def validate_action(action, target, sweeper, cfg):
@@ -83,7 +87,7 @@ def parameter_for(params, key, item_id, default):
 
 
 def perturbed_scene(scene, params, snapshot, cfg):
-    if not params:
+    if params == {}:
         return scene
     allowed = {"friction_scale", "mass_scale", "position_offset_mm", "tilt_offset_deg", "max_torque_nm"}
     if not isinstance(params, dict) or params.keys() - allowed:
@@ -141,6 +145,13 @@ def rollout(scene: Scene, action, physics_params=None, seed=None) -> Result:
     for geom_id, key in zip(box_geom_ids, ids):
         labels[geom_id] = key
     settings, scoring = cfg["sim"], cfg["scoring"]
+    table = cfg["rig"]["table"]
+    target_center = data.xpos[body_ids[target_index]] / MM
+    target_bottom = target_center[2] - abs(data.xmat[body_ids[target_index]].reshape(3, 3)[2]) @ model.geom_size[box_geom_ids[target_index]] / MM
+    if (not 0 <= target_center[0] <= table["width"]
+            or not 0 <= target_center[1] <= table["depth"]
+            or target_bottom < table["height"] - scoring["support_tolerance_mm"]):
+        return invalid_result(target_id, "target must start on or over the bench")
     overlap = scoring["initial_overlap_tolerance_mm"] * MM
     attached = {"stick", "servo_case", "servo_mount_bracket", "can"}
     for pair, distance in contact_pairs(data, labels):
@@ -239,3 +250,74 @@ def rollout(scene: Scene, action, physics_params=None, seed=None) -> Result:
         contacts=[dict(t_s=t, body_a=a, body_b=b) for (a, b), t in contacts.items()],
     )
     return result
+
+
+def robust_score(scene: Scene, action, trials=10, seed=None) -> dict:
+    """Return the fraction of inclusive, independent uncertainty trials that sort."""
+    if isinstance(trials, bool) or not isinstance(trials, int) or trials < 1:
+        raise ValueError("trials must be a positive integer")
+    uncertainty = scene.config()["scoring"]["robustness"]
+    ids = [obj["instanceId"] for obj in scene.snapshot["objects"] if obj["type"] == "box"]
+    rng = np.random.default_rng(seed)
+    results = []
+    for _ in range(trials):
+        friction = uncertainty["friction_fraction"]
+        mass = uncertainty["mass_fraction"]
+        position = uncertainty["position_mm"]
+        tilt = uncertainty["tilt_deg"]
+        params = {
+            "friction_scale": {key: float(rng.uniform(1 - friction, 1 + friction)) for key in ids},
+            "mass_scale": {key: float(rng.uniform(1 - mass, 1 + mass)) for key in ids},
+            "position_offset_mm": {key: rng.uniform(-position, position, size=2).tolist() for key in ids},
+            "tilt_offset_deg": float(rng.uniform(-tilt, tilt)),
+        }
+        results.append(rollout(scene, action, physics_params=params))
+    return {"score": sum(result["success"] for result in results) / trials, "results": results}
+
+
+def apply_result(scene: Scene, result: Result) -> Scene:
+    """Carry forward every final parcel pose and remove a parcel caught by a bag."""
+    if result["invalid"]:
+        return scene
+    snapshot = scene.snapshot
+    poses = result["final_poses"]
+    target = result["target"]
+    removed = target["id"] if target["landed_bag"] != "none" else None
+    cfg = scene.config()["models"]["sweeper"]
+    servo_min, servo_max = cfg["servo"]["limitsDeg"]
+    items = []
+    standing = []
+    for item in snapshot["objects"]:
+        key = item["instanceId"]
+        if key == removed:
+            continue
+        if item["type"] == "box":
+            p = poses[key]
+            item["position"] = {axis: p[axis] for axis in ("x", "y", "z")}
+            item.update({field: p[field] for field in ("baseZ", "roll", "pitch", "yaw")})
+            standing.append(item)
+        elif item["type"] == "sweeper":
+            item["tiltDeg"] = result["realized_tilt_deg"]
+            item["servoDeg"] = min(servo_max, max(servo_min, result["servo_final_deg"]))
+        items.append(item)
+    for i, item in enumerate(sorted(standing, key=lambda item: item["baseZ"])):
+        item["stackIndex"] = i
+    snapshot["objects"] = items
+    if snapshot.get("selectedId") == removed:
+        snapshot["selectedId"] = None
+    return scene.with_snapshot(snapshot)
+
+
+def rollout_sequence(scene: Scene, actions, seed=None) -> list[Result]:
+    """Roll each action forward from the preceding final scene."""
+    results = []
+    for action in actions:
+        result = rollout(scene, action, seed=seed)
+        results.append(result)
+        scene = apply_result(scene, result)
+    return results
+
+
+def feasible_tilts(scene: Scene, target_id) -> list[float]:
+    """Sample tilts with a kinematic approach to the target from either side."""
+    return [tilt for tilt, _ in contact_angles(scene, target_id)]

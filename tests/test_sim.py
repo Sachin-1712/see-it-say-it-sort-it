@@ -64,3 +64,70 @@ def test_sweeper_matches_config_and_keeps_bench_clear():
     model = compile_scene(scene, tilt_deg=low)
     first, last = (initial_data(model, angle).geom("stick").xpos[0] for angle in (start, end))
     assert first > last
+
+
+def test_single_box_rehearsals_both_bags_and_deliberate_miss():
+    from sim.api import rollout
+    from sim.search import best_candidate
+
+    for colour, bag in (("red", "left"), ("blue", "right")):
+        scene = build_scene(demo_snapshot([colour]))
+        key = scene.snapshot["objects"][0]["instanceId"]
+        best, attempts = best_candidate(scene, key)
+        assert best is not None, f"{bag}: no candidate approaches"
+        action, result = best
+        print(f"{bag}: {attempts} attempts, {action}, {result['target']}, {result['reason']}")
+        assert result["success"], result["reason"]
+        assert result["target"]["landed_bag"] == bag
+        assert any({contact["body_a"], contact["body_b"]} == {key, "stick"}
+                   for contact in result["contacts"])
+        assert result["trajectories"]["stick"][1][0] == 0.05
+    spec = scene.config()["models"]["sweeper"]
+    start, end = spec["servo"]["limitsDeg"]
+    miss = rollout(scene, dict(target=key, tilt_deg=spec["assemblyTilt"]["limitsDeg"][0],
+                               sweep_start_deg=start, sweep_end_deg=end))
+    assert not miss["invalid"] and not miss["success"]
+    assert miss["reason"] == "stick never contacted target"
+
+
+def test_top_search_records_a_physics_outcome():
+    from sim.search import best_candidate
+
+    scene = build_scene(demo_snapshot(["red", "blue", "red"]))
+    key = scene.snapshot["objects"][2]["instanceId"]
+    best, attempts = best_candidate(scene, key)
+    assert attempts > 0
+    action, result = best
+    print(f"stack top: {attempts} attempts, {action}, {result['target']}, {result['others']}, {result['reason']}")
+    assert not result["invalid"]
+    assert result["score"] in (0.0, 1.0)
+    assert len(result["others"]) == 2
+
+
+def test_robustness_sequence_deterministic_and_immutable():
+    from sim.api import apply_result, feasible_tilts, robust_score, rollout, rollout_sequence
+    from sim.search import candidate_actions
+
+    original = demo_snapshot(["red", "blue", "red"])
+    scene = build_scene(original)
+    top = original["objects"][2]["instanceId"]
+    middle = original["objects"][1]["instanceId"]
+    assert feasible_tilts(scene, top)
+    assert not feasible_tilts(scene, "missing")
+    action = next(candidate_actions(scene, top))
+    next_action = {**action, "target": middle}
+    valid = rollout(scene, action)
+    assert not valid["invalid"]
+    after = apply_result(scene, valid)
+    assert rollout_sequence(scene, [action, next_action], seed=42) == [
+        valid, rollout(after, next_action, seed=42),
+    ]
+    for item in after.snapshot["objects"]:
+        if item["type"] == "box":
+            assert item["position"]["z"] == valid["final_poses"][item["instanceId"]]["z"]
+    first = robust_score(scene, action, trials=3, seed=42)
+    assert first == robust_score(scene, action, trials=3, seed=42)
+    assert first["score"] == sum(row["success"] for row in first["results"]) / 3
+    invalid = rollout(scene, {**action, "tilt_deg": -1})
+    assert invalid["invalid"] and apply_result(scene, invalid) is scene
+    assert scene.snapshot == original
