@@ -21,7 +21,7 @@ from test_demo import validated
 class Firmware:
     def __init__(self, ack=True, tilt=10):
         self.master,slave=os.openpty();self.device=os.ttyname(slave);os.close(slave)
-        self.angle=90;self.tilt=tilt;self.ack=ack;self.events=[];self.acks=[];self.closed=False;self.tilt_reader=None
+        self.angle=90;self.tilt=tilt;self.ack=ack;self.events=[];self.acks=[];self.closed=False;self.tilt_reader=None;self.completion='VERIFIED'
         self.thread=threading.Thread(target=self.run,daemon=True);self.thread.start()
 
     def run(self):
@@ -38,7 +38,7 @@ class Firmware:
                     self.events.append((cmd,time.monotonic()))
                     if cmd=='?':
                         tilt=self.tilt_reader() if self.tilt_reader else self.tilt
-                        reply=f'STATUS {token} {self.angle} {tilt} test-rig 0 180 VERIFIED\n'
+                        reply=f'STATUS {token} {self.angle} {tilt} test-rig 0 180 {self.completion}\n'
                     elif cmd=='S':reply=f'DONE {token} S {self.angle}\n'
                     elif self.ack:
                         self.angle={'L':0,'R':180,'C':90}[cmd]

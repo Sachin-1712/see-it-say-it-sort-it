@@ -20,12 +20,13 @@ async def run(args):
         read.last=None
         reader=asyncio.create_task(read())
         await ws.send(json.dumps({'cmd':'hardware_connect'}))
+        if args.calibration:await ws.send(json.dumps({'cmd':'hardware_calibration_arm','confirmed':args.arm}))
         print('L/R/C = calibrated endpoint movement; S or Escape = stop; Q = quit. This client never owns USB.')
         try:
             while True:
                 key=(await asyncio.to_thread(sys.stdin.read,1)).upper()
                 if key in ('Q','') or key=='\x1b':break
-                if key in 'LRSC':await ws.send(json.dumps({'cmd':'hardware_key','key':key,'armed':args.arm}))
+                if key in 'LRSC':await ws.send(json.dumps({'cmd':'hardware_stop'} if key=='S' else {'cmd':'hardware_calibration_move' if args.calibration else 'hardware_key','key':key,'armed':args.arm}))
         finally:
             await ws.send(json.dumps({'cmd':'hardware_stop'}));reader.cancel()
 
@@ -33,6 +34,7 @@ async def run(args):
 def main():
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument('--url',default='ws://localhost:8765')
+    p.add_argument('--calibration',action='store_true',help='Supervised operator-calibration firmware; individual commands only')
     p.add_argument('--arm',action='store_true',help='Explicit operator arming; verified calibration is still required')
     args=p.parse_args()
     if not sys.stdin.isatty():p.error('Use an interactive terminal')

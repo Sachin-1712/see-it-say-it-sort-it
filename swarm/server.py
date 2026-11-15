@@ -35,6 +35,13 @@ async def run(args):
                         if playback.job:await playback.job
                     if cmd == 'hardware_connect':
                         await playback.connect()
+                    elif cmd == 'hardware_status':
+                        await ws.send(json.dumps(dict(type='hardware_status',status=await playback.status())))
+                    elif cmd == 'hardware_calibration_arm':
+                        await playback.arm_calibration(message.get('confirmed'))
+                    elif cmd == 'hardware_calibration_move':
+                        await playback.start_calibration_move(message.get('key'))
+                        playback_owner=ws
                     elif cmd == 'hardware_arm':
                         if message.get('armed') is not True:raise ValueError('Explicit operator arming is required')
                         await playback.arm()
@@ -85,6 +92,7 @@ async def run(args):
                         playback.state['message']=str(error)
                         if not playback.running:
                             playback.armed=False
+                            playback.calibration_armed=False
                             playback.state['status']='failed'
                     await ws.send(json.dumps(dict(type="error",reason=str(error))))
         except ConnectionClosed:

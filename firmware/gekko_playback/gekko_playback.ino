@@ -1,6 +1,10 @@
 #include <Arduino_RouterBridge.h>
 #include <HardwareServo.h>
 
+#ifndef GEKKO_OPERATOR_CALIBRATION
+#define GEKKO_OPERATOR_CALIBRATION 0
+#endif
+
 // Match these to measured rig calibration before enabling any movement.
 // Merely changing a flag is NOT a measurement. Defaults cannot move the servo.
 const bool MOTION_CALIBRATED = false;
@@ -34,7 +38,7 @@ void command(char cmd, const String &id) {
   if (cmd == '?') {
     String tilt = TILT_SENSOR_CALIBRATED ? String(analogRead(TILT_PIN) * TILT_DEG_PER_ADC + TILT_ZERO_DEG, 2) : "NA";
     reply("STATUS", id, (positionKnown ? String(currentAngle) : String("NA")) + " " + tilt + " " + CALIBRATION_ID + " " + MIN_ANGLE + " " + MAX_ANGLE + " " +
-          (MOTION_CALIBRATED && COMPLETION_TIME_VERIFIED ? "VERIFIED" : "UNVERIFIED"));
+          (MOTION_CALIBRATED && COMPLETION_TIME_VERIFIED ? "VERIFIED" : GEKKO_OPERATOR_CALIBRATION ? "CALIBRATION" : "UNVERIFIED"));
     return;
   }
   if (cmd == 'S') {
@@ -44,7 +48,10 @@ void command(char cmd, const String &id) {
     return;
   }
   if (cmd != 'L' && cmd != 'R' && cmd != 'C') { reply("ERROR", id, "UNKNOWN_COMMAND"); return; }
-  if (!MOTION_CALIBRATED || !COMPLETION_TIME_VERIFIED) { reply("ERROR", id, "CALIBRATION_REQUIRED"); return; }
+  // Build-time opt-in permits individual framed operator tests only. It does
+  // not assert measured completion or enable host automatic-plan validation.
+  bool operatorTest = GEKKO_OPERATOR_CALIBRATION && id != "raw";
+  if ((!MOTION_CALIBRATED || !COMPLETION_TIME_VERIFIED) && !operatorTest) { reply("ERROR", id, "CALIBRATION_REQUIRED"); return; }
   if (!positionKnown && cmd != 'C') { reply("ERROR", id, "HOME_WITH_C_FIRST"); return; }
   if (moving || settling) { reply("ERROR", id, "BUSY"); return; }
   int end = cmd == 'L' ? L_ANGLE : cmd == 'R' ? R_ANGLE : CENTER_ANGLE;
@@ -91,7 +98,8 @@ void loop() {
   }
   if (settling && millis() - reachedAt >= VERIFIED_SETTLE_MS) {
     settling = false; positionKnown = true;
-    // DONE means firmware finished a calibrated ramp + verified conservative settle.
+    // VERIFIED mode: calibrated ramp + measured conservative settling bound.
+    // CALIBRATION mode: command-ramp acknowledgement only; operator must observe.
     // HardwareServo.read() is only the commanded PWM, never a position sensor.
     reply("DONE", activeId, String(activeCommand) + " " + currentAngle);
     activeId = ""; activeCommand = 0;

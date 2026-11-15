@@ -17,3 +17,6 @@
 #physical-stop {background:#f5c518;color:#161616;font-size:20px;font-weight:700;min-width:110px;}
 
 #physical-status[data-error="true"] {padding:12px;border:2px solid #f5c518;background:#f5c518;color:#171717;}
+
+.calibration-controls {width:100%;display:flex;flex-wrap:wrap;gap:10px;border:2px solid #f5c518;padding:12px;}
+.calibration-controls label {width:100%;line-height:1.5;}

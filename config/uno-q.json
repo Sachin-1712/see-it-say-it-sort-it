@@ -2,13 +2,16 @@
   "enabled": false,
   "calibration_verified": false,
   "acknowledgement_verified": false,
-  "serial_port": null,
+  "serial_port": "/dev/cu.usbmodem42325750942",
   "baud": 115200,
   "direction_commands": {
-    "increasing": null,
-    "decreasing": null
+    "increasing": "L",
+    "decreasing": "R"
   },
-  "servo_limits_deg": null,
+  "servo_limits_deg": [
+    0,
+    180
+  ],
   "tilt_limits_deg": null,
   "calibration_id": null,
   "note": "Disabled by default. Calibrate actual L/R movement, servo limits, endpoint/action profiles, firmware completion and tilt verification. Manual multi-angle tilt without a verified sensor requires timed dry run.",
@@ -16,9 +19,9 @@
   "completion_verification_id": null,
   "command_timeout_s": 5,
   "endpoint_angles_deg": {
-    "L": null,
-    "R": null,
-    "C": null
+    "L": 180,
+    "R": 0,
+    "C": 90
   },
   "tilt_verification": {
     "mode": "none",
@@ -27,5 +30,19 @@
     "tolerance_deg": 1,
     "angle_deg": null
   },
-  "action_profiles": {}
+  "action_profiles": {},
+  "operator_calibration": {
+    "enabled": true,
+    "range_confirmed": true,
+    "servo_limits_deg": [
+      0,
+      180
+    ],
+    "observed_L_destination": "left",
+    "observed_R_destination": "right",
+    "viewpoint": "behind the sweeper",
+    "source": "Operator confirmed full 0\u2013180 travel and L toward RED/LEFT destination in chat",
+    "recorded_at": "2026-11-15T09:41:18.052836+00:00",
+    "command_timeout_s": 8
+  }
 }

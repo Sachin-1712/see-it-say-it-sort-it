@@ -667,6 +667,8 @@ function renderSwarmFrame(f) {
   $("physical-step").disabled=!connected()||!saved||!hw.armed||hw.running;
   $("physical-connect").disabled=!connected()||hw.running;
   $("physical-connect").textContent=hw.status==="connecting"?"Connecting…":"Connect UNO Q";
+  $("calibration-arm").disabled=!connected()||hw.running||!hw.connection.startsWith('Connected')||!$("calibration-present").checked;
+  for(const id of ['calibration-center','calibration-left','calibration-right'])$(id).disabled=!connected()||hw.running||!hw.calibration_armed;
   $("physical-arm").disabled=!connected()||!saved||hw.running||!hw.connection.startsWith('Connected');
   $("physical-arm").textContent=hw.armed?'Hardware armed for one Start':hw.status==='failed'?'Arm Hardware Once · BLOCKED':'Arm Hardware Once';
   $("physical-arm").title=hw.status==='failed'?hw.message:'Check measured hardware calibration and arm for one playback';
@@ -763,6 +765,10 @@ $("physical-connect").onclick=()=>{
   $("physical-status").textContent='Connecting to UNO Q. Close Serial Monitor and external servo_keys.py first.';
   send({cmd:'hardware_connect'});
 };
+$("calibration-arm").onclick=()=>send({cmd:'hardware_calibration_arm',confirmed:$("calibration-present").checked});
+$("calibration-center").onclick=()=>send({cmd:'hardware_calibration_move',key:'C'});
+$("calibration-left").onclick=()=>send({cmd:'hardware_calibration_move',key:'L'});
+$("calibration-right").onclick=()=>send({cmd:'hardware_calibration_move',key:'R'});
 $("physical-arm").onclick=()=>{
   $("physical-status").textContent='Checking hardware calibration…';
   $("physical-arm").textContent='Checking calibration…';

@@ -118,3 +118,43 @@ and [Arduino HardwareServo](https://github.com/arduino-libraries/Arduino_Hardwar
 Remaining hardware blockers: measured direction/travel/action profiles, actual
 completion timing, actual tilt verification and confirmation of the board's USB
 Monitor route. The firmware is compiled, not physically verified.
+
+## Supervised endpoint calibration on this rig
+
+The operator confirmed full 0–180° travel and L toward the RED/LEFT bin (viewed
+from behind the sweeper). Those observations are recorded in `operator_calibration`
+in `config/uno-q.json`; they do not certify settling, action profiles or tilt.
+
+The explicit `GEKKO_OPERATOR_CALIBRATION=1` firmware build permits individual,
+framed operator tests and reports `CALIBRATION`, never `VERIFIED`. The default
+build still refuses motion without full calibration. Boot never moves the servo.
+
+Connect UNO Q, check the operator-presence box, then **Arm supervised tests**.
+Press **Center · C** first, then one **L · RED bin** or **R · BLUE bin** command
+at a time while observing the real mechanism. STOP cancels and disarms tests.
+A command-ramp acknowledgement is shown separately from physical completion.
+Keep hands clear of the arm and keep servo-power disconnection within reach.
+
+For the same controls from a terminal, through the single serial owner:
+
+```sh
+.venv/bin/python -m scripts.servo_keys --calibration --arm
+```
+
+The can has no tilt sensor. This supervised mode does not unlock automatic
+three-step saved-plan execution. Completion timing and each physical action
+profile still require observation/testing; the software never marks them
+verified from a command acknowledgement alone.
+
+
+To rebuild the exact supervised-test firmware (stop the GEKKO server first so
+only the upload tool owns USB):
+
+```sh
+arduino-cli compile --fqbn arduino:zephyr:unoq \
+  --build-property compiler.cpp.extra_flags=-DGEKKO_OPERATOR_CALIBRATION=1 \
+  --build-path /tmp/gekko-operator-calibration-build firmware/gekko_playback
+arduino-cli upload --fqbn arduino:zephyr:unoq \
+  --port /dev/cu.usbmodem42325750942 \
+  --build-path /tmp/gekko-operator-calibration-build firmware/gekko_playback
+```

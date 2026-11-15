@@ -221,6 +221,15 @@
           <p id="playback-connection" role="status">Hardware disconnected · not armed</p>
           <p id="physical-status" role="status">Physical execution disabled by default. Timed dry run sends no sweep commands.</p>
           <button id="physical-connect" type="button">Connect UNO Q</button>
+          <div class="calibration-controls">
+            <strong>Supervised REAL servo tests · 0–180° operator-tested</strong>
+            <p>These controls move the physical servo. Center first. L → RED/LEFT bin; R → BLUE/RIGHT bin, viewed from behind the sweeper. Tilt remains manual.</p>
+            <label><input id="calibration-present" type="checkbox"> I am at the rig and ready to stop/disconnect servo power.</label>
+            <button id="calibration-arm" type="button" disabled>Arm supervised tests</button>
+            <button id="calibration-center" type="button" disabled>Center · C</button>
+            <button id="calibration-left" type="button" disabled>L · RED bin</button>
+            <button id="calibration-right" type="button" disabled>R · BLUE bin</button>
+          </div>
           <button id="physical-arm" type="button" disabled>Arm Hardware Once</button>
           <button id="physical-step" type="button" disabled>Start Hardware Playback</button>
           <p id="dry-run-status" role="status"></p>
@@ -289,7 +298,7 @@
 </dialog>
 <script type="module" src="./inventory.mjs"></script>
 <script type="module" src="./model-preview.mjs"></script>
-<script type="module" src="./workshop.mjs?v=timed-replay-1"></script>
+<script type="module" src="./workshop.mjs?v=operator-calibration-1"></script>
 <script type="module" src="./sim-preview.mjs"></script>
 </body>
 </html>

@@ -21,6 +21,7 @@ class Playback:
         self.job=None
         self.control_busy=False
         self.armed=False
+        self.calibration_armed=False
         self.armed_hash=None
         self.state=dict(status='idle',mode='dry_run',step=0,steps=0,acknowledged=False,message='Load a saved plan')
 
@@ -28,7 +29,7 @@ class Playback:
     def running(self):return self.control_busy or bool(self.job and not self.job.done())
 
     def snapshot(self):
-        return dict(self.state,connection=self.bridge.connection,armed=self.armed,running=self.running,
+        return dict(self.state,connection=self.bridge.connection,armed=self.armed,calibration_armed=self.calibration_armed,running=self.running,
                     remaining_s=max(0,math.ceil(self.state.get('next_at',0)-time.monotonic())),
                     replay_elapsed_s=min(self.state.get('replay_duration_s',0),max(0,time.monotonic()-self.state.get('replay_started_at',time.monotonic()))))
 
@@ -44,7 +45,7 @@ class Playback:
         if self.running:raise ValueError('Stop playback before changing the scene, connection or plan')
 
     async def connect(self):
-        self.require_idle();self.armed=False;self.control_busy=True;self.cancel.clear()
+        self.require_idle();self.armed=False;self.calibration_armed=False;self.control_busy=True;self.cancel.clear()
         self.state.update(status='connecting',message='Connecting to UNO Q; checking port ownership and firmware. No sweep requested.')
         try:
             await asyncio.to_thread(self.bridge.connect,self.config_reader())
@@ -125,6 +126,7 @@ class Playback:
         if not dry_run:
             if not self.armed or self.armed_hash!=sha(config):raise ValueError('Arm hardware once before the initial Start action')
             profiles=self.profiles(bundle,config)
+        self.calibration_armed=False
         self.armed=False # every start consumes the one-time arm
         self.cancel.clear()
         self.state=dict(run_id=uuid.uuid4().hex,status='starting',mode='dry_run' if dry_run else 'hardware',step=0,
@@ -187,9 +189,61 @@ class Playback:
         finally:self.armed=False
 
     def stop(self):
-        self.cancel.set();self.armed=False
+        self.cancel.set();self.armed=False;self.calibration_armed=False
         sent=self.bridge.stop_now()
         self.state.update(status='interrupted',next_at=0,message='STOP '+('sent; acknowledgement pending' if sent else 'not transmitted (no connection)')+'. Disconnect servo power physically. No automatic restart.')
+
+    def calibration_config(self):
+        config=self.config_reader();test=config.get('operator_calibration',{})
+        if test.get('enabled') is not True or test.get('range_confirmed') is not True:
+            raise ValueError('Operator-tested travel range is required for supervised calibration')
+        limits=config.get('servo_limits_deg')
+        if limits!=test.get('servo_limits_deg') or not isinstance(limits,list) or len(limits)!=2 or not 0<=limits[0]<limits[1]<=180:
+            raise ValueError('Supervised test limits do not match operator-confirmed range')
+        if not config.get('serial_port') or self.bridge.config!=config:raise ValueError('Reconnect using the operator-confirmed USB configuration')
+        return config
+
+    async def arm_calibration(self,confirmed):
+        self.require_idle();self.armed=False;self.calibration_armed=False
+        if confirmed is not True:raise ValueError('Explicit operator presence and supervised-test arming required')
+        config=self.calibration_config();self.cancel.clear();self.control_busy=True
+        try:
+            status=await self.status()
+            if self.cancel.is_set():raise InterruptedError('Calibration arming stopped')
+            if status['completion']!='CALIBRATION' or status['limits']!=config['servo_limits_deg']:
+                raise ValueError('Upload the operator-calibration build first; reported test limits must match')
+            self.calibration_armed=True
+            self.state.update(status='calibration_ready',mode='calibration',message='Supervised servo tests armed. Center first, then choose L or R. These buttons move real hardware; automatic playback remains disabled.')
+        finally:self.control_busy=False
+
+    async def start_calibration_move(self,command):
+        self.require_idle()
+        if not self.calibration_armed:raise ValueError('Arm supervised calibration tests first')
+        if command not in ('L','R','C'):raise ValueError('Calibration supports L/R/C; use STOP to interrupt')
+        config=self.calibration_config();end=config.get('endpoint_angles_deg',{}).get(command)
+        if not isinstance(end,(int,float)) or not math.isfinite(end) or not config['servo_limits_deg'][0]<=end<=config['servo_limits_deg'][1]:
+            raise ValueError('Test endpoint exceeds operator-confirmed limits')
+        self.cancel.clear();self.job=asyncio.create_task(self.calibration_move(command,end,config))
+
+    async def calibration_move(self,command,end,config):
+        started=time.monotonic()
+        def guard():
+            if self.cancel.is_set():raise InterruptedError('Supervised test stopped')
+            if self.config_reader()!=config:raise ValueError('Calibration configuration changed')
+        try:
+            status=await self.status(guard)
+            if status['completion']!='CALIBRATION' or status['limits']!=config['servo_limits_deg']:
+                raise ValueError('Firmware is not in the expected supervised test mode')
+            if status['angle'] is None and command!='C':raise ValueError('Press Center first to establish the commanded start position')
+            self.state.update(status='calibration_moving',mode='calibration',command=command,acknowledged=False,message=f'REAL SERVO TEST: {command} toward {end}°. Waiting for firmware ramp acknowledgement; watch the physical servo.')
+            actual=await self.bridge.request(command,self.cancel,config['operator_calibration'].get('command_timeout_s',8),guard)
+            guard()
+            if not math.isfinite(actual) or abs(actual-end)>.5:raise ValueError('Test endpoint acknowledgement mismatch')
+            record=dict(command=command,commanded_endpoint_deg=actual,round_trip_s=round(time.monotonic()-started,3),timestamp=time.time(),physical_completion_verified=False)
+            self.state.update(status='calibration_review',test_result=record,command_acknowledged=True,acknowledged=False,
+                message=f'{command} command ramp acknowledged at {actual}°. Observe the actual stop and direction. Physical settling and box outcome are NOT yet verified.')
+        except Exception as error:
+            self.stop();self.state.update(status='failed',message=str(error))
 
     async def start_keyboard(self,command,armed=False):
         if command=='S':self.stop();return
