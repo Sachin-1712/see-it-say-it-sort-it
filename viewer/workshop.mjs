@@ -19,7 +19,10 @@ import { LineSegmentsGeometry } from "three/addons/lines/LineSegmentsGeometry.js
 const WS_URL = new URLSearchParams(location.search).get("observer") ?? "ws://localhost:8765";
 const DEG = Math.PI / 180;
 const EXECUTE_MIN = 0.8;
-const C = { accent: 0xF5C518, success: 0x3DDC84, bg: 0xEAEAEA };
+const C = { accent: 0xF5C518, success: 0x3DDC84, bg: 0x10131A };
+// Dark, minimal room with a little colour: blue-slate walls, a warm key light and a cool
+// rim light. The bench stays light so the boxes and sweeper read clearly against it.
+const ROOM_COLOURS = { floor: 0x161A22, floorGrid: 0x3A4253, back: 0x1E2330, side: 0x1B202B, wallGrid: 0x525C72 };
 
 // Pose in the z-up table frame -> three.js Vector3 and yaw. The axis swap itself is
 // toThree in frame.mjs, the one conversion function.
@@ -97,8 +100,12 @@ function floorText(text, heightMM, color = "#616161") {
 const centre = scenePose({ x: table.width / 2, y: table.depth / 2, z: table.height }).pos;
 const span = Math.max(table.width, table.depth);
 function addLights(target, withShadow) {
-  target.add(new THREE.HemisphereLight(0xffffff, 0xd5d5d5, 1.2));
-  const key = new THREE.DirectionalLight(0xffffff, 1.5);
+  target.add(new THREE.HemisphereLight(0xC9D6FF, 0x1A1E27, 1.0));
+  const rim = new THREE.DirectionalLight(0x6FA8FF, 0.55);            // cool light from behind the bench
+  rim.position.copy(centre).add(new THREE.Vector3(span * 1.2, span * 1.1, -span * 1.6));
+  rim.target.position.copy(centre);
+  target.add(rim, rim.target);
+  const key = new THREE.DirectionalLight(0xFFF1DD, 1.6);
   key.position.copy(centre).add(new THREE.Vector3(-span * 0.9, span * 2.4, span * 1.2));
   key.target.position.copy(centre);
   if (withShadow) {
@@ -118,40 +125,40 @@ addLights(scene, true);
 const sceneMaxX = Math.max(table.width, ...Object.values(bags).map(b => b.x + b.width / 2));
 const sceneMaxY = Math.max(table.depth, ...Object.values(bags).map(b => b.y + b.depth / 2));
 const ROOM = { left: -800, right: sceneMaxX + 80, front: -700, back: sceneMaxY + 70, height: 520, step: 40 };
-function grid(w, h, step) {               // in the local XY plane from (0,0) to (w,h)
+function grid(w, h, step, color, opacity = 0.9) {   // in the local XY plane from (0,0) to (w,h)
   const pts = [];
   for (let x = 0; x <= w + 1e-6; x += step) pts.push(x, 0, 0, x, h, 0);
   for (let y = 0; y <= h + 1e-6; y += step) pts.push(0, y, 0, w, y, 0);
   const g = new THREE.BufferGeometry();
   g.setAttribute("position", new THREE.Float32BufferAttribute(pts, 3));
-  return new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.6 }));
+  return new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color, transparent: true, opacity }));
 }
 {
   const fw = ROOM.right - ROOM.left, fd = ROOM.back - ROOM.front;
-  const floor = new THREE.Mesh(new THREE.PlaneGeometry(fw, fd), matte(0xDADADA));
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(fw, fd), matte(ROOM_COLOURS.floor));
   floor.rotation.x = -Math.PI / 2;
   floor.position.copy(scenePose({ x: ROOM.left + fw / 2, y: ROOM.front + fd / 2 }).pos);
   floor.receiveShadow = true;
   scene.add(floor);
-  const fg = grid(fw, fd, ROOM.step);
+  const fg = grid(fw, fd, ROOM.step, ROOM_COLOURS.floorGrid);   // same grid as the walls, darker grey
   fg.rotation.x = -Math.PI / 2;                          // local +Y -> table +y
   fg.position.copy(scenePose({ x: ROOM.left, y: ROOM.front, z: 0.3 }).pos);
   scene.add(fg);
 
-  const back = new THREE.Mesh(new THREE.PlaneGeometry(fw, ROOM.height), matte(0xE4E4E4));
+  const back = new THREE.Mesh(new THREE.PlaneGeometry(fw, ROOM.height), matte(ROOM_COLOURS.back));
   back.position.copy(scenePose({ x: ROOM.left + fw / 2, y: ROOM.back, z: ROOM.height / 2 }).pos);
   back.receiveShadow = true;
   scene.add(back);
-  const bg = grid(fw, ROOM.height, ROOM.step);
+  const bg = grid(fw, ROOM.height, ROOM.step, ROOM_COLOURS.wallGrid);
   bg.position.copy(scenePose({ x: ROOM.left, y: ROOM.back - 0.3 }).pos);
   scene.add(bg);
 
-  const right = new THREE.Mesh(new THREE.PlaneGeometry(fd, ROOM.height), matte(0xDEDEDE));
+  const right = new THREE.Mesh(new THREE.PlaneGeometry(fd, ROOM.height), matte(ROOM_COLOURS.side));
   right.rotation.y = -Math.PI / 2;                       // faces left (towards the camera)
   right.position.copy(scenePose({ x: ROOM.right, y: ROOM.front + fd / 2, z: ROOM.height / 2 }).pos);
   right.receiveShadow = true;
   scene.add(right);
-  const rg = grid(fd, ROOM.height, ROOM.step);
+  const rg = grid(fd, ROOM.height, ROOM.step, ROOM_COLOURS.wallGrid);
   rg.rotation.y = -Math.PI / 2;                          // local +X -> table -y
   rg.position.copy(scenePose({ x: ROOM.right - 0.3, y: ROOM.back }).pos);
   scene.add(rg);
@@ -165,7 +172,7 @@ scene.add(tableMesh);
 let supportMesh = null;
 if (table.height - slabT > 0) {
   const inset = 30, supportH = table.height - slabT;
-  supportMesh = block(table.width - 2 * inset, table.depth - 2 * inset, supportH, matte(0x7A7A7A));
+  supportMesh = block(table.width - 2 * inset, table.depth - 2 * inset, supportH, matte(0x3A404D));
   place(supportMesh, { x: table.width / 2, y: table.depth / 2, z: supportH / 2 });
   scene.add(supportMesh);
 }
@@ -190,7 +197,7 @@ for (const [name, z] of Object.entries(zones)) {
 // and its top (b.height) is level with the bench top -------------------------
 const bagGroups = {};
 for (const [side, b] of Object.entries(bags)) {
-  const body = matte(0x616161), t = 2.5, rimH = 3, wallH = b.height - rimH;
+  const body = matte(0x353B47), t = 2.5, rimH = 3, wallH = b.height - rimH;
   const rim = matte(bagColour[side] ? tagColour(bagColour[side]) : 0x898989);
   const parts = [
     [b.width, b.depth, t, 0, 0, t / 2, body],
@@ -678,7 +685,10 @@ $("send").onclick = () => {
   if (ok) send({ cmd: "execute" });
 };
 $("swarm-demo").onclick=()=>send({cmd:"load_demo"});
-$("swarm-plan").onclick=()=>{loadedSwarmTask="workbench";send({cmd:"plan_workbench",snapshot:workbenchState.snapshot()});selectTab("agents");$("observer-overlay").checked=true;};
+$("swarm-plan").onclick=()=>{
+  const unassigned=workbenchState.snapshot().objects.filter(o=>o.type==="box"&&!o.destination);
+  if(unassigned.length){$("world-message").textContent=`${unassigned.length} placed box${unassigned.length>1?"es have":" has"} no bag (${[...new Set(unassigned.map(o=>o.color??"no colour"))].join(", ")}). Only red → left and blue → right can be sorted. Change the routing colour in Inventory, then Clear workbench and place again.`;return;}
+  loadedSwarmTask="workbench";send({cmd:"plan_workbench",snapshot:workbenchState.snapshot()});selectTab("agents");$("observer-overlay").checked=true;};
 $("swarm-isolate").onchange=()=>{selectedAgent=$("swarm-isolate").value||null;swarmOverlay.selected=selectedAgent;};
 
 function setConnected(on) {

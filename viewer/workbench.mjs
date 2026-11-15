@@ -135,6 +135,12 @@ export class Workbench {
       $("world-message").textContent = "Place a box and the sweeper on the bench to run a physical sweep.";
       this.synchronise(); return;
     }
+    if (search && !target.destination) {
+      // A box needs a bag before the search can aim for one (config/rig.json colour_to_bag).
+      $("world-message").textContent = `${target.name} is ${target.color ?? "uncoloured"}, which has no bag (red → left, blue → right). ` +
+        "Change its routing colour in Inventory, then Clear workbench and place it again.";
+      this.synchronise(); return;
+    }
     if (!search && Math.abs(endpoint - sweeper.servoDeg) < .01) return;
     this.busy = true; this.abort = new AbortController(); this.synchronise();
     $("world-message").textContent = search ? "MuJoCo: finding a collision-tested sweep…" : "MuJoCo: calculating contacts…";

@@ -24,8 +24,11 @@ function message(text, error = false) {
 function announce(text) { $("inventory-notice").textContent = text; }
 function option(value, text) { const item = document.createElement("option"); item.value = value; item.textContent = text; return item; }
 function fillColours(select, color = "red") {
-  select.replaceChildren(...colours.map(color => option(color, cap(color))));
-  select.value = color;
+  // Only colours with a bag in config/rig.json can be sorted. A record that already has
+  // another colour keeps it, labelled so the operator sees why it cannot be sorted.
+  const list = colours.includes(color) || !color ? colours : [...colours, color];
+  select.replaceChildren(...list.map(item => option(item, colours.includes(item) ? cap(item) : `${cap(item)} · no bag`)));
+  select.value = color && list.includes(color) ? color : list[0];
 }
 function stopCamera() {
   if (stream) for (const track of stream.getTracks()) track.stop();
@@ -340,7 +343,7 @@ try {
   const rig = await response.json();
   store.colourToBag = { ...rig.colour_to_bag };
   mappingAvailable = true;
-  colours = [...new Set([...Object.keys(store.colourToBag), ...colours])];
+  colours = Object.keys(store.colourToBag).length ? Object.keys(store.colourToBag) : colours;
   const selected = $("capture-color").value;
   fillColours($("capture-color"), selected);
   for (const record of store.list()) if (record.type === "box") store.setColor(record.id, record.color);
