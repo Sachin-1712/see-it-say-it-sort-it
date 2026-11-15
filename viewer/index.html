@@ -215,7 +215,7 @@
         <div id="swarm-plan-details"></div>
         <div class="physical-controls" aria-label="Saved-plan hardware playback">
           <strong id="playback-title">Load a saved plan for playback</strong>
-          <p>MANUAL TILT — GEKKO does not adjust the can. Physical playback requires calibrated positioning or a verified tilt sensor before every sweep.</p>
+          <p>MANUAL TILT — GEKKO does not adjust the can. In servo-demo mode, you handle tilt. Verified sorting mode additionally requires measured tilt positioning.</p>
           <p id="playback-step" role="status"></p>
           <p id="playback-tilt"></p>
           <p id="playback-connection" role="status">Hardware disconnected · not armed</p>
@@ -231,8 +231,11 @@
             <button id="calibration-right" type="button" disabled>R · BLUE bin</button>
           </div>
           <button id="physical-arm" type="button" disabled>Arm Hardware Once</button>
+          <p><strong>AUTOMATIC SERVO DEMO</strong> — one Start follows the saved L/R order, waits for DONE + 3 seconds, and may centre first. You adjust tilt manually. Box sorting is unverified.</p>
+          <p id="servo-demo-setup" role="status"></p>
+          <button id="servo-demo-start" class="primary" type="button" disabled>Start Automatic Servo Demo</button>
           <p id="automatic-status" role="status"></p>
-          <button id="physical-step" type="button" disabled>Start Hardware Playback</button>
+          <button id="physical-step" type="button" disabled>Start Verified Sorting Playback</button>
           <p id="dry-run-status" role="status"></p>
           <button id="physical-dry" type="button" disabled>Start Timed Dry Run · no servo movement</button>
           <button id="physical-stop" type="button">STOP</button>
@@ -299,7 +302,7 @@
 </dialog>
 <script type="module" src="./inventory.mjs"></script>
 <script type="module" src="./model-preview.mjs"></script>
-<script type="module" src="./workshop.mjs?v=device-arming-1"></script>
+<script type="module" src="./workshop.mjs?v=automatic-servo-demo-1"></script>
 <script type="module" src="./sim-preview.mjs"></script>
 </body>
 </html>

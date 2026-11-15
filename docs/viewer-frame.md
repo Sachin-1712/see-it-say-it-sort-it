@@ -104,3 +104,12 @@ accepts L/R/S/C via the same serial owner, requires operator arming for movement
 and refuses sweeps during playback. Stop remains available. No per-step confirmation
 is needed for this playback path; verified tilt and motion calibration are required
 for real sweeps. DONE means acknowledged servo motion, never measured box sorting.
+
+
+`hardware_start` additionally supports `mode:"servo_demo", manual_tilt:true` for
+the operator-authorized endpoint demonstration. It uses saved-plan direction order
+and DONE + 3-second gaps, but does not assert tilt or box sorting verification.
+`hardware_playback.servo_demo_ready` is independent of strict `automatic_ready`.
+The active mode is `servo_demo`, with `tilt_verified:false`, `sorting_verified:false`
+and final status `servo_demo_completed`. Unknown initial servo position is centred
+once at Start; a position loss later aborts instead of auto-homing/restarting.

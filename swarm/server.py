@@ -46,8 +46,8 @@ async def run(args):
                         if message.get('armed') is not True:raise ValueError('Explicit operator arming is required')
                         await playback.arm()
                     elif cmd == 'hardware_start':
-                        if message.get('mode') not in ('dry_run','hardware'):raise ValueError('Choose dry_run or hardware')
-                        await playback.start(dry_run=message['mode']=='dry_run')
+                        if message.get('mode') not in ('dry_run','hardware','servo_demo'):raise ValueError('Choose dry_run, hardware or servo_demo')
+                        await playback.start(dry_run=message['mode']=='dry_run',servo_demo=message['mode']=='servo_demo',manual_tilt=message.get('manual_tilt') is True)
                         playback_owner=ws
                     elif cmd == 'hardware_key':
                         await playback.start_keyboard(message.get('key'),message.get('armed') is True)

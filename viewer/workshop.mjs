@@ -664,9 +664,12 @@ function renderSwarmFrame(f) {
   const dry=dryRunAvailability(f,connected());
   $("physical-dry").disabled=!dry.enabled;$("physical-dry").title=dry.reason;
   $("dry-run-status").textContent=dry.reason;
+  const firstDemoStep=f.best?.plan?.actions?.[0];
+  $("servo-demo-setup").textContent=firstDemoStep?`Before Start: set MANUAL tilt to ${firstDemoStep.tilt_deg}°. The servo may centre automatically, then follows the saved directions.`:"Load a saved plan to prepare the automatic servo demo.";
+  $("servo-demo-start").disabled=!connected()||!saved||!hw.armed||!hw.servo_demo_ready||hw.running;
   $("physical-step").disabled=!connected()||!saved||!hw.armed||!hw.automatic_ready||hw.running;
   $("physical-step").title=hw.automatic_reason??"Automatic playback requires verified tilt and action profiles";
-  $("automatic-status").textContent=hw.armed?`Device armed. Automatic playback: ${hw.automatic_reason}`:"";
+  $("automatic-status").textContent=hw.armed?`Verified sorting mode: ${(hw.automatic_reason??"").replace(": use timed dry-run playback"," — requires verified tilt positioning")}. The automatic servo demo is separate.`:"";
   $("physical-connect").disabled=!connected()||hw.running;
   $("physical-connect").textContent=hw.status==="connecting"?"Connecting…":"Connect UNO Q";
   $("calibration-arm").disabled=!connected()||hw.running||!hw.connection.startsWith('Connected')||!$("calibration-present").checked;
@@ -676,7 +679,7 @@ function renderSwarmFrame(f) {
   $("physical-arm").title=hw.status==='failed'?hw.message:'Check measured hardware calibration and arm for one playback';
   $("physical-status").dataset.error=String(hw.status==='failed');
   $("playback-title").textContent=saved?'SAVED PLAN LOADED · PREVIOUSLY VALIDATED PLAN':'Load a saved plan for playback';
-  $("playback-connection").textContent=`${hw.connection} · ${hw.armed?'ARMED FOR ONE START':'NOT ARMED'} · ${hw.mode==='hardware'?'PHYSICAL PLAYBACK':'DRY RUN / IDLE'}`;
+  $("playback-connection").textContent=`${hw.connection} · ${hw.armed?'ARMED FOR ONE START':'NOT ARMED'} · ${hw.mode==='servo_demo'?'AUTOMATIC REAL SERVO DEMO · MANUAL TILT · BOX SORTING UNVERIFIED':hw.mode==='hardware'?'VERIFIED PHYSICAL PLAYBACK':hw.mode==='calibration'?'SUPERVISED REAL SERVO TESTS':hw.running?'SIMULATION ONLY':'IDLE — choose a playback mode'}`;
   $("playback-step").textContent=hw.step?`Step ${hw.step}/${hw.steps} — ${hw.box??hw.target??'Servo'} → ${(hw.destination??'').toUpperCase()}`:'';
   $("playback-tilt").textContent=hw.tilt_deg!=null?`REQUIRED MANUAL TILT: ${hw.tilt_deg}° · sweep ${(hw.direction??'').toUpperCase()} · ${hw.command?`servo command ${hw.command}`:'L/R mapping unverified'}`:'';
   $("physical-status").textContent=hw.status==='interval'?`${hw.last_acknowledged?`Completed servo step ${hw.last_acknowledged.step} (DONE acknowledged; box unverified). `:''}Next sweep in ${hw.remaining_s} · ${hw.message}`:hw.message;
@@ -775,6 +778,10 @@ $("physical-arm").onclick=()=>{
   $("physical-status").textContent='Checking hardware calibration…';
   $("physical-arm").textContent='Checking calibration…';
   send({cmd:'hardware_arm',armed:true});
+};
+$("servo-demo-start").onclick=()=>{
+  $("physical-status").textContent='Starting AUTOMATIC REAL SERVO DEMO. Adjust tilt manually; box sorting is unverified.';
+  send({cmd:'hardware_start',mode:'servo_demo',manual_tilt:true});
 };
 $("physical-step").onclick=()=>send({cmd:'hardware_start',mode:'hardware'});
 $("physical-dry").onclick=()=>{

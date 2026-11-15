@@ -35,7 +35,11 @@ class Playback:
             try:
                 self.profiles(self.bundle(),self.config_reader());automatic_ready=True;reason='Automatic plan checks passed.'
             except (ValueError,KeyError,TypeError) as error:reason=str(error)
-        return dict(self.state,automatic_ready=automatic_ready,automatic_reason=reason,connection=self.bridge.connection,armed=self.armed,calibration_armed=self.calibration_armed,running=self.running,
+        demo_ready=False
+        if self.armed:
+            try:self.demo_endpoints(self.bundle(),self.config_reader());demo_ready=True
+            except (ValueError,KeyError,TypeError):pass
+        return dict(self.state,servo_demo_ready=demo_ready,automatic_ready=automatic_ready,automatic_reason=reason,connection=self.bridge.connection,armed=self.armed,calibration_armed=self.calibration_armed,running=self.running,
                     remaining_s=max(0,math.ceil(self.state.get('next_at',0)-time.monotonic())),
                     replay_elapsed_s=min(self.state.get('replay_duration_s',0),max(0,time.monotonic()-self.state.get('replay_started_at',time.monotonic()))))
 
@@ -133,20 +137,42 @@ class Playback:
         if status['calibration']!=config['calibration_id'] or status['limits']!=config['servo_limits_deg'] or status['completion']!='VERIFIED':
             raise ValueError('Firmware calibration/limits/completion mismatch')
 
-    async def start(self,dry_run=True):
+    def demo_endpoints(self,bundle,config):
+        # Endpoint demonstration only: no assertion that these reproduce the
+        # MuJoCo action's exact start angle, speed, tilt or physical box outcome.
+        self.verify_device_config(config)
+        low,high=config['servo_limits_deg'];profiles=[]
+        timeout=config.get('command_timeout_s',5)
+        if not isinstance(timeout,(int,float)) or not math.isfinite(timeout) or not 0<timeout<=30:
+            raise ValueError('Invalid completion timeout')
+        for action in bundle['plan']['actions']:
+            direction='increasing' if action['sweep_end_deg']>action['sweep_start_deg'] else 'decreasing'
+            command=config['direction_commands'][direction]
+            end=config.get('endpoint_angles_deg',{}).get(command)
+            if not isinstance(end,(int,float)) or not math.isfinite(end) or not low<=end<=high:
+                raise ValueError('Servo demo endpoint outside verified limits')
+            profiles.append(dict(command=command,end_deg=end,timeout_s=timeout))
+        center=config.get('endpoint_angles_deg',{}).get('C')
+        if not isinstance(center,(int,float)) or not math.isfinite(center) or not low<=center<=high:
+            raise ValueError('Missing verified centering endpoint')
+        return profiles
+
+    async def start(self,dry_run=True,servo_demo=False,manual_tilt=False):
         self.require_idle()
+        if servo_demo and (dry_run or manual_tilt is not True):
+            raise ValueError('Servo demo requires explicit manual-tilt mode acknowledgement')
         bundle=copy.deepcopy(self.bundle());config=copy.deepcopy(self.config_reader())
         check_plan(self.swarm.task,bundle['plan'])
         profiles=[]
         if not dry_run:
             if not self.armed or self.armed_hash!=sha(config):raise ValueError('Arm hardware once before the initial Start action')
-            profiles=self.profiles(bundle,config)
+            profiles=self.demo_endpoints(bundle,config) if servo_demo else self.profiles(bundle,config)
         self.calibration_armed=False
         self.armed=False # every start consumes the one-time arm
         self.cancel.clear()
-        self.state=dict(run_id=uuid.uuid4().hex,status='starting',mode='dry_run' if dry_run else 'hardware',step=0,
+        self.state=dict(run_id=uuid.uuid4().hex,status='starting',mode='servo_demo' if servo_demo else 'dry_run' if dry_run else 'hardware',tilt_verified=False,sorting_verified=False,step=0,
                         steps=len(bundle['plan']['actions']),acknowledged=False,completed_steps=0,message='PREVIOUSLY VALIDATED PLAN')
-        self.job=asyncio.create_task(self.run(bundle,config,profiles,dry_run))
+        self.job=asyncio.create_task(self.run(bundle,config,profiles,dry_run,servo_demo))
 
     def guard(self,bundle,config):
         if self.cancel.is_set():raise InterruptedError('Playback stopped; no automatic restart')
@@ -160,20 +186,31 @@ class Playback:
             await asyncio.sleep(min(.05,max(0,deadline-time.monotonic())))
         guard()
 
-    async def run(self,bundle,config,profiles,dry_run):
+    async def run(self,bundle,config,profiles,dry_run,servo_demo=False):
         guard=lambda:self.guard(bundle,config)
         try:
             actions=bundle['plan']['actions']
             objects={o['instanceId']:o for o in self.swarm.task['snapshot']['objects']}
+            centered=False
+            if servo_demo:
+                status=await self.status(guard);self.verify_status(status,config)
+                if status['angle'] is None:
+                    first=actions[0]
+                    self.state.update(status='centering',command='C',tilt_deg=first['tilt_deg'],
+                        message='AUTOMATIC SERVO DEMO: centering first. Tilt is manual; box sorting is unverified.')
+                    end=await self.bridge.request('C',self.cancel,config.get('command_timeout_s',5),guard)
+                    guard()
+                    if not math.isfinite(end) or abs(end-config['endpoint_angles_deg']['C'])>.5:raise ValueError('Center acknowledgement mismatch')
+                    centered=True
             for index,action in enumerate(actions):
                 guard()
                 prepared=prepare(action,config)
                 self.state.update(step=index+1,target=action['target'],box=objects[action['target']].get('name',action['target']),
                     destination=self.swarm.task['goals'][action['target']],tilt_deg=action['tilt_deg'],
-                    direction=action.get('direction'),command=prepared['command'],acknowledged=False,next_at=0)
-                if index:
+                    direction=action.get('direction'),command=profiles[index]['command'] if servo_demo else prepared['command'],acknowledged=False,next_at=0)
+                if index or centered:
                     self.state.update(status='interval',next_at=time.monotonic()+INTERVAL_S,
-                                      message='Next sweep in countdown; set required MANUAL tilt. GEKKO does not adjust tilt.')
+                                      message='Next sweep in countdown; set MANUAL tilt. Tilt and box sorting are unverified.' if servo_demo else 'Next sweep in countdown; set required MANUAL tilt. GEKKO does not adjust tilt.')
                     await self.wait(INTERVAL_S,guard)
                 if dry_run:
                     self.state.update(status='dry_run_sweeping',message='DRY RUN — no serial command sent; no movement acknowledged')
@@ -183,20 +220,23 @@ class Playback:
                 else:
                     p=profiles[index]
                     status=await self.status(guard);self.verify_status(status,config)
-                    tilt=config['tilt_verification']
-                    actual=status['tilt'] if tilt['mode']=='sensor' else tilt['angle_deg']
-                    if actual is None or abs(actual-action['tilt_deg'])>tilt['tolerance_deg']:
-                        raise ValueError('Required manual tilt is unverified; next physical sweep blocked')
-                    if status['angle'] is None or abs(status['angle']-p['start_deg'])>.5:raise ValueError('Servo start position mismatch; no automatic reposition')
-                    self.state.update(status='sweeping',message='Sweeping — waiting for correlated DONE; box outcome unverified')
+                    if servo_demo:
+                        if status['angle'] is None:raise ValueError('Servo position lost during demo; interrupted, no automatic restart')
+                    else:
+                        tilt=config['tilt_verification']
+                        actual=status['tilt'] if tilt['mode']=='sensor' else tilt['angle_deg']
+                        if actual is None or abs(actual-action['tilt_deg'])>tilt['tolerance_deg']:
+                            raise ValueError('Required manual tilt is unverified; next physical sweep blocked')
+                        if status['angle'] is None or abs(status['angle']-p['start_deg'])>.5:raise ValueError('Servo start position mismatch; no automatic reposition')
+                    self.state.update(status='sweeping',message='AUTOMATIC SERVO DEMO — waiting for DONE. Manual tilt and box sorting are unverified.' if servo_demo else 'Sweeping — waiting for correlated DONE; box outcome unverified')
                     end=await self.bridge.request(p['command'],self.cancel,p['timeout_s'],guard)
                     guard()
                     if not math.isfinite(end) or abs(end-p['end_deg'])>.5:raise ValueError('Acknowledged endpoint mismatch')
                     self.state['completed_steps']+=1
                     self.state['last_acknowledged']=dict(step=index+1,target=action['target'],command=p['command'],timestamp=time.time())
                     self.state.update(status='step_completed',acknowledged=True,message='Completed — firmware acknowledged servo movement. Box sorting is unverified.')
-            self.state.update(status='dry_run_finished' if dry_run else 'completed',next_at=0,
-                message='Dry-run playback finished — nothing sent or acknowledged' if dry_run else 'Playback completed — all servo movements acknowledged; box outcomes unverified')
+            self.state.update(status='servo_demo_completed' if servo_demo else 'dry_run_finished' if dry_run else 'completed',next_at=0,
+                message='Automatic servo demo completed — all endpoint movements acknowledged. Manual tilt and box sorting were not verified.' if servo_demo else 'Dry-run playback finished — nothing sent or acknowledged' if dry_run else 'Playback completed — all servo movements acknowledged; box outcomes unverified')
         except (Exception,asyncio.CancelledError) as error:
             sent=False if dry_run else self.bridge.stop_now()
             self.state.update(status='interrupted' if self.cancel.is_set() else 'failed',next_at=0,

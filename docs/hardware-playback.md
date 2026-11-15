@@ -173,3 +173,28 @@ shown beside Start Hardware Playback. Manual tilt without a sensor still prevent
 unattended playback; no physical three-box action profiles have been certified.
 The firmware flags in this checkout describe this specific tested rig, not a
 factory calibration suitable for another servo.
+
+
+## Automatic servo-only demo (operator-authorized manual tilt)
+
+The operator explicitly chose automatic endpoint motion with hand-adjusted tilt,
+without claiming verified box sorting. This is a separate mode from verified
+three-box physical-plan execution; the stricter tilt/action-profile checks remain
+in force for that mode.
+
+Load Three-Box Demo → Load Saved Plan → Connect UNO Q → Arm Hardware Once →
+**Start Automatic Servo Demo**. Only Start is needed during the sequence. It uses
+the saved action order and calibrated direction mapping, sends each endpoint
+command once, waits for the correlated DONE and then a full three seconds before
+the next movement. If the firmware reports an unknown initial position, Start
+first centres the servo with C and waits DONE + three seconds before step 1.
+Set the first displayed manual tilt before Start; adjust the next tilt during the
+countdown. The can is not moved or verified by GEKKO. The status explicitly says
+manual tilt and box sorting are unverified; simulated start angles/speeds are not
+claimed to be reproduced by this endpoint-only firmware.
+
+STOP, lost connection/position, timeout, scenario/calibration mismatch and owner
+client disconnect interrupt the sequence. There is no automatic restart. No
+per-step confirmation is requested. The wire command is
+`{"cmd":"hardware_start","mode":"servo_demo","manual_tilt":true}`; the mode
+still requires explicit device arming and all saved-plan identity/evidence checks.
