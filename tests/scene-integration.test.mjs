@@ -35,7 +35,7 @@ async function harness(t, overrides = {}) {
   return { window, document: window.document, evaluate, motion, frames, tick(milliseconds) { time = milliseconds; const callbacks = [...frames.values()]; frames.clear(); callbacks.forEach(callback => callback(time)); } };
 }
 const record = { id: "box", type: "box", name: "Box", modelKey: "box" };
-const SETUP = { stackPositionMm: { x: 230, y: 220 }, sweeperPositionMm: { x: 70, y: 220 }, otherPositionMm: { x: 60, y: 60 }, otherSpacingMm: 60 };
+const SETUP = { stackPositionMm: { x: 230, y: 220 }, sweeperPositionMm: { x: 70, y: 220 }, otherPositionMm: { x: 60, y: 60 }, otherSpacingMm: 60, otherSlots: 3 };
 function boxInstance() {
   const root = new THREE.Group();
   const mesh = new THREE.Mesh(new THREE.BoxGeometry(50, 20, 35), new THREE.MeshStandardMaterial()); mesh.position.y = 10; root.add(mesh);

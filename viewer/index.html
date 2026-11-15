@@ -28,7 +28,7 @@
 
   /* ---- top bar ---------------------------------------------------------- */
   #top { position: fixed; inset: 0 0 auto 0; height: var(--top-h); z-index: 2; background: var(--panel);
-         border-bottom: 1px solid var(--border); display: grid; grid-template-columns: 1fr auto 1fr;
+         border-bottom: 1px solid var(--border); display: grid; grid-template-columns: 1fr auto;
          align-items: center; gap: 16px; padding: 0 16px; }
   .brand { display: flex; align-items: center; gap: 12px; }
   .brand b { font-size: 17px; font-weight: 700; letter-spacing: -.01em; }
@@ -38,9 +38,6 @@
            border: 1px solid var(--border); border-radius: 999px; padding: 3px 10px; }
   #phase.ready { color: var(--accent); border-color: var(--accent); }
   #phase.executing { color: #111; background: var(--accent); border-color: var(--accent); }
-  #goal { display: flex; align-items: center; gap: 8px; font-weight: 500; white-space: nowrap; }
-  #goal .sw { width: 12px; height: 12px; border-radius: 3px; }
-  #goal .muted { color: var(--dim); font-weight: 400; }
   .top-right { display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
   .best { display: flex; align-items: baseline; gap: 8px; margin-right: 6px; }
   #best { font-size: 28px; font-weight: 600; line-height: 1; }
@@ -129,7 +126,6 @@
   @media (max-width: 999px) {
     html, body { overflow: auto; height: auto; }
     #top { position: sticky; height: auto; min-height: var(--top-h); grid-template-columns: 1fr; gap: 6px; padding: 10px 16px; }
-    #goal { white-space: normal; }
     .top-right { justify-content: flex-start; flex-wrap: wrap; }
     #scene { position: relative; top: 0; right: 0; height: 58vh; }
     #side { position: static; width: auto; }
@@ -153,7 +149,6 @@
     <b>Gekko</b>
     <span id="phase">offline</span>
   </div>
-  <div id="goal"><span class="muted">Waiting for the observer</span></div>
   <div class="top-right">
     <div class="best"><span class="heading">Best</span><span id="best" class="mono">–</span></div>
     <button id="silence" disabled>Silence all</button>
@@ -171,8 +166,8 @@
 </div>
 <section id="world-tilt-panel" class="panel" hidden aria-labelledby="world-tilt-title">
   <div class="inventory-heading"><h2 id="world-tilt-title">Sweeper setup</h2><button id="world-deselect" aria-label="Close sweeper setup" type="button">✕</button></div>
-  <label for="world-tilt">Manual tilt <output id="world-tilt-value">0°</output></label><input id="world-tilt" type="range" step="1">
-  <label for="world-servo">Stick rotation <output id="world-servo-value">0°</output></label><input id="world-servo" type="range" step="1">
+  <label for="world-tilt">Tilt (raise/lower stick) <output id="world-tilt-value">0°</output></label><input id="world-tilt" type="range" step="1">
+  <label for="world-servo">Sweep (right 0° – forward 90° – left 180°) <output id="world-servo-value">0°</output></label><input id="world-servo" type="range" step="1">
   <p>Visual setup only · no hardware commands</p>
 </section>
 

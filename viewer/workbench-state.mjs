@@ -5,17 +5,25 @@ const point = (label, value) => {
   if (!Number.isFinite(value?.x) || !Number.isFinite(value?.y)) throw new Error(`Workbench config is missing ${label}.`);
   return { x: value.x, y: value.y };
 };
+// Where the sweeper goes: behind the stack on the same x, the lying can's front end
+// sweeperGapToStackMm behind the stack's back face. Returns the can centre (sweeper origin).
+export function sweeperPositionFromConfig(rig, models) {
+  const pick = rig?.zones?.pick, box = rig?.parcels?.find(p => p.id === models?.boxes?.[0]?.rigParcel);
+  const gap = models?.workbench?.sweeperGapToStackMm, can = models?.sweeper?.can;
+  if (!pick || !box || !Number.isFinite(gap) || !can) return null;
+  return { x: pick.x, y: pick.y + box.depth / 2 + gap + can.heightMm / 2 };
+}
 export class WorkbenchState {
   #items = []; #listeners = new Set(); #sequence = 0;
   constructor() { this.ready = false; this.configured = false; this.epoch = 0; this.selectedId = null; }
   configure(table, setup) {
     if (!Number.isFinite(table?.height)) throw new Error("Workbench config is missing table.height.");
-    if (!Number.isFinite(setup?.otherSpacingMm)) throw new Error("Workbench config is missing otherSpacingMm.");
+    if (!Number.isFinite(setup?.otherSpacingMm) || !(setup?.otherSlots >= 1)) throw new Error("Workbench config is missing otherSpacingMm or otherSlots.");
     this.surfaceZ = table.height;
     this.stackPosition = point("stackPositionMm", setup.stackPositionMm);
     this.sweeperPosition = point("sweeperPositionMm", setup.sweeperPositionMm);
     this.otherPosition = point("otherPositionMm", setup.otherPositionMm);
-    this.otherSpacing = setup.otherSpacingMm;
+    this.otherSpacing = setup.otherSpacingMm; this.otherSlots = setup.otherSlots;
     this.configured = true;
   }
   list() { return structuredClone(this.#items); }
@@ -36,7 +44,7 @@ export class WorkbenchState {
     // Boxes rest exactly on the bench and on each other: base = bench top + heights below.
     const baseZ = isBox ? this.surfaceZ + stack.reduce((height, item) => height + item.dimensionsMm.height, 0) : this.surfaceZ;
     const xy = isBox ? this.stackPosition : record.type === "sweeper" ? this.sweeperPosition :
-      { x: this.otherPosition.x + (this.#items.filter(item => item.type === "unknown").length % 3) * this.otherSpacing, y: this.otherPosition.y };
+      { x: this.otherPosition.x + (this.#items.filter(item => item.type === "unknown").length % this.otherSlots) * this.otherSpacing, y: this.otherPosition.y };
     const item = { instanceId: `world_${record.type}_${String(++this.#sequence).padStart(4, "0")}`, inventoryId: record.id,
       modelKey: record.modelKey, name: record.name, type: record.type, stackIndex: isBox ? stack.length : null,
       color: record.color ?? null, destination: record.destination ?? null,

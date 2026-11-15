@@ -14,48 +14,88 @@
   "sweeper": {
     "id": "sweeper",
     "name": "Cylindrical Sweeper",
-    "note": "Every value is an UNMEASURED PLACEHOLDER. Frame: can-base centre, Z-up, +x points from the can towards the box stack.",
+    "note": "Every value is an UNMEASURED PLACEHOLDER. Sweeper frame: origin on the bench top directly under the can's centre, x right, y away from the front, z up. The can lies on its side with its axis along y; its open/top end faces the boxes (-y).",
     "can": {
       "radiusMm": 33,
       "heightMm": 115,
       "massG": 55,
+      "baseCentreMm": [
+        0,
+        57.5,
+        33.6
+      ],
+      "axisZup": [
+        0,
+        -1,
+        0
+      ],
       "measured": false,
-      "_note": "diameter 66"
+      "_note": "diameter 66, length 115 along y. It rests on its rolled rims (radius 33.6), so the axis is 33.6 above the bench. baseCentreMm is the centre of the back (closed) end; axisZup points from the back end to the front end, towards the boxes."
     },
     "assemblyTilt": {
-      "pivotMm": [33, 0, 0],
-      "axisZup": [0, 1, 0],
-      "limitsDeg": [-35, 35],
+      "pivotMm": [
+        0,
+        57.5,
+        0
+      ],
+      "axisZup": [
+        1,
+        0,
+        0
+      ],
+      "limitsDeg": [
+        -20,
+        35
+      ],
       "measured": false,
-      "_note": "pivot on the bottom edge of the can on the side facing the boxes (+x). Positive tilt tips the can towards the boxes."
+      "_note": "x axis through the can's bottom-back edge. Positive tilt lowers the stick tip (and the can's front end)."
     },
     "servo": {
-      "pivotMm": [45, 8, 111],
-      "axisZup": [0, 1, 0],
+      "pivotMm": [
+        0,
+        -48.5,
+        91.6
+      ],
+      "axisZup": [
+        0,
+        0,
+        1
+      ],
       "mountRollDeg": 0,
-      "caseDimensionsLocalMm": [23, 23, 12],
+      "caseDimensionsLocalMm": [
+        23,
+        12,
+        23
+      ],
       "restDeg": 0,
-      "direction": 1,
-      "limitsDeg": [0, 180],
+      "direction": -1,
+      "limitsDeg": [
+        0,
+        180
+      ],
       "massG": 9,
       "measured": false,
-      "_note": "Shaft axis +Y kept from before. Shaft centre 4 mm below the can top (115 - 4 = 111). Case is 23 wide (x) x 12 along the shaft (y) x 23 tall (z); caseDimensionsLocalMm lists it in servo-local order (x, y, shaft). The case is clamped to the outside of the can wall facing the boxes (x 33.5 to 56.5, y -6 to 6) because a case centred on the can would sit inside it."
+      "_note": "On top of the lying can near its front end, shaft straight up. Case 23 wide (x) x 12 deep (y) x 23 tall along the shaft (caseDimensionsLocalMm is servo-local x, y, shaft); its centre is 9 mm behind the can's front end, it sits on the can's top line (z 66.6) and the shaft centre is 2 mm above the case. Servo 0 = stick to the right (+x), 90 = forward (-y), 180 = left (-x): direction -1 turns clockwise seen from above."
     },
     "stick": {
-      "lengthMm": 120,
+      "lengthMm": 140,
       "widthMm": 10,
       "thicknessMm": 3,
       "pivotFromEndMm": 5,
       "massG": 2,
       "measured": false,
-      "_note": "attached at one end to the servo horn: the horn hole is 5 mm (half the width) from the end"
+      "_note": "Lengthened from 120 to 140 mm so the sweep carries the top box's contact point about 10 mm past both bench edges (135 mm is the bare minimum, about 4 mm). Lies flat: 10 mm wide horizontally, 3 mm thick vertically. Hung on the horn 5 mm from one end."
     },
     "friction": null
   },
   "workbench": {
-    "sweeperPositionMm": {"x": 70, "y": 220, "measured": false, "_note": "can centre: 70 mm from the left edge, 80 mm from the back edge of the 300 mm deep bench"},
-    "otherPositionMm": {"x": 60, "y": 60},
-    "otherSpacingMm": 60,
-    "note": "The box stack is placed at the centre of rig.json zones.pick. Visual placement only: no collision or stability simulation."
+    "sweeperGapToStackMm": 15,
+    "otherPositionMm": {
+      "x": 40,
+      "y": 245
+    },
+    "otherSpacingMm": 170,
+    "otherSlots": 2,
+    "note": "The box stack sits at the centre of rig.json zones.pick. The sweeper sits behind it on the same x, its can's front end sweeperGapToStackMm behind the stack's back face. Visual placement only: no collision or stability simulation."
   }
 }

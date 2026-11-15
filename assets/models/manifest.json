@@ -43,11 +43,11 @@
       "name": "Cylindrical Sweeper",
       "url": "sweeper.glb",
       "type": "sweeper",
-      "origin": "can-base-centre",
+      "origin": "bench top under the can centre",
       "dimensionsMm": {
-        "width": 193.6,
-        "depth": 67.2,
-        "height": 125.5
+        "width": 168.6,
+        "depth": 116,
+        "height": 98.3
       },
       "placeholderMeasurements": true,
       "measurementSource": "config/models.json sweeper",
@@ -58,49 +58,59 @@
           "radiusMm": 33,
           "heightMm": 115,
           "massG": 55,
-          "measured": false,
-          "_note": "diameter 66"
-        },
-        "servo": {
-          "pivotMm": [
-            45,
-            8,
-            111
+          "baseCentreMm": [
+            0,
+            57.5,
+            33.6
           ],
           "axisZup": [
             0,
-            1,
+            -1,
             0
+          ],
+          "measured": false,
+          "_note": "diameter 66, length 115 along y. It rests on its rolled rims (radius 33.6), so the axis is 33.6 above the bench. baseCentreMm is the centre of the back (closed) end; axisZup points from the back end to the front end, towards the boxes."
+        },
+        "servo": {
+          "pivotMm": [
+            0,
+            -48.5,
+            91.6
+          ],
+          "axisZup": [
+            0,
+            0,
+            1
           ],
           "mountRollDeg": 0,
           "caseDimensionsLocalMm": [
             23,
-            23,
-            12
+            12,
+            23
           ],
           "restDeg": 0,
-          "direction": 1,
+          "direction": -1,
           "limitsDeg": [
             0,
             180
           ],
           "massG": 9,
           "measured": false,
-          "_note": "Shaft axis +Y kept from before. Shaft centre 4 mm below the can top (115 - 4 = 111). Case is 23 wide (x) x 12 along the shaft (y) x 23 tall (z); caseDimensionsLocalMm lists it in servo-local order (x, y, shaft). The case is clamped to the outside of the can wall facing the boxes (x 33.5 to 56.5, y -6 to 6) because a case centred on the can would sit inside it."
+          "_note": "On top of the lying can near its front end, shaft straight up. Case 23 wide (x) x 12 deep (y) x 23 tall along the shaft (caseDimensionsLocalMm is servo-local x, y, shaft); its centre is 9 mm behind the can's front end, it sits on the can's top line (z 66.6) and the shaft centre is 2 mm above the case. Servo 0 = stick to the right (+x), 90 = forward (-y), 180 = left (-x): direction -1 turns clockwise seen from above."
         },
         "stick": {
-          "lengthMm": 120,
+          "lengthMm": 140,
           "widthMm": 10,
           "thicknessMm": 3,
           "pivotFromEndMm": 5,
           "massG": 2,
           "measured": false,
-          "_note": "attached at one end to the servo horn: the horn hole is 5 mm (half the width) from the end"
+          "_note": "Lengthened from 120 to 140 mm so the sweep carries the top box's contact point about 10 mm past both bench edges (135 mm is the bare minimum, about 4 mm). Lies flat: 10 mm wide horizontally, 3 mm thick vertically. Hung on the horn 5 mm from one end."
         }
       },
       "collision": {
         "shape": "compound",
-        "frame": "Z-up millimetres",
+        "frame": "Z-up millimetres, sweeper frame",
         "parts": [
           {
             "node": "metal_can",
@@ -110,12 +120,12 @@
             "centerMm": [
               0,
               0,
-              57.5
+              33.6
             ],
             "axisZup": [
               0,
-              0,
-              1
+              -1,
+              0
             ]
           },
           {
@@ -123,27 +133,27 @@
             "shape": "box",
             "sizeMm": [
               23,
-              23,
-              12
+              12,
+              23
             ],
-            "frame": "servo_mount local",
+            "frame": "servo_mount local (shaft = local z)",
             "centerMm": [
               0,
               0,
-              -8
+              -13.5
             ]
           },
           {
             "node": "wooden_stick",
             "shape": "box",
             "sizeMm": [
-              120,
+              140,
               10,
               3
             ],
             "frame": "servo_output local",
             "centerMm": [
-              55,
+              65,
               0,
               4.5
             ]
@@ -154,22 +164,22 @@
         "tilt": {
           "node": "assembly_tilt",
           "pivotMm": [
-            33,
             0,
+            57.5,
             0
           ],
           "axisZup": [
-            0,
             1,
+            0,
             0
           ],
           "axisGltfLocal": [
+            1,
             0,
-            0,
-            -1
+            0
           ],
           "limitsDeg": [
-            -35,
+            -20,
             35
           ],
           "restDeg": 0,
@@ -179,14 +189,14 @@
           "node": "servo_output",
           "parent": "servo_mount",
           "pivotMm": [
-            45,
-            8,
-            111
+            0,
+            -48.5,
+            91.6
           ],
           "axisZup": [
             0,
-            1,
-            0
+            0,
+            1
           ],
           "axisGltfLocal": [
             0,
@@ -198,7 +208,7 @@
             180
           ],
           "restDeg": 0,
-          "direction": 1
+          "direction": -1
         }
       },
       "nodes": {
@@ -208,8 +218,9 @@
         "servoOutput": "servo_output",
         "stick": "wooden_stick"
       },
-      "measured": false
+      "measured": false,
+      "frame": "sweeper frame: origin on the bench top under the can centre, Z-up millimetres"
     }
   },
-  "note": "Physical sizes, collision and joints below match config/rig.json and config/models.json (placeholders, measured:false). The GLB geometry was baked at older sizes; viewer/model-fit.mjs scales each part at load time to these values. Blender has not been rerun."
+  "note": "Physical sizes, collision and joints below match config/rig.json and config/models.json (placeholders, measured:false). The GLB geometry was baked at older sizes and orientation (upright can, horizontal shaft); viewer/model-fit.mjs re-fits each part at load time: the can lies along y, the servo shaft points up and servo_mount is re-parented to assembly_tilt. Blender has not been rerun."
 }

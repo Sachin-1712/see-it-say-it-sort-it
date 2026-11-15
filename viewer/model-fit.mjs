@@ -44,36 +44,45 @@ function fitBox(THREE, instance, { rig, models }) {
   };
 }
 
+// Sweeper frame (config/models.json): origin on the bench top under the can's centre,
+// x right, y away from the front, z up. The can lies along y; the servo shaft is vertical.
 function fitSweeper(THREE, instance, { models }) {
   const { can, servo, stick, assemblyTilt: tilt } = models.sweeper;
   positive("Can size", can.radiusMm, can.heightMm);
   positive("Servo case size", ...servo.caseDimensionsLocalMm);
   positive("Stick size", stick.lengthMm, stick.widthMm, stick.thicknessMm);
   const { root, joints } = instance, h = can.heightMm;
+  const minus = (a, b) => a.map((v, i) => v - b[i]);
+  const dir = v => new THREE.Vector3(...toThree({ x: v[0], y: v[1], z: v[2] })).normalize();
+  const UP = new THREE.Vector3(0, 1, 0);                      // glTF-local axis of the can and of the shaft
 
-  // Tilt pivot: the assembly rotates about tilt.pivotMm; the can frame sits back at the origin.
-  node(root, "assembly_tilt").position.fromArray(toLocal(tilt.pivotMm));
-  node(root, "can_base_frame").position.fromArray(toLocal(tilt.pivotMm)).negate();
+  // Tilt: the whole assembly rotates about tilt.axisZup through tilt.pivotMm.
+  const tiltNode = node(root, "assembly_tilt");
+  tiltNode.position.fromArray(toLocal(tilt.pivotMm));
+  tiltNode.quaternion.identity();
 
-  // Can: glTF-local axes are (x, height, depth). Rims and ribs follow the generator's layout.
+  // Can: its local +Y (back end -> front end) turned to can.axisZup, back-end centre at can.baseCentreMm.
+  const canFrame = node(root, "can_base_frame");
+  canFrame.position.fromArray(toLocal(minus(can.baseCentreMm, tilt.pivotMm)));
+  canFrame.quaternion.setFromUnitVectors(UP, dir(can.axisZup));
   scaleMeshTo(node(root, "metal_can"), [2 * can.radiusMm, h, 2 * can.radiusMm]);
   node(root, "metal_can").position.set(0, h / 2 * MM, 0);
   node(root, "bottom_rim").position.set(0, 1 * MM, 0);
   node(root, "top_rim").position.set(0, (h - 1) * MM, 0);
   for (let i = 0; i < 3; i++) node(root, `can_rib_${i}`).position.set(0, h * (0.3 + i * 0.16) * MM, 0);
 
-  // Servo: the mount keeps its baked rotation (shaft axis unchanged), so the configured
-  // axis must still match it. Mount-local glTF axes: x, shaft, z.
+  // Servo: re-parented beside the can (not inside its rotated frame), shaft turned to
+  // servo.axisZup. Mount-local glTF axes: x, shaft, z.
   const mount = node(root, "servo_mount");
-  mount.position.fromArray(toLocal(servo.pivotMm));
-  const shaft = new THREE.Vector3(0, 1, 0).applyQuaternion(mount.quaternion);
-  const wanted = new THREE.Vector3(...toThree({ x: servo.axisZup[0], y: servo.axisZup[1], z: servo.axisZup[2] })).normalize();
-  if (shaft.angleTo(wanted) > 1e-6) throw new Error("config servo.axisZup differs from the pre-built model; rerun Blender to change it.");
+  tiltNode.add(mount);
+  mount.position.fromArray(toLocal(minus(servo.pivotMm, tilt.pivotMm)));
+  mount.quaternion.setFromUnitVectors(UP, dir(servo.axisZup))
+    .multiply(new THREE.Quaternion().setFromAxisAngle(UP, (servo.mountRollDeg ?? 0) * Math.PI / 180));
   const [cx, cy, cz] = servo.caseDimensionsLocalMm;          // servo-local (x, y, shaft)
   const caseMesh = node(root, "servo_case");
   scaleMeshTo(caseMesh, [cx, cz, cy]);
   caseMesh.position.set(0, -(cz / 2 + 2) * MM, 0);
-  node(root, "servo_mount_bracket").position.set(0, -(cz / 2 + 2) * MM, (cy / 2 + 1) * MM);
+  node(root, "servo_mount_bracket").position.set(0, -(cz / 2 + 2) * MM, (cy / 2 + 2) * MM);
 
   // Stick: servo-output glTF axes are (length, shaft, width).
   const stickMesh = node(root, "wooden_stick");
@@ -81,33 +90,35 @@ function fitSweeper(THREE, instance, { models }) {
   stickMesh.position.set((stick.lengthMm / 2 - stick.pivotFromEndMm) * MM, (3 + stick.thicknessMm / 2) * MM, 0);
   node(root, "horn_screw").position.set(0, (3 + stick.thicknessMm + 0.35) * MM, 0);
 
-  // Joints from config. Tilt axis is in the root frame (assembly_tilt has no base rotation).
-  const tiltAxis = new THREE.Vector3(...toThree({ x: tilt.axisZup[0], y: tilt.axisZup[1], z: tilt.axisZup[2] })).normalize();
+  // Joints from config. Tilt axis is in the root frame; the servo turns about its local shaft.
+  const tiltAxis = dir(tilt.axisZup);
   if (joints.tilt) Object.assign(joints.tilt, { axis: tiltAxis, axisGltfLocal: tiltAxis.toArray(), pivotMm: tilt.pivotMm,
-    axisZup: tilt.axisZup, limitsDeg: tilt.limitsDeg, restDeg: 0, direction: 1 });
-  if (joints.servo) Object.assign(joints.servo, { pivotMm: servo.pivotMm, axisZup: servo.axisZup,
+    axisZup: tilt.axisZup, limitsDeg: tilt.limitsDeg, restDeg: 0, direction: 1, base: tiltNode.quaternion.clone() });
+  if (joints.servo) Object.assign(joints.servo, { pivotMm: servo.pivotMm, axisZup: servo.axisZup, axis: UP.clone(),
     limitsDeg: servo.limitsDeg, restDeg: servo.restDeg, direction: servo.direction });
 
   root.updateMatrixWorld(true);
   const bounds = new THREE.Box3().setFromObject(root).getSize(new THREE.Vector3()); // mm: root is scaled x1000
   const r3 = v => Math.round(v * 1000) / 1000;
+  const canCentre = can.baseCentreMm.map((v, i) => r3(v + can.axisZup[i] * h / 2));
   return {
     ...instance.metadata,
     dimensionsMm: { width: r3(bounds.x), depth: r3(bounds.z), height: r3(bounds.y) },
     massG: can.massG + servo.massG + stick.massG, measured: false, placeholderMeasurements: true,
     measurementSource: "config/models.json sweeper",
+    frame: "sweeper frame: origin on the bench top under the can centre, Z-up millimetres",
     geometry: { can, servo, stick },
-    collision: { shape: "compound", frame: "Z-up millimetres", parts: [
-      { node: "metal_can", shape: "cylinder", radiusMm: can.radiusMm, heightMm: h, centerMm: [0, 0, h / 2], axisZup: [0, 0, 1] },
-      { node: "servo_case", shape: "box", sizeMm: [cx, cy, cz], frame: "servo_mount local", centerMm: [0, 0, -(cz / 2 + 2)] },
+    collision: { shape: "compound", frame: "Z-up millimetres, sweeper frame", parts: [
+      { node: "metal_can", shape: "cylinder", radiusMm: can.radiusMm, heightMm: h, centerMm: canCentre, axisZup: can.axisZup },
+      { node: "servo_case", shape: "box", sizeMm: [cx, cy, cz], frame: "servo_mount local (shaft = local z)", centerMm: [0, 0, -(cz / 2 + 2)] },
       { node: "wooden_stick", shape: "box", sizeMm: [stick.lengthMm, stick.widthMm, stick.thicknessMm], frame: "servo_output local",
         centerMm: [stick.lengthMm / 2 - stick.pivotFromEndMm, 0, 3 + stick.thicknessMm / 2] },
     ] },
     joints: {
       tilt: { ...instance.metadata.joints?.tilt, node: "assembly_tilt", pivotMm: tilt.pivotMm, axisZup: tilt.axisZup,
-        axisGltfLocal: toThree({ x: tilt.axisZup[0], y: tilt.axisZup[1], z: tilt.axisZup[2] }), limitsDeg: tilt.limitsDeg, restDeg: 0, direction: 1 },
-      servo: { ...instance.metadata.joints?.servo, node: "servo_output", pivotMm: servo.pivotMm, axisZup: servo.axisZup,
-        limitsDeg: servo.limitsDeg, restDeg: servo.restDeg, direction: servo.direction },
+        axisGltfLocal: toThree({ x: tilt.axisZup[0], y: tilt.axisZup[1], z: tilt.axisZup[2] }).map(v => v + 0), limitsDeg: tilt.limitsDeg, restDeg: 0, direction: 1 },
+      servo: { ...instance.metadata.joints?.servo, node: "servo_output", parent: "servo_mount", pivotMm: servo.pivotMm, axisZup: servo.axisZup,
+        axisGltfLocal: [0, 1, 0], limitsDeg: servo.limitsDeg, restDeg: servo.restDeg, direction: servo.direction },
     },
   };
 }

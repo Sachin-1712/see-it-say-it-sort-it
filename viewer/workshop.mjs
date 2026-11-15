@@ -1,6 +1,7 @@
 import { selectTab } from "./tabs.mjs";
 import { toThree, fromThree } from "./frame.mjs";
 import { Workbench } from "./workbench.mjs";
+import { sweeperPositionFromConfig } from "./workbench-state.mjs";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
@@ -557,19 +558,6 @@ function renderTop(f) {
   ph.textContent = f ? f.phase : "offline";
   ph.className = f?.phase ?? "";
   $("best").textContent = pct(f?.best?.robust);
-  const goal = $("goal");
-  goal.replaceChildren();
-  const target = f?.best?.goal?.parcel ?? (f?.items ?? []).find(i => i.zone === "pick")?.id;
-  const item = (f?.items ?? []).find(i => i.id === target);
-  const bin = f?.best?.goal?.bin ?? item?.bin;
-  if (!f) goal.innerHTML = `<span class="muted">Waiting for the observer</span>`;
-  else if (!item) goal.innerHTML = `<span class="muted">No parcel in the pick zone</span>`;
-  else {
-    const sw = document.createElement("span"); sw.className = "sw"; sw.style.background = tagColour(item.color);
-    const txt = document.createElement("span");
-    txt.textContent = `${item.id} (${item.color}) → ${bin ?? "?"} bag`;
-    goal.append(sw, txt);
-  }
   const silenced = (f?.agents ?? []).some(a => a.alive && a.silenced);
   $("silence").classList.toggle("on", silenced);
   $("silence").textContent = silenced ? "Unsilence" : "Silence all";
@@ -631,9 +619,11 @@ function connect() {
 connect();
 
 // ---- placement: independent of all observer items and arm poses ----------------
-// Sizes and positions come only from config: the stack sits at the centre of the pick zone.
+// Sizes and positions come only from config: the stack sits at the centre of the pick zone,
+// the lying can behind it on the same x (sweeperPositionFromConfig).
 workbench = new Workbench({ scene, camera, canvas: renderer.domElement, toThree: scenePose, tagColour, table,
-  setup: { ...modelConfig.workbench, stackPositionMm: zones.pick ? { x: zones.pick.x, y: zones.pick.y } : null },
+  setup: { ...modelConfig.workbench, stackPositionMm: zones.pick ? { x: zones.pick.x, y: zones.pick.y } : null,
+    sweeperPositionMm: sweeperPositionFromConfig(rig, modelConfig) },
   onBoundsChanged: () => { fitCamera(); refreshDebug(); } });
 ghostGroup.visible = false;
 $("observer-overlay").onchange = () => { ghostGroup.visible = $("observer-overlay").checked; bestLine.visible = ghostGroup.visible && !!bestPath; if (bestBox) bestBox.visible = false; };

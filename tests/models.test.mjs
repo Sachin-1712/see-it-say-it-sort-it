@@ -64,8 +64,8 @@ test("the baked box GLB is metre/Y-up with a bottom-centre origin, and fitting s
   near(size.x, p1.width); near(size.y, p1.height); near(size.z, p1.depth);
 });
 
-test("servo rotates only its output around the configured horizontal shaft; tilt moves the assembly", async () => {
-  const instance = await makeLibrary().instantiate("sweeper");
+test("fitted sweeper: the servo turns only the stick about its vertical shaft; tilt moves the assembly", async () => {
+  const instance = fitToConfig(THREE, await makeLibrary().instantiate("sweeper"), "sweeper", { rig, models: modelConfig });
   const { root, joints } = instance;
   const can = root.getObjectByName("metal_can"), stick = root.getObjectByName("wooden_stick");
   const canBefore = world(can).clone(), stickBefore = world(stick).clone(), pivotBefore = world(joints.servo.node).clone();
@@ -74,7 +74,7 @@ test("servo rotates only its output around the configured horizontal shaft; tilt
   const expectedAxis = new THREE.Vector3(configured.x, configured.z, -configured.y);
   const actualAxis = joints.servo.axis.clone().applyQuaternion(joints.servo.node.getWorldQuaternion(new THREE.Quaternion()));
   near(actualAxis.distanceTo(expectedAxis), 0);
-  assert.ok(Math.abs(actualAxis.y) < 0.01, "default shaft is explicitly horizontal");
+  assert.ok(actualAxis.y > 0.999, "shaft points straight up");
   applyJoint(joints.servo, 90);
   assert.ok(world(stick).distanceTo(stickBefore) > 50);
   near(world(can).distanceTo(canBefore), 0);
@@ -83,7 +83,6 @@ test("servo rotates only its output around the configured horizontal shaft; tilt
   applyJoint(joints.tilt, 25);
   assert.ok(world(can).distanceTo(canBefore) > 1);
   assert.ok(world(joints.servo.node).distanceTo(pivotBefore) > 1);
-  // Local servo angle is independent of its parent's manual tilt.
   near(joints.servo.node.quaternion.angleTo(joints.servo.base), Math.PI / 2);
   applyJoint(joints.tilt, 0); applyJoint(joints.servo, 0);
   near(world(stick).distanceTo(stickBefore), 0); near(world(can).distanceTo(canBefore), 0);

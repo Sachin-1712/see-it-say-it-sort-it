@@ -240,3 +240,27 @@ Press **D** in the viewer (or open `?debug=1`) for measured bounding boxes with 
 labels and a 100 mm scale bar. Every refresh prints a `console.table` of each
 object's measured size and centre in table-frame mm. The stick reads 120 × 3 × 10 in
 x × y × z because it stands on its 10 mm edge with 3 mm along the shaft.
+
+## Lying-can sweeper and the sideways sort
+
+The can lies on its side along y, behind the stack on the bench centreline, its front
+end 15 mm behind the stack (`sweeperGapToStackMm`). It rests on its rolled rims. The
+servo sits on top near the front end with its shaft straight up; servo 0° points the
+stick right (+x), 90° forward over the stack, 180° left. Manual tilt turns the whole
+assembly about an x axis through the can's bottom-back edge; positive tilt lowers the
+tip (limits -20° to 35°). The GLB was baked upright with a horizontal shaft:
+`model-fit.mjs` turns the can frame, re-parents `servo_mount` to `assembly_tilt` and
+sets the shaft vertical at load time. Blender has not been rerun.
+
+Reach (kinematic, `tests/fit.test.mjs`): with a 420 mm bench the 120 mm stick left the
+contact point about 95 mm short of each edge. Narrowing the bench to its 250 mm minimum
+left it 10 mm short; changing the gap did not help (a larger gap pushes the can off the
+back). The stick is lengthened to 140 mm (135 mm is the bare minimum). Both sides then
+work for tilts 7° to 13.5°; at 13.5° the stick first touches the top box's side face at
+servo 0° (red) or 180° (blue) and carries the contact point 10 mm past the bench edge.
+This assumes the box slides straight sideways; rotation and friction are for the
+physics simulation.
+
+Known physical problem: with the pivot on the bottom-back edge, lowering the tip drives
+the can's front end into the bench (14 mm at 7°, 27 mm at 13.5°). A real rig needs the
+can's back end raised, or the pivot moved to the front-bottom edge.

@@ -2,22 +2,23 @@
   "_note": "PLACEHOLDER measurements: realistic estimates, not measured (every block says measured:false). Units: mm, grams, degrees. Table frame: origin at the front-left corner of the bench footprint on the floor, x along the width (to the right), y along the depth (away from the front edge), z up from the floor. Angles are counter-clockwise seen from above, 0 = +x. Zones and bags give the centre (x, y) and size of a rectangle. Bags are open bins on the floor just outside the left and right bench edges: width x depth is the opening and height is the bin depth, so the rim is level with the bench top. The sweeper (can, servo, stick, tilt) is defined once, in config/models.json.",
 
   "table": {
-    "width": 420,
+    "width": 250,
     "depth": 300,
     "thickness": 25,
     "height": 90,
     "measured": false,
+    "_width": "250 mm (the minimum allowed) so the swept box can be carried past both side edges; see tests/fit.test.mjs.",
     "_height": "height is the bench top above the floor. The bench is a 25 mm slab on a support; its top is 90 mm up so the 90 mm deep bags below its edges have rims level with the bench top."
   },
 
   "zones": {
-    "pick": {"x": 230, "y": 220, "width": 110, "depth": 85, "measured": false, "_note": "around the box stack, 160 mm along +x from the can centre"},
-    "scan": {"x": 230, "y": 55, "width": 110, "depth": 85, "measured": false, "_note": "near the front edge"}
+    "pick": {"x": 125, "y": 135, "width": 110, "depth": 85, "measured": false, "_note": "around the box stack, on the bench centreline, in front of the sweeper"},
+    "scan": {"x": 125, "y": 47.5, "width": 110, "depth": 85, "measured": false, "_note": "near the front edge, on the centreline"}
   },
 
   "bags": {
-    "left":  {"x": -65, "y": 220, "width": 130, "depth": 160, "height": 90, "measured": false},
-    "right": {"x": 485, "y": 220, "width": 130, "depth": 160, "height": 90, "measured": false}
+    "left":  {"x": -65, "y": 135, "width": 130, "depth": 160, "height": 90, "measured": false},
+    "right": {"x": 315, "y": 135, "width": 130, "depth": 160, "height": 90, "measured": false}
   },
 
   "colour_to_bag": {"red": "left", "blue": "right"},

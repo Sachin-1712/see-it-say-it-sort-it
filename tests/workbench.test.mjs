@@ -9,7 +9,7 @@ import { sampleModelSurface } from "../viewer/surface-points.mjs";
 import { readFileSync } from "node:fs";
 const rig = JSON.parse(readFileSync(new URL("../config/rig.json", import.meta.url), "utf8"));
 const models = JSON.parse(readFileSync(new URL("../config/models.json", import.meta.url), "utf8"));
-const setup = { ...models.workbench, stackPositionMm: { x: rig.zones.pick.x, y: rig.zones.pick.y } };
+const setup = { ...models.workbench, stackPositionMm: { x: rig.zones.pick.x, y: rig.zones.pick.y }, sweeperPositionMm: { x: rig.zones.pick.x, y: 242.5 } };
 const configured = () => { const state = new WorkbenchState(); state.configure(rig.table, setup); return state; };
 const box = { id: "box", name: "Box", modelKey: "box", type: "box" };
 const metadata = { dimensionsMm: { width: 95, depth: 70, height: 25 }, collision: { shape: "box" } };
