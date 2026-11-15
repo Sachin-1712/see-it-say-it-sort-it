@@ -9,7 +9,7 @@ from websockets.asyncio.server import serve
 from websockets.exceptions import ConnectionClosed
 
 from .api import build_scene, rollout
-from .search import rank, search_candidates
+from .search import meets_search_goal, rank, search_candidates
 
 HOST, PORT = "localhost", 8766
 LOCAL_ORIGIN = re.compile(r"https?://(?:localhost|127\.0\.0\.1|\[::1\])(?::\d+)?")
@@ -52,7 +52,7 @@ async def dispatch(ws, request):
         if best is None or rank(result) > rank(best["result"]):
             best = payload
         await send(ws, {"type": "candidate", **payload})
-        if result["success"]:
+        if meets_search_goal(result):
             break
     await send(ws, {"type": "search_done", "attempts": attempts, "best": best})
 

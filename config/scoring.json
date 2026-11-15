@@ -5,6 +5,7 @@
   "support_tolerance_mm": 2,
   "settled_speed_mm_s": 5,
   "initial_overlap_tolerance_mm": 0.2,
+  "single_box_search": {"trials": 24, "minimum_score": 0.8, "seed": 2026},
   "robustness": {
     "friction_fraction": 0.20,
     "mass_fraction": 0.15,

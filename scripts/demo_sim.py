@@ -3,18 +3,20 @@
 import argparse
 import json
 
-from sim.api import build_scene, rollout
+from sim.api import apply_result, build_scene, rollout
 from sim.scene import demo_snapshot
-from sim.search import best_candidate
+from sim.search import best_candidate, meets_search_goal
 
 
 def summary(label, action, result, attempts):
     return {
         "case": label, "attempts": attempts, "action": action,
-        "score": result["score"], "reason": result["reason"], "target": result["target"],
+        "score": result["score"], "robust_score": result.get("robust_score"),
+        "robust_trials": result.get("robust_trials"), "reason": result["reason"], "target": result["target"],
         "others_mm": result["others"], "servo_stalled": result["servo_stalled"],
         "peak_servo_torque_nm": result.get("peak_servo_torque_nm"),
         "stack_stable": result["stack_stable"],
+        "max_contact_penetration_mm": result.get("max_contact_penetration_mm"),
     }
 
 
@@ -23,10 +25,10 @@ def report(label, scene, target, budget):
     if candidate is None:
         print(json.dumps({"case": label, "attempts": attempts, "score": 0,
                           "reason": "no clear kinematic approach in the sampled tilt and angle grid"}))
-        return False
+        return None
     action, result = candidate
     print(json.dumps(summary(label, action, result, attempts)))
-    return result["success"]
+    return result
 
 
 def main():
@@ -50,9 +52,13 @@ def main():
     result = rollout(scene, bad)
     print(json.dumps(summary("deliberately bad", bad, result, 1)))
     stack = build_scene(demo_snapshot(["red", "blue", "red"]))
-    target = stack.snapshot["objects"][2]["instanceId"]
-    report("three-stack top", stack, target, args.budget)
-    return 0 if all(single) and not result["success"] and not result["invalid"] else 1
+    ids = [item["instanceId"] for item in stack.snapshot["objects"] if item["type"] == "box"]
+    for name, target in zip(("top", "middle", "bottom"), reversed(ids)):
+        step = report(f"three-stack {name}", stack, target, args.budget)
+        if step and step["success"]:
+            stack = apply_result(stack, step)
+    verified = all(item and meets_search_goal(item) for item in single)
+    return 0 if verified and not result["success"] and not result["invalid"] else 1
 
 
 if __name__ == "__main__":

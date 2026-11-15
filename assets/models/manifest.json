@@ -45,23 +45,23 @@
       "type": "sweeper",
       "origin": "bench top under the can centre",
       "dimensionsMm": {
-        "width": 165.6,
-        "depth": 90,
-        "height": 88.7
+        "width": 167.1,
+        "depth": 100,
+        "height": 91.7
       },
       "placeholderMeasurements": true,
       "measurementSource": "config/models.json sweeper",
-      "massG": 51,
+      "massG": 29,
       "friction": null,
       "geometry": {
         "can": {
-          "radiusMm": 25,
-          "heightMm": 90,
-          "massG": 40,
+          "radiusMm": 26.5,
+          "heightMm": 100,
+          "massG": 18,
           "baseCentreMm": [
             0,
-            45,
-            25.6
+            50,
+            27.1
           ],
           "axisZup": [
             0,
@@ -69,13 +69,13 @@
             0
           ],
           "measured": false,
-          "_note": "diameter 50, length 90 along y. It rests on its rolled rims (radius 25.6), so the axis is 25.6 above the bench. baseCentreMm is the centre of the back (closed) end; axisZup points from the back end to the front end, towards the boxes."
+          "_note": "Empty slim aluminium drinks can, 53 mm in diameter and 100 mm long. The 0.6 mm rolled rims set its centre height; +y is the closed end."
         },
         "servo": {
           "pivotMm": [
             0,
-            -36,
-            82
+            -41,
+            85
           ],
           "axisZup": [
             0,
@@ -99,7 +99,7 @@
           ],
           "massG": 9,
           "measured": false,
-          "_note": "On top of the lying can near its front end, shaft straight up. The shaft centre is at z 82 so the stick's underside (shaft + 3 mm horn) is 85 above the bench: 10 mm above a 3-box stack (75) at tilt 0. The 23 mm case sits on a 6.4 mm riser on the can's top line (z 50.6): 50.6 + 6.4 + 23 + 2 = 82. Case centre 9 mm behind the can's front end. Servo 0 = stick to the right (+x), 90 = forward (-y), 180 = left (-x)."
+          "_note": "9 g micro servo on a 6.4 mm riser, shaft 2 mm above the case. The 3 mm horn holds the stick above it. The shaft is vertical at zero tilt."
         },
         "stick": {
           "lengthMm": 145,
@@ -108,7 +108,7 @@
           "pivotFromEndMm": 5,
           "massG": 2,
           "measured": false,
-          "_note": "Lengthened from 140 to 145 mm: with the can moved back the 140 mm stick carried the top box only 9.7 mm past the edges. Lies flat: 10 mm wide horizontally, 3 mm thick vertically. Hung on the horn 5 mm from one end."
+          "_note": "145 × 10 × 3 mm hardwood craft strip with the pivot 5 mm from the mounting end. The 2 g mass corresponds to approximately 460 kg/m³."
         }
       },
       "collision": {
@@ -118,12 +118,12 @@
           {
             "node": "metal_can",
             "shape": "cylinder",
-            "radiusMm": 25,
-            "heightMm": 90,
+            "radiusMm": 26.5,
+            "heightMm": 100,
             "centerMm": [
               0,
               0,
-              25.6
+              27.1
             ],
             "axisZup": [
               0,
@@ -184,7 +184,7 @@
           "node": "assembly_tilt",
           "pivotMm": [
             0,
-            -45,
+            -50,
             0
           ],
           "axisZup": [
@@ -199,7 +199,7 @@
           ],
           "limitsDeg": [
             0,
-            32.5
+            33.5
           ],
           "restDeg": 0,
           "direction": 1
@@ -209,8 +209,8 @@
           "parent": "servo_mount",
           "pivotMm": [
             0,
-            -36,
-            82
+            -41,
+            85
           ],
           "axisZup": [
             0,

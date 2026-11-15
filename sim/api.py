@@ -168,7 +168,6 @@ def rollout(scene: Scene, action, physics_params=None, seed=None) -> Result:
             return invalid_result(target_id, f"initial overlap between {pair[0]} and {pair[1]}")
 
     target_pair = tuple(sorted((target_id, "stick")))
-    floor_pair = tuple(sorted((target_id, "floor")))
     other_indices = [i for i in range(len(boxes)) if i != target_index]
     contacts = {}
     tracks = {key: [] for key in [*ids, "stick"]}
@@ -188,6 +187,8 @@ def rollout(scene: Scene, action, physics_params=None, seed=None) -> Result:
     stalled = stalled_before = False
     frame = 0
     peak_torque = 0.0
+    max_penetration = 0.0
+    deepest_pair = None
     for step in range(steps + 1):
         t = step * dt
         alpha = min(1, max(0, (t - before_s) / duration))
@@ -199,6 +200,8 @@ def rollout(scene: Scene, action, physics_params=None, seed=None) -> Result:
         for pair, distance in contact_pairs(data, labels):
             if distance <= 0:
                 contacts.setdefault(pair, round(t, 6))
+                if -distance > max_penetration:
+                    max_penetration, deepest_pair = -distance, pair
         if t + dt / 2 >= frame / rate:
             timestamp = frame / rate
             for key, body, position in zip(ids, body_ids, positions):
@@ -231,15 +234,16 @@ def rollout(scene: Scene, action, physics_params=None, seed=None) -> Result:
     if data.warning.number.any():
         return invalid_result(target_id, "MuJoCo reported a numerical warning")
     rotations = data.xmat[body_ids].reshape(-1, 3, 3)
-    vertical_extent = np.einsum("ij,ij->i", abs(rotations[:, 2, :]), model.geom_size[box_geom_ids]) / MM
+    extents = np.einsum("nij,nj->ni", abs(rotations), model.geom_size[box_geom_ids]) / MM
     final = {}
     for index, (key, position, rotation) in enumerate(zip(ids, positions, rotations)):
         final[key] = dict(zip(("x", "y", "z", "roll", "pitch", "yaw"), pose(position, rotation)))
-        final[key]["baseZ"] = final[key]["z"] - vertical_extent[index]
+        final[key]["baseZ"] = final[key]["z"] - extents[index, 2]
     item = boxes[target_index][1]
     target_pose = final[target_id]
-    bag = landed_bag(target_pose, vertical_extent[target_index], cfg["rig"]["bags"],
-                     floor_pair in contacts, scoring["support_tolerance_mm"])
+    bags = cfg["rig"]["bags"]
+    touched_bases = {name for name in bags if tuple(sorted((target_id, f"bag_{name}_base"))) in contacts}
+    bag = landed_bag(target_pose, extents[target_index], bags, touched_bases, scoring["support_tolerance_mm"])
     others = {ids[i]: float(math.sqrt(max_motion[i]) / MM) for i in other_indices}
 
     # A remaining parcel must be upright and supported above the floor, directly
@@ -267,7 +271,8 @@ def rollout(scene: Scene, action, physics_params=None, seed=None) -> Result:
     result.update(
         action=action, realized_tilt_deg=tilt, servo_stalled=stalled, servo_stalled_before_contact=stalled_before,
         servo_final_deg=math.degrees(data.qpos[qpos]), peak_servo_torque_nm=float(peak_torque),
-        trajectories=tracks, final_poses=final,
+        trajectories=tracks, final_poses=final, max_contact_penetration_mm=float(max_penetration / MM),
+        deepest_contact_pair=list(deepest_pair) if deepest_pair else None,
         contacts=[dict(t_s=t, body_a=a, body_b=b) for (a, b), t in contacts.items()],
     )
     return result

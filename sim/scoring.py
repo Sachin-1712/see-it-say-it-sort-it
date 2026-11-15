@@ -5,13 +5,15 @@ import math
 import numpy as np
 
 
-def landed_bag(position, vertical_extent_mm, bags, floor_contact, tolerance):
-    if floor_contact and abs(position["z"] - vertical_extent_mm) <= tolerance:
-        for name, bag in bags.items():
-            if (abs(position["x"] - bag["x"]) <= bag["width"] / 2
-                    and abs(position["y"] - bag["y"]) <= bag["depth"] / 2
-                    and position["z"] + vertical_extent_mm <= bag["height"]):
-                return name
+def landed_bag(position, extent_mm, bags, base_contacts, tolerance):
+    for name, bag in bags.items():
+        wall = bag["wall_thickness"]
+        if (name in base_contacts
+                and abs(position["z"] - extent_mm[2] - wall) <= tolerance
+                and abs(position["x"] - bag["x"]) + extent_mm[0] <= bag["width"] / 2 - wall + tolerance
+                and abs(position["y"] - bag["y"]) + extent_mm[1] <= bag["depth"] / 2 - wall + tolerance
+                and position["z"] + extent_mm[2] <= bag["height"]):
+            return name
     return "none"
 
 

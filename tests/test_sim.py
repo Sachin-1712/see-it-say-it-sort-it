@@ -13,6 +13,9 @@ def test_empty_bench_steps():
     mujoco.mj_step(model, data, nstep=1000)
     assert model.njnt == 0
     assert model.geom("bench").id >= 0
+    for bag in ("left", "right"):
+        for part in ("base", "front", "back", "left", "right"):
+            assert model.geom(f"bag_{bag}_{part}").id >= 0
     assert np.isclose(data.time, 1000 * model.opt.timestep)
     assert not data.warning.number.any()
 
@@ -28,7 +31,8 @@ def test_three_independent_boxes_rest_on_contacts():
     drift_mm = np.linalg.norm((data.xpos - initial) * 1000, axis=1).max()
     print(f"5 s stack drift: {drift_mm:.6f} mm")
     assert model.njnt == 3
-    assert drift_mm < 1
+    assert drift_mm < 0.1
+    assert np.abs(data.qvel).max() < 1e-5
     assert not data.warning.number.any()
 
 
@@ -79,6 +83,10 @@ def test_single_box_rehearsals_both_bags_and_deliberate_miss():
         print(f"{bag}: {attempts} attempts, {action}, {result['target']}, {result['reason']}")
         assert result["success"], result["reason"]
         assert result["target"]["landed_bag"] == bag
+        assert result["robust_score"] >= 0.8
+        assert result["max_contact_penetration_mm"] < 2
+        assert any({contact["body_a"], contact["body_b"]} == {key, f"bag_{bag}_base"}
+                   for contact in result["contacts"])
         assert any({contact["body_a"], contact["body_b"]} == {key, "stick"}
                    for contact in result["contacts"])
         assert result["trajectories"]["stick"][1][0] == 0.05
@@ -90,18 +98,27 @@ def test_single_box_rehearsals_both_bags_and_deliberate_miss():
     assert miss["reason"] == "stick never contacted target"
 
 
-def test_top_search_records_a_physics_outcome():
+def test_stack_sorts_in_sequence_without_disturbing_remaining_parcels():
+    from sim.api import apply_result, rollout_sequence
     from sim.search import best_candidate
 
-    scene = build_scene(demo_snapshot(["red", "blue", "red"]))
-    key = scene.snapshot["objects"][2]["instanceId"]
-    best, attempts = best_candidate(scene, key)
-    assert attempts > 0
-    action, result = best
-    print(f"stack top: {attempts} attempts, {action}, {result['target']}, {result['others']}, {result['reason']}")
-    assert not result["invalid"]
-    assert result["score"] in (0.0, 1.0)
-    assert len(result["others"]) == 2
+    original = build_scene(demo_snapshot(["red", "blue", "red"]))
+    scene = original
+    actions = []
+    for obj in reversed(original.snapshot["objects"][:-1]):
+        key = obj["instanceId"]
+        best, attempts = best_candidate(scene, key)
+        assert best is not None
+        action, result = best
+        print(f"stack {key}: {attempts} attempts, {action}, {result['target']}, "
+              f"{result['others']}, {result['reason']}")
+        assert result["success"], result["reason"]
+        assert result["target"]["landed_bag"] == obj["destination"]
+        assert result["stack_stable"] and not result["disturbed"]
+        actions.append(action)
+        scene = apply_result(scene, result)
+    assert all(result["success"] for result in rollout_sequence(original, actions))
+    assert [obj["type"] for obj in scene.snapshot["objects"]] == ["sweeper"]
 
 
 def test_robustness_sequence_deterministic_and_immutable():

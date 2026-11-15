@@ -70,8 +70,10 @@ test("fitted GLB parts match the config sizes, with the can lying along y and th
   const caseBox = tableBox(root.getObjectByName("servo_case")), canBox = tableBox(root.getObjectByName("metal_can"));
   near(tableBox(root.getObjectByName("servo_mount_bracket")).min.z, canBox.max.z, 1e-4);
   near(caseBox.min.z, canBox.max.z + servo.riserMm, 1e-4);
-  // At tilt 0 the stick's underside is 10 mm above a 3-box stack.
-  near(tableBox(root.getObjectByName("wooden_stick")).min.z, 3 * rig.parcels[0].height + 10, 1e-4);
+  // At zero tilt the configured horn must sit above the three-box stack.
+  const stickBottom = tableBox(root.getObjectByName("wooden_stick")).min.z;
+  near(stickBottom, servo.pivotMm[2] + servo.hornRiseMm, 1e-4);
+  assert.ok(stickBottom > 3 * rig.parcels[0].height);
   assert.ok(caseBox.min.y >= canBox.min.y && caseBox.min.y - canBox.min.y < 10, "servo is near the can's front end");
   const shaft = fromThree(root.getObjectByName("servo_output").getWorldPosition(new THREE.Vector3()).toArray());
   near(shaft.z, caseBox.max.z + 2, 1e-4); assert.deepEqual(servo.axisZup, [0, 0, 1]);

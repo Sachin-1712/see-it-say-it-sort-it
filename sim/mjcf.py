@@ -86,6 +86,25 @@ def add_sweeper(root, world, item, spec, settings, tilt_deg):
                forcelimited="true", forcerange=vector((-torque, torque)))
 
 
+def add_bags(world, bags, contact):
+    """Add four rigid walls and a thin bottom to each open bin."""
+    # A parcel's friction takes priority on the deck. Stiff tray surfaces
+    # take priority inside bins so impacts cannot sink through the thin plastic.
+    surface = dict(priority="2", solref=vector(contact["solref"]), solimp=vector(contact["solimp"]))
+    for name, bag in bags.items():
+        x, y = bag["x"], bag["y"]
+        w, d, h = bag["width"] / 2, bag["depth"] / 2, bag["height"] / 2
+        t = bag["wall_thickness"] / 2
+        SubElement(world, "geom", name=f"bag_{name}_base", type="box",
+                   pos=si((x, y, t)), size=si((w, d, t)), **surface)
+        for label, px, py, sx, sy in (
+            ("back", x, y + d - t, w, t), ("front", x, y - d + t, w, t),
+            ("left", x - w + t, y, t, d - 2 * t), ("right", x + w - t, y, t, d - 2 * t),
+        ):
+            SubElement(world, "geom", name=f"bag_{name}_{label}", type="box",
+                       pos=si((px, py, h)), size=si((sx, sy, h)), **surface)
+
+
 def scene_xml(scene, *, tilt_deg=None, torque_cap=None):
     """Generate the MJCF in SI for the scene and locked hinge angle."""
     cfg = scene.config()
@@ -108,6 +127,7 @@ def scene_xml(scene, *, tilt_deg=None, torque_cap=None):
                pos=si((width / 2, depth / 2, height - thickness / 2)),
                size=si((width / 2, depth / 2, thickness / 2)))
     SubElement(world, "geom", name="floor", type="plane", size="0 0 0.1")
+    add_bags(world, cfg["rig"]["bags"], sim["bag_contact"])
     for index, item in enumerate(scene.snapshot["objects"]):
         if item["type"] == "sweeper":
             locked = item.get("tiltDeg", 0) if tilt_deg is None else tilt_deg
