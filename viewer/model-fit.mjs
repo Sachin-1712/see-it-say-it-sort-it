@@ -83,20 +83,26 @@ function fitSweeper(THREE, instance, { models }) {
   mount.position.fromArray(toLocal(minus(servo.pivotMm, tilt.pivotMm)));
   mount.quaternion.setFromUnitVectors(UP, dir(servo.axisZup))
     .multiply(new THREE.Quaternion().setFromAxisAngle(UP, (servo.mountRollDeg ?? 0) * Math.PI / 180));
+  const gap = servo.caseShaftGapMm, horn = servo.hornRiseMm;
   const [cx, cy, cz] = servo.caseDimensionsLocalMm;          // servo-local (x, y, shaft)
   const caseMesh = node(root, "servo_case");
   scaleMeshTo(caseMesh, [cx, cz, cy]);
-  caseMesh.position.set(0, -(cz / 2 + 2) * MM, 0);
+  caseMesh.position.set(0, -(cz / 2 + gap) * MM, 0);
   // The bracket becomes the riser block between the can's top line and the case.
   const riser = servo.riserMm ?? 0, bracket = node(root, "servo_mount_bracket");
   bracket.visible = riser > 0;
-  if (riser > 0) { scaleMeshTo(bracket, [cx, riser, cy]); bracket.position.set(0, -(cz + 2 + riser / 2) * MM, 0); }
+  if (riser > 0) { scaleMeshTo(bracket, [cx, riser, cy]); bracket.position.set(0, -(cz + gap + riser / 2) * MM, 0); }
+
+  // A continuous output shaft/horn overlaps the case and meets the stick underside.
+  const hornMesh = node(root, "servo_horn");
+  scaleMeshTo(hornMesh, [8, gap + horn + 0.4, 8]);
+  hornMesh.position.set(0, (horn - gap - 0.4) / 2 * MM, 0);
 
   // Stick: servo-output glTF axes are (length, shaft, width).
   const stickMesh = node(root, "wooden_stick");
   scaleMeshTo(stickMesh, [stick.lengthMm, stick.thicknessMm, stick.widthMm]);
-  stickMesh.position.set((stick.lengthMm / 2 - stick.pivotFromEndMm) * MM, (3 + stick.thicknessMm / 2) * MM, 0);
-  node(root, "horn_screw").position.set(0, (3 + stick.thicknessMm + 0.35) * MM, 0);
+  stickMesh.position.set((stick.lengthMm / 2 - stick.pivotFromEndMm) * MM, (horn + stick.thicknessMm / 2) * MM, 0);
+  node(root, "horn_screw").position.set(0, (horn + stick.thicknessMm + 0.35) * MM, 0);
 
   // Joints from config. Tilt axis is in the root frame; the servo turns about its local shaft.
   const tiltAxis = dir(tilt.axisZup);
@@ -118,11 +124,11 @@ function fitSweeper(THREE, instance, { models }) {
     geometry: { can, servo, stick },
     collision: { shape: "compound", frame: "Z-up millimetres, sweeper frame", parts: [
       { node: "metal_can", shape: "cylinder", radiusMm: can.radiusMm, heightMm: h, centerMm: canCentre, axisZup: can.axisZup },
-      { node: "servo_case", shape: "box", sizeMm: [cx, cy, cz], frame: "servo_mount local (shaft = local z)", centerMm: [0, 0, -(cz / 2 + 2)] },
+      { node: "servo_case", shape: "box", sizeMm: [cx, cy, cz], frame: "servo_mount local (shaft = local z)", centerMm: [0, 0, -(cz / 2 + gap)] },
       ...(servo.riserMm > 0 ? [{ node: "servo_mount_bracket", shape: "box", sizeMm: [cx, cy, servo.riserMm], frame: "servo_mount local (shaft = local z)",
-        centerMm: [0, 0, -(cz + 2 + servo.riserMm / 2)], role: "riser" }] : []),
+        centerMm: [0, 0, -(cz + gap + servo.riserMm / 2)], role: "riser" }] : []),
       { node: "wooden_stick", shape: "box", sizeMm: [stick.lengthMm, stick.widthMm, stick.thicknessMm], frame: "servo_output local",
-        centerMm: [stick.lengthMm / 2 - stick.pivotFromEndMm, 0, 3 + stick.thicknessMm / 2] },
+        centerMm: [stick.lengthMm / 2 - stick.pivotFromEndMm, 0, horn + stick.thicknessMm / 2] },
     ] },
     joints: {
       tilt: { ...instance.metadata.joints?.tilt, node: "assembly_tilt", pivotMm: tilt.pivotMm, axisZup: tilt.axisZup,

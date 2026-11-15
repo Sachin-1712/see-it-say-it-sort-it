@@ -134,7 +134,7 @@ def build_box(spec, rig, output):
         "origin": "bottom-centre", "dimensionsMm": {"width": width, "depth": depth, "height": height},
         "massG": mass, "collision": {"shape": "box", "sizeMm": dimensions, "centerMm": [0, 0, height / 2]},
         "measurementSource": f'config/rig.json parcels.{spec["rigParcel"]}' if parcel else "config/models.json fallbackDimensionsMm",
-        "placeholderMeasurements": True, "friction": None,
+        "placeholderMeasurements": True, "measured": False, "friction": None,
         "nodes": {"root": spec["id"], "body": "parcel_body"},
     }
 
@@ -148,36 +148,39 @@ def build_sweeper(spec, output):
     plastic = material("Servo graphite case", "#3D3D3D", roughness=0.45)
     dark = material("Servo mount and horn", "#303030", roughness=0.6)
     wood = material("Muted grey wooden sweeper", "#777777", roughness=0.85)
-    # Asset origin is can-base centre. The tilt pivot may be elsewhere in that frame.
+    # Asset origin is on the bench beneath the can centre. Pivots share that frame.
     root = empty("sweeper")
     root["modelKey"] = "sweeper"
     root["placeholderMeasurements"] = True
     assembly = empty("assembly_tilt", root, tilt["pivotMm"])
     assembly["rotationAxisGltf"] = gltf_vector(tilt_axis)
-    assembly["role"] = "manual assembly tilt; preview only"
-    body_frame = empty("can_base_frame", assembly, -Vector(tilt["pivotMm"]))
+    assembly["role"] = "manual assembly tilt; locked during each physical sweep"
+    body_frame = empty("can_base_frame", assembly, Vector(can["baseCentreMm"]) - Vector(tilt["pivotMm"]))
+    body_frame.rotation_mode = "QUATERNION"
+    body_frame.rotation_quaternion = Vector((0, 0, 1)).rotation_difference(axis(can["axisZup"]))
     cylinder("metal_can", can["radiusMm"], can["heightMm"], (0, 0, can["heightMm"] / 2), body_frame, steel)
     for name, z in (("bottom_rim", 1), ("top_rim", can["heightMm"] - 1)):
         cylinder(name, can["radiusMm"] + 0.6, 2, (0, 0, z), body_frame, rim)
     for i in range(3):
         cylinder(f"can_rib_{i}", can["radiusMm"] + 0.15, 0.7,
                  (0, 0, can["heightMm"] * (0.3 + i * 0.16)), body_frame, steel, 0.1)
-    mount = empty("servo_mount", body_frame, servo["pivotMm"])
+    mount = empty("servo_mount", assembly, Vector(servo["pivotMm"]) - Vector(tilt["pivotMm"]))
     mount.rotation_mode = "QUATERNION"
     mount.rotation_quaternion = (Vector((0, 0, 1)).rotation_difference(servo_axis)
                                  @ Quaternion((0, 0, 1), math.radians(servo.get("mountRollDeg", 0))))
     sx, sy, sz = servo["caseDimensionsLocalMm"]
-    box("servo_case", (sx, sy, sz), (0, 0, -sz / 2 - 2), mount, plastic, 0.7)
-    box("servo_mount_bracket", (sx + 8, 4, sz + 4), (0, -sy / 2 - 1, -sz / 2 - 2), mount, dark)
+    gap, horn, riser = servo["caseShaftGapMm"], servo["hornRiseMm"], servo.get("riserMm", 0)
+    box("servo_case", (sx, sy, sz), (0, 0, -sz / 2 - gap), mount, plastic, 0.7)
+    box("servo_mount_bracket", (sx, sy, riser), (0, 0, -sz - gap - riser / 2), mount, dark, 0.1)
     output_node = empty("servo_output", mount)
     output_node.rotation_euler.z = math.radians(servo["restDeg"])
     output_node["rotationAxisGltf"] = [0.0, 1.0, 0.0]  # Blender local +Z exported to glTF local +Y
     output_node["direction"] = servo["direction"]
     output_node["role"] = "servo output; rotates stick only"
-    cylinder("servo_horn", 6, 3, (0, 0, 1.5), output_node, dark)
-    center = [stick["lengthMm"] / 2 - stick["pivotFromEndMm"], 0, 3 + stick["thicknessMm"] / 2]
+    cylinder("servo_horn", 4, gap + horn + 0.4, (0, 0, (horn - gap - 0.4) / 2), output_node, dark)
+    center = [stick["lengthMm"] / 2 - stick["pivotFromEndMm"], 0, horn + stick["thicknessMm"] / 2]
     box("wooden_stick", (stick["lengthMm"], stick["widthMm"], stick["thicknessMm"]), center, output_node, wood, 0.4)
-    cylinder("horn_screw", 1.5, 0.7, (0, 0, 3 + stick["thicknessMm"] + 0.35), output_node, rim, 0.1)
+    cylinder("horn_screw", 1.5, 0.7, (0, 0, horn + stick["thicknessMm"] + 0.35), output_node, rim, 0.1)
     bpy.context.view_layer.update()
     corners = [obj.matrix_world @ Vector(corner) for obj in bpy.context.scene.objects
                if obj.type == "MESH" for corner in obj.bound_box]
@@ -185,13 +188,14 @@ def build_sweeper(spec, output):
     dimensions = dict(zip(("width", "depth", "height"), (round(value, 3) for value in extents)))
     export(output / "sweeper.glb")
     return {
-        "name": spec["name"], "url": "sweeper.glb", "type": "sweeper", "origin": "can-base-centre", "dimensionsMm": dimensions,
-        "placeholderMeasurements": True, "measurementSource": "config/models.json sweeper",
+        "name": spec["name"], "url": "sweeper.glb", "type": "sweeper", "origin": "bench under can centre", "dimensionsMm": dimensions,
+        "placeholderMeasurements": True, "measured": False, "measurementSource": "config/models.json sweeper",
         "massG": can["massG"] + servo["massG"] + stick["massG"], "friction": spec["friction"],
         "geometry": {"can": can, "servo": servo, "stick": stick},
-        "collision": {"shape": "compound", "frame": "Z-up millimetres", "parts": [
-            {"node": "metal_can", "shape": "cylinder", "radiusMm": can["radiusMm"], "heightMm": can["heightMm"], "centerMm": [0, 0, can["heightMm"] / 2], "axisZup": [0, 0, 1]},
-            {"node": "servo_case", "shape": "box", "sizeMm": servo["caseDimensionsLocalMm"], "frame": "servo_mount local", "centerMm": [0, 0, -sz / 2 - 2]},
+        "collision": {"shape": "compound", "frame": "Z-up millimetres, sweeper frame", "parts": [
+            {"node": "metal_can", "shape": "cylinder", "radiusMm": can["radiusMm"], "heightMm": can["heightMm"], "centerMm": list(Vector(can["baseCentreMm"]) + axis(can["axisZup"]) * can["heightMm"] / 2), "axisZup": can["axisZup"]},
+            {"node": "servo_case", "shape": "box", "sizeMm": servo["caseDimensionsLocalMm"], "frame": "servo_mount local (shaft = local z)", "centerMm": [0, 0, -sz / 2 - gap]},
+            *([{"node": "servo_mount_bracket", "shape": "box", "sizeMm": [sx, sy, riser], "frame": "servo_mount local (shaft = local z)", "centerMm": [0, 0, -sz - gap - riser / 2], "role": "riser"}] if riser > 0 else []),
             {"node": "wooden_stick", "shape": "box", "sizeMm": [stick["lengthMm"], stick["widthMm"], stick["thicknessMm"]], "frame": "servo_output local", "centerMm": center}
         ]},
         "joints": {

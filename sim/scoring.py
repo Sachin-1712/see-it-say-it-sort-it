@@ -9,7 +9,7 @@ def landed_bag(position, extent_mm, bags, base_contacts, tolerance):
     for name, bag in bags.items():
         wall = bag["wall_thickness"]
         if (name in base_contacts
-                and abs(position["z"] - extent_mm[2] - wall) <= tolerance
+                and position["z"] - extent_mm[2] >= wall - tolerance
                 and abs(position["x"] - bag["x"]) + extent_mm[0] <= bag["width"] / 2 - wall + tolerance
                 and abs(position["y"] - bag["y"]) + extent_mm[1] <= bag["depth"] / 2 - wall + tolerance
                 and position["z"] + extent_mm[2] <= bag["height"]):

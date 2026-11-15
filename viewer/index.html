@@ -159,7 +159,7 @@
 <main id="scene" aria-label="Interactive workbench"></main>
 <div id="workbench-toolbar" class="panel">
   <div><b>Workbench</b><span id="world-count">0 objects · Visual placement</span></div>
-  <div class="world-actions"><button id="world-reset-view" type="button">Reset view</button><button id="world-clear" type="button">Clear workbench</button></div>
+  <div class="world-actions"><button id="world-reset-view" type="button">Reset view</button><button id="swarm-demo" type="button">Load Three-Box Demo</button><button id="swarm-plan" type="button">Plan workbench</button><button id="world-clear" type="button">Clear workbench</button></div>
   <label class="observer-toggle"><input id="observer-overlay" type="checkbox"> Show observer rehearsals</label>
   <label class="sr-only" for="world-selection">Select placed object</label><select id="world-selection" aria-label="Select placed object"><option value="">No object selected</option></select>
   <p id="world-message" role="status">Capture an object, then click its inventory card to place it.</p>
@@ -168,7 +168,8 @@
   <div class="inventory-heading"><h2 id="world-tilt-title">Sweeper setup</h2><button id="world-deselect" aria-label="Close sweeper setup" type="button">✕</button></div>
   <label for="world-tilt">Tilt (raise/lower stick) <output id="world-tilt-value">0°</output></label><input id="world-tilt" type="range" step="1">
   <label for="world-servo">Sweep (right 0° – forward 90° – left 180°) <output id="world-servo-value">0°</output></label><input id="world-servo" type="range" step="1">
-  <p>Visual setup only · no hardware commands</p>
+  <button id="world-physics-run" type="button">Find &amp; run physical sweep</button>
+  <p>Release Sweep to run MuJoCo at 280°/s. Tilt is manual setup; park at 0° or 180° first. Find &amp; run chooses a setup for the top box. Simulation only · no hardware commands.</p>
 </section>
 
 <aside id="side">
@@ -198,7 +199,10 @@
         <div id="inventory-grid"></div>
         <p class="inventory-note">Click a captured object to place it on the workbench. Box clicks extend the stack. Photos and placement stay in this tab only.</p>
       </div>
-      <div class="view" id="view-agents" role="tabpanel" aria-labelledby="tab-agents" hidden><div id="rows"></div></div>
+      <div class="view" id="view-agents" role="tabpanel" aria-labelledby="tab-agents" hidden><div id="swarm-status" role="status">No simulation data</div>
+        <label for="swarm-isolate">Show agent</label><select id="swarm-isolate"><option value="">All agents</option></select>
+        <div id="rows"></div><div id="swarm-activity" aria-label="Agent activity"></div>
+        <div id="swarm-plan-details"></div></div>
       <div class="view" id="view-outcomes" role="tabpanel" aria-labelledby="tab-outcomes" hidden>
         <div class="metric"><span class="k">Attempts tested</span><span class="v mono" id="m-attempts">0</span></div>
         <div class="metric"><span class="k">Successful pushes found</span><span class="v mono" id="m-success">0</span></div>

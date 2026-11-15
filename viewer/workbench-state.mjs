@@ -1,4 +1,4 @@
-// JSON-ready simulation coordinates: millimetres, Z-up. Visual placement, not physics.
+// JSON-ready simulation coordinates: millimetres, Z-up. Placement and retained physics poses.
 // Every size and position comes from config (via configure) or from the fitted model's
 // metadata. There are no built-in fallbacks: missing config is an error.
 const point = (label, value) => {
@@ -40,9 +40,10 @@ export class WorkbenchState {
     }
     const dimensions = structuredClone(metadata?.dimensionsMm);
     if (![dimensions?.width, dimensions?.depth, dimensions?.height].every(value => Number.isFinite(value) && value > 0)) throw new Error("Model dimensions are missing or invalid.");
-    const isBox = record.type === "box", stack = this.#items.filter(item => item.type === "box");
+    const isBox = record.type === "box", stack = this.#items.filter(item => item.type === "box" &&
+      Math.abs(item.position.x - this.stackPosition.x) < 1 && Math.abs(item.position.y - this.stackPosition.y) < 1 && item.baseZ >= this.surfaceZ - 1);
     // Boxes rest exactly on the bench and on each other: base = bench top + heights below.
-    const baseZ = isBox ? this.surfaceZ + stack.reduce((height, item) => height + item.dimensionsMm.height, 0) : this.surfaceZ;
+    const baseZ = isBox ? stack.reduce((top, item) => Math.max(top, item.position.z + item.dimensionsMm.height / 2), this.surfaceZ) : this.surfaceZ;
     const xy = isBox ? this.stackPosition : record.type === "sweeper" ? this.sweeperPosition :
       { x: this.otherPosition.x + (this.#items.filter(item => item.type === "unknown").length % this.otherSlots) * this.otherSpacing, y: this.otherPosition.y };
     const item = { instanceId: `world_${record.type}_${String(++this.#sequence).padStart(4, "0")}`, inventoryId: record.id,
@@ -61,6 +62,32 @@ export class WorkbenchState {
     const item = this.#items.find(item => item.instanceId === id), limits = item?.jointLimits[name];
     if (!limits || !Number.isFinite(Number(degrees))) return;
     item[name === "tilt" ? "tiltDeg" : "servoDeg"] = Math.max(limits[0], Math.min(limits[1], Number(degrees)));
+    this.notify();
+  }
+  loadSnapshot(snapshot, metadata) {
+    this.#items = snapshot.objects.map((item, index) => {
+      const model = metadata[item.instanceId];
+      return {...structuredClone(item), inventoryId:`demo_${item.instanceId}`, modelKey:item.type,
+        name:item.name ?? (item.type === "box" ? "Box" : "Cylindrical Sweeper"),
+        stackIndex:item.type === "box" ? index : null, dimensionsMm:structuredClone(item.dimensionsMm ?? model.dimensionsMm),
+        tiltDeg:item.tiltDeg ?? 0, servoDeg:item.servoDeg ?? 0,
+        jointLimits:{tilt:model.joints?.tilt.limitsDeg ?? null,servo:model.joints?.servo.limitsDeg ?? null}};
+    });
+    this.selectedId=this.#items.find(item=>item.type === "sweeper")?.instanceId ?? null;
+    this.notify();
+  }
+  applyPhysics(result, sweeperId) {
+    if (result.invalid) return;
+    for (const item of this.#items) {
+      const pose = result.final_poses[item.instanceId];
+      if (item.type === "box" && pose) {
+        item.position = { x: pose.x, y: pose.y, z: pose.z };
+        for (const key of ["baseZ", "roll", "pitch", "yaw"]) item[key] = pose[key];
+        item.simulated = true;
+      } else if (item.instanceId === sweeperId) {
+        item.tiltDeg = result.realized_tilt_deg; item.servoDeg = result.servo_final_deg;
+      }
+    }
     this.notify();
   }
   clear() { this.epoch++; this.#items = []; this.selectedId = null; this.notify(); }

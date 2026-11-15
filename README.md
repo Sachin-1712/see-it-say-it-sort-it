@@ -1,3 +1,13 @@
+# GEKKO
+
+Real decentralized MuJoCo planning is available on branch `sim`.
+Run `.venv312/bin/python -m swarm.server --workers 8` and open
+`http://localhost:8081/viewer/` after starting a static server on port 8081.
+Click **Load Three-Box Demo**. See [docs/swarm.md](docs/swarm.md) for setup,
+architecture, controls, reliability reports and physical limitations.
+UNO Q execution is disabled at the operator's request. The old fake observer
+is a legacy development tool, not the real planning backend.
+
 # Gekko
 
 A DurHack camera-to-3D workbench: capture an object, confirm its identity, watch

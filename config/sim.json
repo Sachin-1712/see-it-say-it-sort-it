@@ -23,7 +23,7 @@
   "settle_before_s": 0.15,
   "settle_after_s": 0.85,
   "max_sweep_duration_s": 12,
-  "sample_rate_hz": 20,
+  "sample_rate_hz": 60,
   "tilt_resolution_deg": 0.5,
   "alignment_servo_resolution_deg": 1,
   "demo_speeds_deg_s": [90, 150, 220, 280, 320, 60],

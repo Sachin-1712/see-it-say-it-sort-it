@@ -63,20 +63,22 @@ test("fitted GLB parts match the config sizes, with the can lying along y and th
   near(tableBox(box.root.getObjectByName("parcel_body")).min.z, 0);
   const { root } = await fitted("sweeper"), { can, servo, stick } = models.sweeper;
   sizeIs(root.getObjectByName("metal_can"), [2 * can.radiusMm, can.heightMm, 2 * can.radiusMm]);   // axis along y
-  sizeIs(root.getObjectByName("servo_case"), [23, 12, 23]);
+  sizeIs(root.getObjectByName("servo_case"), servo.caseDimensionsLocalMm);
   sizeIs(root.getObjectByName("wooden_stick"), [stick.lengthMm, stick.widthMm, stick.thicknessMm]); // flat, along +x at servo 0
   // Rests on its rims; the case sits on a riser on the can's top line near the front end; shaft 2 mm above the case.
   near(Math.min(tableBox(root.getObjectByName("bottom_rim")).min.z, tableBox(root.getObjectByName("top_rim")).min.z), 0, 1e-4);
   const caseBox = tableBox(root.getObjectByName("servo_case")), canBox = tableBox(root.getObjectByName("metal_can"));
-  near(tableBox(root.getObjectByName("servo_mount_bracket")).min.z, canBox.max.z, 1e-4);
-  near(caseBox.min.z, canBox.max.z + servo.riserMm, 1e-4);
-  // At zero tilt the configured horn must sit above the three-box stack.
+  near(tableBox(root.getObjectByName("servo_mount_bracket")).min.z, canBox.max.z - 0.5, 1e-4);
+  near(caseBox.min.z, canBox.max.z - 0.5 + servo.riserMm, 1e-4);
+  // The shorter mount reaches the top box at zero tilt, within its side-face band.
   const stickBottom = tableBox(root.getObjectByName("wooden_stick")).min.z;
   near(stickBottom, servo.pivotMm[2] + servo.hornRiseMm, 1e-4);
-  assert.ok(stickBottom > 3 * rig.parcels[0].height);
+  assert.ok(stickBottom > 2 * rig.parcels[0].height && stickBottom < 3 * rig.parcels[0].height);
+  const hornBox = tableBox(root.getObjectByName("servo_horn"));
+  assert.ok(hornBox.min.z <= caseBox.max.z && hornBox.max.z >= stickBottom - 1e-4, "shaft joins case and stick");
   assert.ok(caseBox.min.y >= canBox.min.y && caseBox.min.y - canBox.min.y < 10, "servo is near the can's front end");
   const shaft = fromThree(root.getObjectByName("servo_output").getWorldPosition(new THREE.Vector3()).toArray());
-  near(shaft.z, caseBox.max.z + 2, 1e-4); assert.deepEqual(servo.axisZup, [0, 0, 1]);
+  near(shaft.z, caseBox.max.z + servo.caseShaftGapMm, 1e-4); assert.deepEqual(servo.axisZup, [0, 0, 1]);
 });
 
 test("servo 0/90/180 point right/forward/left; positive tilt about the front-bottom edge lifts the back and lowers the tip", async () => {

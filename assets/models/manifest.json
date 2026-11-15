@@ -32,24 +32,25 @@
       },
       "measurementSource": "config/rig.json parcels.p1",
       "placeholderMeasurements": true,
+      "measured": false,
       "friction": null,
       "nodes": {
         "root": "box",
         "body": "parcel_body"
-      },
-      "measured": false
+      }
     },
     "sweeper": {
       "name": "Cylindrical Sweeper",
       "url": "sweeper.glb",
       "type": "sweeper",
-      "origin": "bench top under the can centre",
+      "origin": "bench under can centre",
       "dimensionsMm": {
         "width": 167.1,
         "depth": 100,
-        "height": 91.7
+        "height": 73.8
       },
       "placeholderMeasurements": true,
+      "measured": false,
       "measurementSource": "config/models.json sweeper",
       "massG": 29,
       "friction": null,
@@ -75,7 +76,7 @@
           "pivotMm": [
             0,
             -41,
-            85
+            68.1
           ],
           "axisZup": [
             0,
@@ -84,13 +85,13 @@
           ],
           "mountRollDeg": 0,
           "caseDimensionsLocalMm": [
-            23,
-            12,
-            23
+            18,
+            10,
+            12
           ],
-          "riserMm": 6.4,
+          "riserMm": 1,
           "caseShaftGapMm": 2,
-          "hornRiseMm": 3,
+          "hornRiseMm": 2,
           "restDeg": 0,
           "direction": -1,
           "limitsDeg": [
@@ -99,7 +100,7 @@
           ],
           "massG": 9,
           "measured": false,
-          "_note": "9 g micro servo on a 6.4 mm riser, shaft 2 mm above the case. The 3 mm horn holds the stick above it. The shaft is vertical at zero tilt."
+          "_note": "Compact placeholder servo: 18 × 10 × 12 mm, with a 1 mm mounting saddle embedded 0.5 mm into the can crown. A continuous shaft/horn joins the case to the stick. Measure hardware before deployment."
         },
         "stick": {
           "lengthMm": 145,
@@ -135,30 +136,30 @@
             "node": "servo_case",
             "shape": "box",
             "sizeMm": [
-              23,
-              12,
-              23
+              18,
+              10,
+              12
             ],
             "frame": "servo_mount local (shaft = local z)",
             "centerMm": [
               0,
               0,
-              -13.5
+              -8
             ]
           },
           {
             "node": "servo_mount_bracket",
             "shape": "box",
             "sizeMm": [
-              23,
-              12,
-              6.4
+              18,
+              10,
+              1
             ],
             "frame": "servo_mount local (shaft = local z)",
             "centerMm": [
               0,
               0,
-              -28.2
+              -14.5
             ],
             "role": "riser"
           },
@@ -174,7 +175,7 @@
             "centerMm": [
               67.5,
               0,
-              4.5
+              3.5
             ]
           }
         ]
@@ -199,7 +200,7 @@
           ],
           "limitsDeg": [
             0,
-            33.5
+            27
           ],
           "restDeg": 0,
           "direction": 1
@@ -210,7 +211,7 @@
           "pivotMm": [
             0,
             -41,
-            85
+            68.1
           ],
           "axisZup": [
             0,
@@ -237,9 +238,7 @@
         "servoOutput": "servo_output",
         "stick": "wooden_stick"
       },
-      "measured": false,
       "frame": "sweeper frame: origin on the bench top under the can centre, Z-up millimetres"
     }
-  },
-  "note": "Physical sizes, collision and joints below match config/rig.json and config/models.json (placeholders, measured:false). The GLB geometry was baked at older sizes and orientation (upright can, horizontal shaft); viewer/model-fit.mjs re-fits each part at load time: the can lies along y, the servo shaft points up and servo_mount is re-parented to assembly_tilt. Blender has not been rerun."
+  }
 }

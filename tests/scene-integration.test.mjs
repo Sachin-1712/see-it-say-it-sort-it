@@ -102,3 +102,83 @@ test("reduced motion avoids particles and pending photo loads can be canceled sa
   app.motion.matches = false; const pending = effect.play(root, "blob:photo"); effect.cancel(); release(); await pending;
   assert.equal(root.visible, true); assert.equal(scene.children.length, 1); assert.equal(disposed, true); assert.equal(app.frames.size, 0);
 });
+
+test("main Sweep release uses MuJoCo tracks for boxes and the actual servo, and persists final rotated poses", async t => {
+  const app = await harness(t, { instantiate: async record => {
+    const instance = boxInstance(); instance.metadata.massG = 30;
+    if (record.type === "sweeper") {
+      for (const name of ["tilt", "servo"]) {
+        const node = new THREE.Group(); instance.root.add(node);
+        instance.joints[name] = {node, base:new THREE.Quaternion(), axis:new THREE.Vector3(0,1,0), limitsDeg:[0,180], restDeg:0, direction:1};
+      }
+      instance.metadata.joints = {tilt:{restDeg:0,limitsDeg:[0,27]},servo:{restDeg:0,limitsDeg:[0,180]}};
+    }
+    return instance;
+  }});
+  const { Workbench } = await app.evaluate("workbench.mjs");
+  const { workbenchState: state } = await app.evaluate("workbench-state.mjs");
+  let request, resolve;
+  const workbench = new Workbench({scene:new THREE.Scene(),camera:new THREE.PerspectiveCamera(),canvas:app.document.createElement("canvas"),
+    toThree:p=>({pos:new THREE.Vector3(p.x,p.z,-p.y)}),onBoundsChanged(){},table:{height:40},setup:SETUP,
+    simulateImpl: payload => {request=payload; return new Promise(done=>{resolve=done;});}});
+  await workbench.place(record,state.epoch);
+  await workbench.place({id:"sweeper",type:"sweeper",modelKey:"sweeper",name:"Sweeper"},state.epoch);
+  const box=state.list()[0], sweeper=state.list()[1], root=workbench.instances.get(box.instanceId).root;
+  const input=app.document.getElementById("world-servo"); input.value=180; input.dispatchEvent(new app.window.Event("input"));
+  assert.equal(state.list()[1].servoDeg,0,"dragging must not move a collisionless stick");
+  const pending=workbench.runPhysics(false,180);
+  assert.equal(request.cmd,"preview"); assert.equal(request.action.sweep_start_deg,0);
+  assert.equal(workbench.busy,true);
+  const final={x:-50,y:60,z:15,baseZ:5,roll:180,pitch:0,yaw:0};
+  resolve({invalid:false,reason:null,target:{landed_bag:"left"},realized_tilt_deg:22,servo_final_deg:170,
+    servo_trajectory:[[0,0],[1,170]],trajectories:{[box.instanceId]:[[0,230,220,50,0,0,0],[1,-50,60,15,180,0,0]]},
+    final_poses:{[box.instanceId]:final},contacts:[{body_a:"stick",body_b:box.instanceId}]});
+  await pending; workbench.update(.5);
+  assert.ok(root.position.x < 230 && root.position.x > -50);
+  assert.ok(Math.abs(workbench.instances.get(sweeper.instanceId).currentServo-85)<1e-6,"render the solved angle, not the requested 180°");
+  workbench.update(.5);
+  assert.equal(workbench.busy,false); assert.equal(state.list()[0].position.x,-50);
+  assert.equal(state.list()[0].roll,180); assert.equal(state.list()[1].servoDeg,170);
+  assert.ok(Math.abs(root.position.y-25)<1e-6,"bottom-origin mesh must rotate about the simulated centre of mass");
+  assert.equal(state.add(record,boxInstance().metadata).baseZ,40,"a fallen box cannot support new placements");
+});
+
+test("physics errors keep the workbench stationary; clearing cancels stale simulation results", async t => {
+  const app=await harness(t,{instantiate:async()=>boxInstance()});
+  const {Workbench}=await app.evaluate("workbench.mjs");
+  const {workbenchState:state}=await app.evaluate("workbench-state.mjs");
+  let reject;
+  const workbench=new Workbench({scene:new THREE.Scene(),camera:new THREE.PerspectiveCamera(),canvas:app.document.createElement("canvas"),
+    toThree:p=>({pos:new THREE.Vector3(p.x,p.z,-p.y)}),onBoundsChanged(){},table:{height:40},setup:SETUP,
+    simulateImpl:()=>new Promise((_,no)=>{reject=no;})});
+  await workbench.place(record,state.epoch);
+  state.add({id:"s",type:"sweeper",name:"Sweeper"},{...boxInstance().metadata,joints:{tilt:{restDeg:0,limitsDeg:[0,27]},servo:{restDeg:0,limitsDeg:[0,180]}}});
+  const before=state.snapshot(), pending=workbench.runPhysics(false,180);
+  reject(new Error("Service unavailable")); await pending;
+  assert.deepEqual(state.snapshot(),before); assert.equal(workbench.busy,false);
+  assert.match(app.document.getElementById("world-message").textContent,/Service unavailable/);
+  const stale=workbench.runPhysics(false,180);
+  app.document.getElementById("world-clear").click(); reject(new Error("cancelled")); await stale;
+  assert.equal(state.list().length,0); assert.equal(workbench.playback,null);
+});
+
+test("agent ghost worlds stay independent, isolate A3 and ignore new trials after its death", async t => {
+  const app=await harness(t);
+  app.window.HTMLCanvasElement.prototype.getContext=()=>({fillRect(){},fillText(){},fillStyle:"",font:""});
+  const {SwarmOverlay}=await app.evaluate("swarm-overlay.mjs");
+  const scene=new THREE.Scene(),physical=boxInstance().root;scene.add(physical);physical.position.set(22,33,44);
+  const overlay=new SwarmOverlay(scene),task={task_id:"test",scene_version:1,snapshot:{objects:[{instanceId:"box",dimensionsMm:{width:50,height:20,depth:35}}]}};
+  const agents=[1,2,3,4].map(i=>({id:`a${i}`,alive:true,status:"Running"}));
+  const trial=(agent,id=1)=>({agent,parcel:"box",trial_id:`${agent}:1:${id}`,success:true,path:[[0,0,20,0],[100,0,20,0]],trajectories:{box:[[0,0,0,20,0,0,0],[1,100,0,20,0,0,0]]}});
+  overlay.ingest({task,agents,ghosts:agents.map(a=>trial(a.id))});overlay.update(.5);
+  assert.equal(overlay.agents.size,4);
+  assert.deepEqual(physical.position.toArray(),[22,33,44]);
+  assert.equal(new Set([...overlay.agents.values()].map(a=>a.group)).size,4);
+  assert.ok([...overlay.agents.values()].every(a=>Math.abs(a.box.position.x-50)<1e-6));
+  overlay.selected="a3";overlay.update(.6);
+  assert.ok([...overlay.agents].every(([id,a])=>a.group.visible===(id==="a3")));
+  agents[2].alive=false;agents[2].status="Dead";
+  overlay.ingest({task,agents,ghosts:[trial("a3",2)]});overlay.update(.7);
+  assert.equal(overlay.agents.get("a3").trial.trial_id,"a3:1:1");
+  overlay.clear();assert.equal(overlay.agents.size,0);assert.deepEqual(physical.position.toArray(),[22,33,44]);
+});

@@ -28,3 +28,35 @@ Viewer sends back: {"cmd": "die", "id": "a1"} | {"cmd": "silence"} |
 "execute" asks the arm driver to run the current best push. The viewer only
 enables it when best.robust >= 0.8. Pressing it is what moves the phase to
 "executing"; nothing starts the push on a timer.
+
+## Real swarm extension (`gekko-swarm-v1`)
+
+Normal operation now runs `python -m swarm.server`, not `scripts/fake_observer.py`.
+The old fields above remain for compatibility. The frame additionally contains:
+
+- `protocol`, `stream_id`, monotonically increasing `frame_seq`.
+- `task`: task ID, scene version, immutable snapshot, physics config, goals,
+  search settings; `source` distinguishes golden fixture/workbench.
+- Agents: real `pid`, role/status, heartbeat, actual cumulative `tries`, latest
+  completed trial (timestamp/action/outcome/trajectories), current work/validation
+  progress, checkpoint ID and peer send/receive counts.
+- Ghosts: actual sampled MuJoCo paths with agent/trial/task IDs, version,
+  timestamps and outcomes. These never update the physical workbench state.
+- `best.plan`: complete actions, nominal results, final snapshot, bag outcomes,
+  unique randomized validation evidence. `physical_eligible` is always false
+  while UNO Q execution is deferred. `metrics` distinguishes worker rollouts,
+  full-plan trials and optional nominal verification replays.
+- `events`: real process kill, peer timeout, takeover, silence/reconciliation
+  events. `execution.enabled` is false. No simulation success enables hardware.
+
+Additional viewer commands are `load_demo`, `plan_workbench` (snapshot required),
+`invalidate`, and `replay_plan`. Replaying returns a `type: plan_replay` response
+with task/version and freshly simulated step trajectories. It changes no world
+state. Existing `die`, `silence`, `unsilence`, `replan` commands retain their
+purpose but now affect genuine processes/networking. `execute` and
+`confirm_ready` return errors; no hardware driver exists in the swarm.
+
+The static viewer uses scene versions, stream sequence numbers and trial
+identities to reject stale/duplicate telemetry. A new physical workbench state
+invalidates the active planning task. Scene frames on 8766 (manual physics
+preview) and camera/inventory storage remain separate. See [swarm.md](swarm.md).

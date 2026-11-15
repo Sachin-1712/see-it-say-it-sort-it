@@ -1,6 +1,5 @@
 {
   "_note": "PLACEHOLDER measurements: realistic estimates, not measured (every block says measured:false). Units: mm, grams, degrees. Table frame: origin at the front-left corner of the bench footprint on the floor, x along the width (to the right), y along the depth (away from the front edge), z up from the floor. Angles are counter-clockwise seen from above, 0 = +x. Zones and bags give the centre (x, y) and size of a rectangle. Bags are rigid open-top trays beside the raised sorting platform. Their dimensions are external, and the rim is level with the platform top. The sweeper (can, servo, stick, tilt) is defined once, in config/models.json.",
-
   "table": {
     "width": 220,
     "depth": 350,
@@ -10,21 +9,64 @@
     "_width": "220 mm wide raised sorting platform for a desktop demo.",
     "_height": "height is the bench top above the floor. A 25 mm deck on a riser puts the working surface and tray rims 90 mm above the desk."
   },
-
   "zones": {
-    "pick": {"x": 110, "y": 135, "width": 110, "depth": 85, "measured": false, "_note": "around the box stack, on the bench centreline, in front of the sweeper"},
-    "scan": {"x": 110, "y": 47.5, "width": 110, "depth": 85, "measured": false, "_note": "near the front edge, on the centreline"}
+    "pick": {
+      "x": 110,
+      "y": 135,
+      "width": 110,
+      "depth": 85,
+      "measured": false,
+      "_note": "around the box stack, on the bench centreline, in front of the sweeper"
+    },
+    "scan": {
+      "x": 110,
+      "y": 47.5,
+      "width": 110,
+      "depth": 85,
+      "measured": false,
+      "_note": "near the front edge, on the centreline"
+    }
   },
-
   "bags": {
-    "left":  {"x": -65, "y": 135, "width": 130, "depth": 160, "height": 90, "wall_thickness": 2.5, "measured": false},
-    "right": {"x": 285, "y": 135, "width": 130, "depth": 160, "height": 90, "wall_thickness": 2.5, "measured": false}
+    "left": {
+      "x": -100,
+      "y": 135,
+      "width": 200,
+      "depth": 240,
+      "height": 90,
+      "wall_thickness": 2.5,
+      "measured": false
+    },
+    "right": {
+      "x": 320,
+      "y": 135,
+      "width": 200,
+      "depth": 240,
+      "height": 90,
+      "wall_thickness": 2.5,
+      "measured": false
+    }
   },
-
-  "colour_to_bag": {"red": "left", "blue": "right"},
-
+  "colour_to_bag": {
+    "red": "left",
+    "blue": "right"
+  },
   "parcels": [
-    {"id": "p1", "width": 95, "depth": 70, "height": 25, "mass_g": 30, "measured": false},
-    {"id": "p2", "width": 95, "depth": 70, "height": 25, "mass_g": 30, "measured": false}
+    {
+      "id": "p1",
+      "width": 95,
+      "depth": 70,
+      "height": 25,
+      "mass_g": 30,
+      "measured": false
+    },
+    {
+      "id": "p2",
+      "width": 95,
+      "depth": 70,
+      "height": 25,
+      "mass_g": 30,
+      "measured": false
+    }
   ]
 }

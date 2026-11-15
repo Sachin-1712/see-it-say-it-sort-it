@@ -49,9 +49,9 @@ def validate_action(action, target, sweeper, cfg):
     return validated, duration
 
 
-def invalid_result(target_id, reason):
+def invalid_result(target_id, reason, *, engine_ran=False):
     return {
-        "success": False, "score": 0.0, "invalid": True, "reason": reason,
+        "success": False, "score": 0.0, "invalid": True, "reason": reason, "engine_ran": engine_ran,
         "target": {"id": target_id, "pose": None, "landed_bag": "none", "correct_bag": False},
         "others": {}, "disturbed": [], "stack_stable": None, "servo_stalled": False,
         "servo_stalled_before_contact": False, "trajectories": {}, "contacts": [], "final_poses": {},
@@ -160,15 +160,25 @@ def rollout(scene: Scene, action, physics_params=None, seed=None) -> Result:
     if (not 0 <= target_center[0] <= table["width"]
             or not 0 <= target_center[1] <= table["depth"]
             or target_bottom < table["height"] - scoring["support_tolerance_mm"]):
-        return invalid_result(target_id, "target must start on or over the bench")
+        return invalid_result(target_id, "target must start on or over the bench", engine_ran=True)
     overlap = scoring["initial_overlap_tolerance_mm"] * MM
     attached = {"stick", "servo_case", "servo_mount_bracket", "can"}
     for pair, distance in contact_pairs(data, labels):
         if distance < -overlap and attached.intersection(pair) and any(x in ids for x in pair):
-            return invalid_result(target_id, f"initial overlap between {pair[0]} and {pair[1]}")
+            return invalid_result(target_id, f"initial overlap between {pair[0]} and {pair[1]}", engine_ran=True)
 
     target_pair = tuple(sorted((target_id, "stick")))
-    other_indices = [i for i in range(len(boxes)) if i != target_index]
+    # Preserve parcels still on the bench, not boxes already collected in bins.
+    # The main viewer retains collected boxes as real colliders on later sweeps.
+    other_indices = []
+    for i, body in enumerate(body_ids):
+        center = data.xpos[body] / MM
+        rotation = data.xmat[body].reshape(3, 3)
+        bottom = center[2] - abs(rotation[2]) @ model.geom_size[box_geom_ids[i]] / MM
+        if (i != target_index and 0 <= center[0] <= table["width"]
+                and 0 <= center[1] <= table["depth"]
+                and bottom >= table["height"] - scoring["support_tolerance_mm"]):
+            other_indices.append(i)
     contacts = {}
     tracks = {key: [] for key in [*ids, "stick"]}
     max_motion = np.zeros(len(boxes))
@@ -186,6 +196,7 @@ def rollout(scene: Scene, action, physics_params=None, seed=None) -> Result:
     jammed_s = 0.0
     stalled = stalled_before = False
     frame = 0
+    servo_track = []
     peak_torque = 0.0
     max_penetration = 0.0
     deepest_pair = None
@@ -208,6 +219,7 @@ def rollout(scene: Scene, action, physics_params=None, seed=None) -> Result:
                 tracks[key].append([timestamp, *pose(position, data.xmat[body].reshape(3, 3))])
             tracks["stick"].append([timestamp, *pose(data.geom_xpos[stick_geom],
                                                      data.geom_xmat[stick_geom].reshape(3, 3))])
+            servo_track.append([timestamp, math.degrees(data.qpos[qpos])])
             frame += 1
         if step == steps:
             break
@@ -232,7 +244,7 @@ def rollout(scene: Scene, action, physics_params=None, seed=None) -> Result:
             jammed_s = 0.0
 
     if data.warning.number.any():
-        return invalid_result(target_id, "MuJoCo reported a numerical warning")
+        return invalid_result(target_id, "MuJoCo reported a numerical warning", engine_ran=True)
     rotations = data.xmat[body_ids].reshape(-1, 3, 3)
     extents = np.einsum("nij,nj->ni", abs(rotations), model.geom_size[box_geom_ids]) / MM
     final = {}
@@ -242,8 +254,18 @@ def rollout(scene: Scene, action, physics_params=None, seed=None) -> Result:
     item = boxes[target_index][1]
     target_pose = final[target_id]
     bags = cfg["rig"]["bags"]
-    touched_bases = {name for name in bags if tuple(sorted((target_id, f"bag_{name}_base"))) in contacts}
-    bag = landed_bag(target_pose, extents[target_index], bags, touched_bases, scoring["support_tolerance_mm"])
+    # A parcel may rest on another parcel already inside the bin. Prove a final
+    # support chain to that bin's floor, never infer a landing from an old touch.
+    final_pairs_for_bags = {pair for pair, distance in contact_pairs(data, labels) if distance <= 0}
+    bag_support = {name: set() for name in bags}
+    for index in sorted(range(len(ids)), key=lambda i: positions[i, 2]):
+        for name in bags:
+            neighbors = {b if a == ids[index] else a for a,b in final_pairs_for_bags if ids[index] in (a,b)}
+            if f"bag_{name}_base" in neighbors or neighbors.intersection(bag_support[name]):
+                if landed_bag(final[ids[index]], extents[index], bags, {name}, scoring["support_tolerance_mm"]) == name:
+                    bag_support[name].add(ids[index])
+    bag_assignments = {key: next((name for name, supported in bag_support.items() if key in supported), "none") for key in ids}
+    bag = bag_assignments[target_id]
     others = {ids[i]: float(math.sqrt(max_motion[i]) / MM) for i in other_indices}
 
     # A remaining parcel must be upright and supported above the floor, directly
@@ -263,15 +285,15 @@ def rollout(scene: Scene, action, physics_params=None, seed=None) -> Result:
     velocities = np.array([data.qvel[model.jnt_dofadr[model.body_jntadr[body]]:][:3]
                            for body in body_ids]) / MM
     stable = stack_stable(other_indices, rotations, velocities, support, scoring)
-    assigned = cfg["rig"]["colour_to_bag"].get(item.get("color"))
+    assigned = item.get("destination") or cfg["rig"]["colour_to_bag"].get(item.get("color"))
     if item.get("color") is None and item.get("destination") in cfg["rig"]["bags"]:
         assigned = item["destination"]
     result = outcome(target_id, target_pose, bag, assigned, others, stable, stalled_before,
                      target_pair in contacts, scoring["displacement_tolerance_mm"])
     result.update(
-        action=action, realized_tilt_deg=tilt, servo_stalled=stalled, servo_stalled_before_contact=stalled_before,
+        engine_ran=True, integration_steps=steps, action=action, realized_tilt_deg=tilt, servo_stalled=stalled, servo_stalled_before_contact=stalled_before,
         servo_final_deg=math.degrees(data.qpos[qpos]), peak_servo_torque_nm=float(peak_torque),
-        trajectories=tracks, final_poses=final, max_contact_penetration_mm=float(max_penetration / MM),
+        trajectories=tracks, servo_trajectory=servo_track, final_poses=final, bag_assignments=bag_assignments, max_contact_penetration_mm=float(max_penetration / MM),
         deepest_contact_pair=list(deepest_pair) if deepest_pair else None,
         contacts=[dict(t_s=t, body_a=a, body_b=b) for (a, b), t in contacts.items()],
     )

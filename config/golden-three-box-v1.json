@@ -1,0 +1,365 @@
+{
+  "fixture": "gekko-three-box-v1",
+  "measured": false,
+  "note": "Versioned SIMULATION fixture; geometry/masses/friction are estimates, not calibrated hardware. Bottom 40 g, middle 12 g, top 8 g; sliding friction 0.35/0.30/0.30. Bins are 200 \u00d7 240 mm. These catch openings and mass ratios reduce edge catches and unintended stack disturbance. Robustness threshold (0.8) and original uncertainty ranges are unchanged.",
+  "snapshot": {
+    "mode": "visual-placement",
+    "units": "mm",
+    "axes": "Z-up",
+    "objects": [
+      {
+        "instanceId": "world_box_0001",
+        "type": "box",
+        "color": "red",
+        "destination": "left",
+        "stackIndex": 0,
+        "position": {
+          "x": 110,
+          "y": 135,
+          "z": 102.5
+        },
+        "baseZ": 90,
+        "dimensionsMm": {
+          "width": 95,
+          "depth": 70,
+          "height": 25
+        },
+        "massG": 40,
+        "friction": [
+          0.35,
+          0.002,
+          0.0001
+        ],
+        "name": "Box C"
+      },
+      {
+        "instanceId": "world_box_0002",
+        "type": "box",
+        "color": "blue",
+        "destination": "right",
+        "stackIndex": 1,
+        "position": {
+          "x": 110,
+          "y": 135,
+          "z": 127.5
+        },
+        "baseZ": 115,
+        "dimensionsMm": {
+          "width": 95,
+          "depth": 70,
+          "height": 25
+        },
+        "massG": 12,
+        "friction": [
+          0.3,
+          0.002,
+          0.0001
+        ],
+        "name": "Box B"
+      },
+      {
+        "instanceId": "world_box_0003",
+        "type": "box",
+        "color": "red",
+        "destination": "left",
+        "stackIndex": 2,
+        "position": {
+          "x": 110,
+          "y": 135,
+          "z": 152.5
+        },
+        "baseZ": 140,
+        "dimensionsMm": {
+          "width": 95,
+          "depth": 70,
+          "height": 25
+        },
+        "massG": 8,
+        "friction": [
+          0.3,
+          0.002,
+          0.0001
+        ],
+        "name": "Box A"
+      },
+      {
+        "instanceId": "world_sweeper_0004",
+        "type": "sweeper",
+        "position": {
+          "x": 110,
+          "y": 290.0,
+          "z": 90
+        },
+        "baseZ": 90,
+        "tiltDeg": 0,
+        "servoDeg": 0,
+        "name": "Cylindrical Sweeper"
+      }
+    ]
+  },
+  "config": {
+    "rig": {
+      "_note": "PLACEHOLDER measurements: realistic estimates, not measured (every block says measured:false). Units: mm, grams, degrees. Table frame: origin at the front-left corner of the bench footprint on the floor, x along the width (to the right), y along the depth (away from the front edge), z up from the floor. Angles are counter-clockwise seen from above, 0 = +x. Zones and bags give the centre (x, y) and size of a rectangle. Bags are rigid open-top trays beside the raised sorting platform. Their dimensions are external, and the rim is level with the platform top. The sweeper (can, servo, stick, tilt) is defined once, in config/models.json.",
+      "table": {
+        "width": 220,
+        "depth": 350,
+        "thickness": 25,
+        "height": 90,
+        "measured": false,
+        "_width": "220 mm wide raised sorting platform for a desktop demo.",
+        "_height": "height is the bench top above the floor. A 25 mm deck on a riser puts the working surface and tray rims 90 mm above the desk."
+      },
+      "zones": {
+        "pick": {
+          "x": 110,
+          "y": 135,
+          "width": 110,
+          "depth": 85,
+          "measured": false,
+          "_note": "around the box stack, on the bench centreline, in front of the sweeper"
+        },
+        "scan": {
+          "x": 110,
+          "y": 47.5,
+          "width": 110,
+          "depth": 85,
+          "measured": false,
+          "_note": "near the front edge, on the centreline"
+        }
+      },
+      "bags": {
+        "left": {
+          "x": -100,
+          "y": 135,
+          "width": 200,
+          "depth": 240,
+          "height": 90,
+          "wall_thickness": 2.5,
+          "measured": false
+        },
+        "right": {
+          "x": 320,
+          "y": 135,
+          "width": 200,
+          "depth": 240,
+          "height": 90,
+          "wall_thickness": 2.5,
+          "measured": false
+        }
+      },
+      "colour_to_bag": {
+        "red": "left",
+        "blue": "right"
+      },
+      "parcels": [
+        {
+          "id": "p1",
+          "width": 95,
+          "depth": 70,
+          "height": 25,
+          "mass_g": 30,
+          "measured": false
+        },
+        {
+          "id": "p2",
+          "width": 95,
+          "depth": 70,
+          "height": 25,
+          "mass_g": 30,
+          "measured": false
+        }
+      ]
+    },
+    "models": {
+      "schemaVersion": 1,
+      "units": "millimetres, grams, degrees",
+      "coordinates": "right-handed Z-up: x right, y away, z up",
+      "note": "PLACEHOLDER geometry: estimates, not measured (measured:false throughout). Box sizes come from config/rig.json. Permanent GLBs are generated by scripts/generate_models.py; viewer/model-fit.mjs also fits them to current config at load time.",
+      "boxes": [
+        {
+          "id": "box",
+          "name": "Box",
+          "rigParcel": "p1",
+          "colour": "#969696"
+        }
+      ],
+      "sweeper": {
+        "id": "sweeper",
+        "name": "Cylindrical Sweeper",
+        "note": "Every value is an UNMEASURED PLACEHOLDER. Sweeper frame: origin on the bench top directly under the can's centre, x right, y away from the front, z up. The can lies on its side with its axis along y; its open/top end faces the boxes (-y).",
+        "can": {
+          "radiusMm": 26.5,
+          "heightMm": 100,
+          "massG": 18,
+          "baseCentreMm": [
+            0,
+            50,
+            27.1
+          ],
+          "axisZup": [
+            0,
+            -1,
+            0
+          ],
+          "measured": false,
+          "_note": "Empty slim aluminium drinks can, 53 mm in diameter and 100 mm long. The 0.6 mm rolled rims set its centre height; +y is the closed end."
+        },
+        "assemblyTilt": {
+          "pivotMm": [
+            0,
+            -50,
+            0
+          ],
+          "axisZup": [
+            1,
+            0,
+            0
+          ],
+          "limitsDeg": [
+            0,
+            27
+          ],
+          "measured": false,
+          "_note": "The front rim acts as the tilt pivot. The upper stop keeps the wooden tip above the platform throughout its full turn."
+        },
+        "servo": {
+          "pivotMm": [
+            0,
+            -41,
+            68.1
+          ],
+          "axisZup": [
+            0,
+            0,
+            1
+          ],
+          "mountRollDeg": 0,
+          "caseDimensionsLocalMm": [
+            18,
+            10,
+            12
+          ],
+          "riserMm": 1,
+          "caseShaftGapMm": 2,
+          "hornRiseMm": 2,
+          "restDeg": 0,
+          "direction": -1,
+          "limitsDeg": [
+            0,
+            180
+          ],
+          "massG": 9,
+          "measured": false,
+          "_note": "Compact placeholder servo: 18 \u00d7 10 \u00d7 12 mm, with a 1 mm mounting saddle embedded 0.5 mm into the can crown. A continuous shaft/horn joins the case to the stick. Measure hardware before deployment."
+        },
+        "stick": {
+          "lengthMm": 145,
+          "widthMm": 10,
+          "thicknessMm": 3,
+          "pivotFromEndMm": 5,
+          "massG": 2,
+          "measured": false,
+          "_note": "145 \u00d7 10 \u00d7 3 mm hardwood craft strip with the pivot 5 mm from the mounting end. The 2 g mass corresponds to approximately 460 kg/m\u00b3."
+        },
+        "friction": null
+      },
+      "workbench": {
+        "sweeperGapToStackMm": 70,
+        "otherPositionMm": {
+          "x": 40,
+          "y": 260
+        },
+        "otherSpacingMm": 155,
+        "otherSlots": 2,
+        "note": "The parcel stays at the pick centre. The fixed sweeper sits behind it, 70 mm from the back face of the parcel to the front rim of the can."
+      }
+    },
+    "sim": {
+      "_note": "Simulation defaults and unmeasured physical parameters.",
+      "measured": false,
+      "timestep_s": 0.00075,
+      "gravity_m_s2": 9.81,
+      "solver_iterations": 40,
+      "friction": {
+        "sliding": 0.3,
+        "torsional": 0.002,
+        "rolling": 0.0001
+      },
+      "solref": [
+        0.006,
+        1.15
+      ],
+      "solimp": [
+        0.9,
+        0.98,
+        0.0007,
+        0.5,
+        2
+      ],
+      "bag_contact": {
+        "solref": [
+          0.0025,
+          1.15
+        ],
+        "solimp": [
+          0.95,
+          0.99,
+          0.0005,
+          0.5,
+          2
+        ]
+      },
+      "servo": {
+        "measured": false,
+        "max_torque_nm": 0.15,
+        "default_speed_deg_s": 60,
+        "max_speed_deg_s": 360,
+        "position_gain_nm_rad": 2.0,
+        "damping_nm_s_rad": 0.012,
+        "armature_kg_m2": 2e-05,
+        "stall_error_deg": 4,
+        "stall_speed_deg_s": 8,
+        "stall_duration_s": 0.06
+      },
+      "settle_before_s": 0.15,
+      "settle_after_s": 0.85,
+      "max_sweep_duration_s": 12,
+      "sample_rate_hz": 60,
+      "tilt_resolution_deg": 0.5,
+      "alignment_servo_resolution_deg": 1,
+      "demo_speeds_deg_s": [
+        90,
+        150,
+        220,
+        280,
+        320,
+        60
+      ],
+      "single_box_search_speed_deg_s": 280,
+      "demo_angle_offsets_deg": [
+        0,
+        6,
+        12
+      ]
+    },
+    "scoring": {
+      "_note": "Scoring thresholds and a priori uncertainty ranges. Floor and bag regions begin at z=0.",
+      "displacement_tolerance_mm": 5,
+      "upright_tolerance_deg": 10,
+      "support_tolerance_mm": 2,
+      "settled_speed_mm_s": 5,
+      "initial_overlap_tolerance_mm": 0.2,
+      "single_box_search": {
+        "trials": 24,
+        "minimum_score": 0.8,
+        "seed": 2026
+      },
+      "robustness": {
+        "friction_fraction": 0.2,
+        "mass_fraction": 0.15,
+        "position_mm": 3,
+        "tilt_deg": 1
+      }
+    }
+  }
+}

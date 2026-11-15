@@ -21,7 +21,21 @@ exhaustion, or after the kinematic candidate grid is exhausted.
 or is null when no candidate ran. A rejected action is an ordinary preview
 result with `invalid: true`; request failures use the error reply.
 
-Open the normal viewer with `?sim=1` to enable the optional button once the
+The normal workbench now uses this service without a query flag. Releasing its
+Sweep slider sends `preview` with the current servo angle and chosen endpoint.
+The boxes and servo play the solved trajectories in the main scene; final box
+poses are retained for the next request. No visual sweep runs if the service
+fails. Manual tilt is setup, allowed only with the stick parked at 0° or 180°.
+“Find & run physical sweep” searches for the top remaining box and applies the
+chosen manual setup before physical playback. It does not simulate the human's
+repositioning. Physics requests and playback block new placement; Clear cancels
+playback and ignores stale responses. No hardware commands are sent.
+
+Results additionally contain `servo_trajectory: [[t_s, actual_angle_deg], ...]`,
+sampled alongside `trajectories` at `config/sim.json sample_rate_hz` (60 Hz).
+This is the solved joint angle, including contact-induced lag or a stall.
+
+For the older separate diagnostic dialog, open the viewer with `?sim=1` to enable the optional button once the
 socket connects. Place a sweeper and boxes. The button searches for the selected
 box or the top box and plays the best returned trajectory in a separate dialog.
 The dialog draws primitive playback meshes and leaves workbench placement

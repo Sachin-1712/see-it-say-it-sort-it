@@ -89,7 +89,9 @@ def test_single_box_rehearsals_both_bags_and_deliberate_miss():
                    for contact in result["contacts"])
         assert any({contact["body_a"], contact["body_b"]} == {key, "stick"}
                    for contact in result["contacts"])
-        assert result["trajectories"]["stick"][1][0] == 0.05
+        assert result["trajectories"]["stick"][1][0] == 1 / scene.config()["sim"]["sample_rate_hz"]
+        assert len(result["servo_trajectory"]) == len(result["trajectories"]["stick"])
+        assert abs(result["servo_trajectory"][-1][1] - result["servo_final_deg"]) < 0.1
     spec = scene.config()["models"]["sweeper"]
     start, end = spec["servo"]["limitsDeg"]
     miss = rollout(scene, dict(target=key, tilt_deg=spec["assemblyTilt"]["limitsDeg"][0],
@@ -174,3 +176,45 @@ def test_sweep_moves_a_single_box_and_respects_torque_cap():
           f"{result['peak_servo_torque_nm']:.6f} N·m peak")
     assert distance > 1
     assert result["peak_servo_torque_nm"] <= scene.config()["sim"]["servo"]["max_torque_nm"] + 1e-12
+
+
+def test_collected_boxes_remain_colliders_without_invalidating_later_workbench_sweeps():
+    """The browser retains landed boxes; the batch demo removes them."""
+    from sim.search import best_candidate
+
+    scene = build_scene(demo_snapshot(["red", "blue", "red"]))
+    for key in ["world_box_0003", "world_box_0002", "world_box_0001"]:
+        best, attempts = best_candidate(scene, key, budget=200)
+        assert best is not None
+        action, result = best
+        assert result["success"], (key, attempts, result["reason"])
+        snapshot = scene.snapshot
+        for item in snapshot["objects"]:
+            if item["type"] == "box":
+                pose = result["final_poses"][item["instanceId"]]
+                item["position"] = {axis: pose[axis] for axis in ("x", "y", "z")}
+                item.update({axis: pose[axis] for axis in ("baseZ", "roll", "pitch", "yaw")})
+            else:
+                item["servoDeg"] = result["servo_final_deg"]
+                item["tiltDeg"] = result["realized_tilt_deg"]
+        scene = scene.with_snapshot(snapshot)
+        assert compile_scene(scene).ngeom >= 16  # all three parcel colliders remain
+        print(f"retained bins {key}: {attempts} attempts, {result['target']['landed_bag']}")
+    assert len([item for item in scene.snapshot["objects"] if item["type"] == "box"]) == 3
+    assert result["bag_assignments"] == {"world_box_0001":"left","world_box_0002":"right","world_box_0003":"left"}
+
+
+def test_collected_box_can_be_supported_by_another_box_inside_the_bin():
+    from sim.api import rollout
+    snapshot=demo_snapshot(["red","red","red"])
+    cfg=build_scene(snapshot).config();bag=cfg["rig"]["bags"]["left"]
+    for item,base in zip(snapshot["objects"][:2],[bag["wall_thickness"],bag["wall_thickness"]+25]):
+        item["position"]={"x":bag["x"],"y":bag["y"],"z":base+12.5};item["baseZ"]=base
+    target=snapshot["objects"][2]
+    target["position"]["z"]=cfg["rig"]["table"]["height"]+12.5
+    target["baseZ"]=cfg["rig"]["table"]["height"]
+    result=rollout(build_scene(snapshot),dict(target=target["instanceId"],tilt_deg=0,sweep_start_deg=0,sweep_end_deg=180,speed_deg_s=280))
+    assert not result["invalid"]
+    assert result["bag_assignments"]["world_box_0001"]=="left"
+    assert result["bag_assignments"]["world_box_0002"]=="left"
+    assert abs(result["final_poses"]["world_box_0002"]["baseZ"]-27.5)<.1

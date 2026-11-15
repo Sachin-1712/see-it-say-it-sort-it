@@ -12,7 +12,7 @@ def candidate_actions(scene, target_id):
     target = next((item for item in items if item["type"] == "box" and item["instanceId"] == target_id), None)
     if target is None:
         return
-    side = cfg["rig"]["colour_to_bag"].get(target.get("color"))
+    side = target.get("destination") or cfg["rig"]["colour_to_bag"].get(target.get("color"))
     if side is None and target.get("color") is None:
         side = target.get("destination")
     if side not in ("left", "right"):

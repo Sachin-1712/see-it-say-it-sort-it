@@ -1,3 +1,25 @@
+## Current update — real decentralized planning
+
+`swarm/` now implements independent MuJoCo worker processes, peer UDP gossip,
+versioned disk checkpoints, role reassignment, real Kill/Silence controls and
+complete-plan validation. Normal viewer frames come from `python -m swarm.server`.
+The viewer has a built-in three-box fixture and independent labelled ghost
+worlds; the solid scene is not changed by planning. UNO Q execution was explicitly
+deferred by the operator. See docs/swarm.md for verified behavior, test reports
+and known physical assumptions. The earlier audit below is historical.
+
+## Current update — compact mount and main-workbench physics
+
+The mount now uses a compact 18 × 10 × 12 mm case, seated saddle and connected
+shaft/horn. Both permanent GLBs have been rebuilt with Blender. Shared config
+sets the matching MuJoCo collision geometry. The main workbench's Sweep control
+now runs MuJoCo and plays solved box and actual joint trajectories, retaining
+final poses. Find & run physical sweep searches for the top remaining box.
+The service on localhost:8766 is required; no collisionless fallback is used.
+Observer/hardware protocol on 8765 is unchanged. See docs/sim.md and
+/tests/physics-smoke.html for operation and limitations. The audit below is
+historical and predates these simulation changes.
+
 # State of the repo after merging origin/main
 
 Written Sun 15 Nov 2026 on branch `viewer-polish`, at merge commit `efd041a`.
