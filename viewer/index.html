@@ -44,7 +44,6 @@
   .top-right { display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
   .best { display: flex; align-items: baseline; gap: 8px; margin-right: 6px; }
   #best { font-size: 28px; font-weight: 600; line-height: 1; }
-  #silence.on { border-color: var(--accent); color: var(--accent); }
 
   /* ---- scene ------------------------------------------------------------ */
   #scene { position: fixed; top: var(--top-h); left: 0; right: 0; bottom: 0; }
@@ -153,8 +152,6 @@
   </div>
   <div class="top-right">
     <div class="best"><span class="heading">Best</span><span id="best" class="mono">–</span></div>
-    <button id="silence" disabled>Silence all</button>
-    <button id="replan" disabled>Replan</button>
   </div>
 </header>
 
@@ -295,7 +292,7 @@
 </dialog>
 <script type="module" src="./inventory.mjs"></script>
 <script type="module" src="./model-preview.mjs"></script>
-<script type="module" src="./workshop.mjs?v=sorting-playback-1"></script>
+<script type="module" src="./workshop.mjs?v=clean-topbar-1"></script>
 <script type="module" src="./sim-preview.mjs"></script>
 <script type="module" src="../scripts/plan-narration.mjs?v=sorting-playback-1"></script>
 </body>

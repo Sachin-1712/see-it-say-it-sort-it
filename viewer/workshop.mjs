@@ -593,10 +593,6 @@ function renderTop(f) {
   ph.textContent = f ? f.phase : "offline";
   ph.className = f?.phase ?? "";
   $("best").textContent = pct(f?.best?.robust);
-  const silenced = (f?.agents ?? []).some(a => a.alive && a.silenced);
-  $("silence").classList.toggle("on", silenced);
-  $("silence").textContent = silenced ? "Unsilence" : "Silence all";
-  $("silence").disabled = $("replan").disabled = !connected();
 }
 
 function renderSend(f) {
@@ -729,11 +725,6 @@ function renderFrame(f) {
   lastFrame = f;
 }
 
-$("silence").onclick = () => {
-  const silenced = (lastFrame?.agents ?? []).some(a => a.alive && a.silenced);
-  send({ cmd: silenced ? "unsilence" : "silence" });
-};
-$("replan").onclick = () => send({ cmd: "replan" });
 $("send").onclick = () => send({cmd:"execute"});
 $("swarm-demo").onclick=()=>send({cmd:"load_demo"});
 $("swarm-stop").onclick=()=>send({cmd:'stop_live'});
