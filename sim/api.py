@@ -4,7 +4,6 @@ import math
 from functools import lru_cache
 from typing import Any
 
-import mujoco
 import numpy as np
 
 from .geometry import contact_angles
@@ -140,8 +139,11 @@ def rollout(scene: Scene, action, physics_params=None, seed=None) -> Result:
     except ValueError as exc:
         return invalid_result(target_id, str(exc))
 
+    import mujoco
+
     model = trial_model(trial_scene, tilt, cap)
     start, end = map(math.radians, (action["sweep_start_deg"], action["sweep_end_deg"]))
+    servo_low, servo_high = map(math.radians, cfg["models"]["sweeper"]["servo"]["limitsDeg"])
     data = initial_data(model, action["sweep_start_deg"])
     body_ids = [model.body(f"parcel_{index}").id for index, _ in boxes]
     box_geom_ids = [model.geom(f"box_{index}").id for index, _ in boxes]
@@ -207,6 +209,14 @@ def rollout(scene: Scene, action, physics_params=None, seed=None) -> Result:
         if step == steps:
             break
         mujoco.mj_step2(model, data)
+        # MuJoCo's inequality constraint is compliant. Model the hard stops
+        # as inelastic if an external contact pushes past the configured travel.
+        if data.qpos[qpos] < servo_low:
+            data.qpos[qpos] = servo_low
+            data.qvel[qvel] = max(0, data.qvel[qvel])
+        elif data.qpos[qpos] > servo_high:
+            data.qpos[qpos] = servo_high
+            data.qvel[qvel] = min(0, data.qvel[qvel])
         torque = abs(data.actuator_force[0])
         peak_torque = max(peak_torque, torque)
         if (alpha > 0 and abs(data.ctrl[0] - data.qpos[qpos]) >= stall_error

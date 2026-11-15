@@ -140,3 +140,20 @@ def test_eight_processes_isolate_trials():
     assert report["processes"] == 8
     assert report["parallel_rollouts"] == 16
     assert report["serial_replays"] == 16
+
+
+def test_sweep_moves_a_single_box_and_respects_torque_cap():
+    from sim.api import rollout
+    from sim.search import candidate_actions
+
+    scene = build_scene(demo_snapshot(["red"]))
+    key = scene.snapshot["objects"][0]["instanceId"]
+    action = next(candidate_actions(scene, key))
+    result = rollout(scene, action)
+    assert not result["invalid"], result["reason"]
+    track = np.array(result["trajectories"][key])[:, 1:4]
+    distance = np.linalg.norm(track - track[0], axis=1).max()
+    print(f"single-box commanded sweep: {distance:.3f} mm displacement, "
+          f"{result['peak_servo_torque_nm']:.6f} N·m peak")
+    assert distance > 1
+    assert result["peak_servo_torque_nm"] <= scene.config()["sim"]["servo"]["max_torque_nm"] + 1e-12
