@@ -1,6 +1,7 @@
 """Fresh, deterministic MuJoCo rollouts of placed workbench objects."""
 
 import math
+from functools import lru_cache
 from typing import Any
 
 import mujoco
@@ -108,6 +109,12 @@ def perturbed_scene(scene, params, snapshot, cfg):
     return scene.with_snapshot(snapshot)
 
 
+@lru_cache(maxsize=32)
+def trial_model(scene, tilt, cap):
+    # The cached model is read-only by convention. Each invocation allocates MjData.
+    return compile_scene(scene, tilt_deg=tilt, torque_cap=cap)
+
+
 def rollout(scene: Scene, action, physics_params=None, seed=None) -> Result:
     """Simulate one sweep from rest at its requested start angle.
 
@@ -133,8 +140,7 @@ def rollout(scene: Scene, action, physics_params=None, seed=None) -> Result:
     except ValueError as exc:
         return invalid_result(target_id, str(exc))
 
-    model = compile_scene(trial_scene, tilt_deg=tilt)
-    model.actuator_forcerange[0] = (-cap, cap)
+    model = trial_model(trial_scene, tilt, cap)
     start, end = map(math.radians, (action["sweep_start_deg"], action["sweep_end_deg"]))
     data = initial_data(model, action["sweep_start_deg"])
     body_ids = [model.body(f"parcel_{index}").id for index, _ in boxes]
@@ -147,7 +153,8 @@ def rollout(scene: Scene, action, physics_params=None, seed=None) -> Result:
     settings, scoring = cfg["sim"], cfg["scoring"]
     table = cfg["rig"]["table"]
     target_center = data.xpos[body_ids[target_index]] / MM
-    target_bottom = target_center[2] - abs(data.xmat[body_ids[target_index]].reshape(3, 3)[2]) @ model.geom_size[box_geom_ids[target_index]] / MM
+    target_up = data.xmat[body_ids[target_index]].reshape(3, 3)[2]
+    target_bottom = target_center[2] - abs(target_up) @ model.geom_size[box_geom_ids[target_index]] / MM
     if (not 0 <= target_center[0] <= table["width"]
             or not 0 <= target_center[1] <= table["depth"]
             or target_bottom < table["height"] - scoring["support_tolerance_mm"]):
@@ -178,6 +185,7 @@ def rollout(scene: Scene, action, physics_params=None, seed=None) -> Result:
     jammed_s = 0.0
     stalled = stalled_before = False
     frame = 0
+    peak_torque = 0.0
     for step in range(steps + 1):
         t = step * dt
         alpha = min(1, max(0, (t - before_s) / duration))
@@ -199,8 +207,10 @@ def rollout(scene: Scene, action, physics_params=None, seed=None) -> Result:
         if step == steps:
             break
         mujoco.mj_step2(model, data)
+        torque = abs(data.actuator_force[0])
+        peak_torque = max(peak_torque, torque)
         if (alpha > 0 and abs(data.ctrl[0] - data.qpos[qpos]) >= stall_error
-                and abs(data.qvel[qvel]) <= stall_speed and abs(data.actuator_force[0]) >= cap * 0.999):
+                and abs(data.qvel[qvel]) <= stall_speed and torque >= cap * 0.999):
             jammed_s += dt
             if jammed_s >= servo["stall_duration_s"]:
                 stalled = True
@@ -246,7 +256,8 @@ def rollout(scene: Scene, action, physics_params=None, seed=None) -> Result:
                      target_pair in contacts, scoring["displacement_tolerance_mm"])
     result.update(
         action=action, realized_tilt_deg=tilt, servo_stalled=stalled, servo_stalled_before_contact=stalled_before,
-        servo_final_deg=math.degrees(data.qpos[qpos]), trajectories=tracks, final_poses=final,
+        servo_final_deg=math.degrees(data.qpos[qpos]), peak_servo_torque_nm=float(peak_torque),
+        trajectories=tracks, final_poses=final,
         contacts=[dict(t_s=t, body_a=a, body_b=b) for (a, b), t in contacts.items()],
     )
     return result

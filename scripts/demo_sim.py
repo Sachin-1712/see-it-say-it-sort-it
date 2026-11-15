@@ -13,6 +13,7 @@ def summary(label, action, result, attempts):
         "case": label, "attempts": attempts, "action": action,
         "score": result["score"], "reason": result["reason"], "target": result["target"],
         "others_mm": result["others"], "servo_stalled": result["servo_stalled"],
+        "peak_servo_torque_nm": result.get("peak_servo_torque_nm"),
         "stack_stable": result["stack_stable"],
     }
 

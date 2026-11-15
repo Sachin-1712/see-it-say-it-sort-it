@@ -2,7 +2,6 @@
 
 from xml.etree.ElementTree import Element, SubElement, tostring
 
-import mujoco
 import numpy as np
 
 from .geometry import (
@@ -87,8 +86,8 @@ def add_sweeper(root, world, item, spec, settings, tilt_deg):
                forcelimited="true", forcerange=vector((-torque, torque)))
 
 
-def compile_scene(scene, *, tilt_deg=None):
-    """Return a fresh MjModel. Any trial state belongs to a separate MjData."""
+def scene_xml(scene, *, tilt_deg=None, torque_cap=None):
+    """Generate the MJCF in SI for the scene and locked hinge angle."""
     cfg = scene.config()
     sim = cfg["sim"]
     root = Element("mujoco", model="gekko")
@@ -112,7 +111,10 @@ def compile_scene(scene, *, tilt_deg=None):
     for index, item in enumerate(scene.snapshot["objects"]):
         if item["type"] == "sweeper":
             locked = item.get("tiltDeg", 0) if tilt_deg is None else tilt_deg
-            add_sweeper(root, world, item, cfg["models"]["sweeper"], sim["servo"], locked)
+            servo_settings = sim["servo"]
+            if torque_cap is not None:
+                servo_settings["max_torque_nm"] = torque_cap
+            add_sweeper(root, world, item, cfg["models"]["sweeper"], servo_settings, locked)
             continue
         half_size = [item["dimensionsMm"][key] / 2 for key in ("width", "depth", "height")]
         body = SubElement(world, "body", name=f"parcel_{index}",
@@ -122,11 +124,20 @@ def compile_scene(scene, *, tilt_deg=None):
         SubElement(body, "geom", name=f"box_{index}", type="box", size=si(half_size),
                    mass=str(item["massG"] * GRAM),
                    priority="1", friction=vector(box_friction(item, friction)))
-    return mujoco.MjModel.from_xml_string(tostring(root, encoding="unicode"))
+    return tostring(root, encoding="unicode")
+
+
+def compile_scene(scene, *, tilt_deg=None, torque_cap=None):
+    """Return a fresh MjModel. Trial state belongs to a separate MjData."""
+    import mujoco
+
+    return mujoco.MjModel.from_xml_string(scene_xml(scene, tilt_deg=tilt_deg, torque_cap=torque_cap))
 
 
 
 def initial_data(model, servo_deg=None):
+    import mujoco
+
     data = mujoco.MjData(model)
     if servo_deg is not None:
         address = model.joint("servo").qposadr[0]
