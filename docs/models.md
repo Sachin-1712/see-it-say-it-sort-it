@@ -1,165 +1,201 @@
-# Saved 3D models (Phase 2)
+# Models, inventory and interactive workbench
 
-All four real binary assets are committed under `assets/models/`:
+The current flow is **Capture → confirm identity → photo materialization → inventory → click to place**.
+There is one reusable Box type, one Cylindrical Sweeper type, and any number of
+individually named unfamiliar objects. The workbench starts empty, including when
+the mock observer is already broadcasting parcels. This milestone provides
+visual placement and setup, not a validated physics simulation.
 
-| Object | Inventory ID | Model key / filename | Nominal dimensions (mm) |
-| --- | --- | --- | --- |
-| Box 1 | `box_1` | `box_1.glb` | 50 × 35 × 20 from `rig.json` p1 |
-| Box 2 | `box_2` | `box_2.glb` | 45 × 35 × 22 from `rig.json` p2 |
-| Box 3 | `box_3` | `box_3.glb` | 55 × 38 × 24 fallback placeholder |
-| Cylindrical Sweeper | `sweeper_1` | `sweeper.glb` | Can Ø66 × 110; stick 180 × 9 × 3 placeholders |
+## Run and test
 
-**Every current measurement is provisional.** `rig.json` itself labels its values
-as placeholders. No physical dimensions, shaft orientation, masses, friction,
-pivots or limits have been calibrated by this milestone. The saved models are
-reusable approximations until the team measures the hardware.
-
-## Regenerate assets with Blender
-
-From the repository root, using Blender 4.x or 5.x (verified with 5.2):
-
-```sh
-blender --background --factory-startup --python scripts/generate_models.py
-```
-
-On this Mac, Blender is installed at:
-
-```sh
-/Applications/Blender.app/Contents/MacOS/Blender --background --factory-startup --python scripts/generate_models.py
-```
-
-Optional paths follow Blender's argument separator:
-
-```sh
-blender --background --factory-startup --python scripts/generate_models.py -- --config config/models.json --rig config/rig.json --output assets/models
-```
-
-The script uses Blender's `bpy` API to build bevelled cardboard boxes, packing
-tape and labels, and the metal-can / servo / wooden-stick assembly. It exports
-four self-contained GLBs and `manifest.json`. No textures, external buffers,
-compression decoder, web backend or runtime Blender installation is needed.
-Capturing/uploading an image only associates a photo and a model key; it never
-calls this script or generates geometry.
-
-## Measurement configuration
-
-Edit `config/rig.json` parcel dimensions for p1/p2, and `config/models.json` for
-the new asset measurements and hardware geometry. Existing rig and observer
-formats have not been changed. Boxes use a matching `rigParcel` if present,
-otherwise the explicitly named fallback dimensions and mass. Adding p3 to the
-rig later will make Box 3 use that entry automatically.
-
-Sweeper inputs in `config/models.json` are in a can-base-centred Z-up frame:
-
-- `can.radiusMm`, `can.heightMm`: cylinder geometry.
-- `assemblyTilt.pivotMm`: complete assembly's manual tilt pivot, relative to the
-  can base. `axisZup` is its rotation axis and `limitsDeg` the preview range.
-- `servo.pivotMm`: shaft centre in the same can-base frame.
-- `servo.axisZup`: measured shaft direction. The **placeholder is horizontal +Y**;
-  nothing assumes a vertical shaft. Any nonzero 3-vector is supported.
-- `servo.mountRollDeg`: case orientation about that shaft. The script first
-  aligns local +Z to the shaft, then applies this roll about local +Z.
-- `servo.caseDimensionsLocalMm`: dimensions in the mounted servo's local frame.
-- `servo.restDeg`, `direction`, `limitsDeg`: rest orientation, sweep sign and
-  preview limits. At rest, the stick's long axis is the output frame's local +X.
-- `stick.pivotFromEndMm`: offset from the near end to its attachment point.
-
-Regenerate and re-test after measuring these values. A photo is not used to
-infer size or orientation.
-
-## Units, origins and transform hierarchy
-
-Source measurements and future collision descriptions use **mm and Z-up**.
-The generator builds Blender meshes in **metres**, then exports glTF **Y-up**.
-The mapping is `(x, y, z) -> (x, z, -y)`; Blender's exporter performs that axis
-conversion. See the official [glTF export options](https://docs.blender.org/api/5.2/bpy.ops.export_scene.html).
-
-`viewer/model-assets.mjs` clones a loaded asset and scales its root by **1000**
-to match the existing millimetre-based Three.js scene. It does not rotate the
-asset a second time: the exported basis already matches the viewer's existing
-`toThree` function. Future placement can use that existing function for poses.
-No new models are placed into the workshop in this phase.
-
-Each box's origin is its **bottom centre**, so a future stack can place its base
-at the previous box's top surface. The body has the exact nominal dimensions;
-flat visual labels sit up to 0.015 mm above the surface and are excluded from
-collision geometry.
-
-The sweeper asset origin is the **can-base centre**. Its hierarchy is:
-
-```text
-sweeper
-└── assembly_tilt                 complete assembly's configurable tilt pivot
-    └── can_base_frame           offset back to the can-base reference
-        ├── metal_can / rims / ribs
-        └── servo_mount          configured shaft alignment and case roll
-            ├── servo_case / bracket
-            └── servo_output     independently rotating shaft/output pivot
-                ├── servo_horn / screw
-                └── wooden_stick
-```
-
-The servo output rotates about its **local glTF +Y**, the exported equivalent of
-Blender local +Z. The parent mount determines the physical shaft direction.
-The default assembly tilt rotates about local glTF +X. `manifest.json` records
-the actual configured axes; the preview reads these instead of hard-coding a
-world-space rotation. Preview sliders never send WebSocket or Arduino commands.
-
-## Inventory and viewer test
+From the repository root:
 
 ```sh
 python3 -m http.server 8080 --bind 127.0.0.1
 ```
 
-Open <http://localhost:8080/viewer/> and refresh after code changes. No frontend
-build or npm install is required for the app. It uses the existing Three.js CDN;
-camera/upload and inventory still work if the observer is disconnected. WebGL
-and access to that CDN are needed for 3D rendering.
+Open <http://localhost:8080/viewer/>. Refresh existing tabs to load changes;
+photographs and placed objects are intentionally held in memory for that tab.
+The app has no build step or frontend npm dependency. Three.js still comes from
+the existing CDN. WebGL is required for 3D; capture/inventory is independent of
+the observer connection and is separately initialised.
 
-1. Before capture, use **Preview object** or **View 3D** to inspect all four saved
-   assets. They are labelled “no photo yet” and are not counted as captures.
-2. Click **Capture Object**, take or upload a real photo, select the matching
-   identity, select a box colour and confirm. The selected saved model loads in
-   the inventory preview beside the real photograph. Repeat for all four slots.
-3. Drag the model to rotate; scroll/pinch to zoom; **Reset view** restores the
-   camera. Keyboard alternative: focus the preview, use arrow keys to rotate,
-   `+` / `-` to zoom and Home to reset.
-4. For the sweeper, adjust **Manual can tilt** and **Servo stick rotation**.
-   The first moves the whole assembly; the second moves only the stick/output.
-   **Reset pose** returns both joints to their configured rest angles.
-5. Replace/remove a photo and edit a box colour. Its static asset identity stays
-   fixed. The exported cardboard colours are intentionally distinct and fixed;
-   the assigned colour controls the inventory's routing label, not mesh geometry.
-6. Stop the mock observer and repeat capture / preview. Check that the existing
-   Agents and Outcomes tabs still work after reconnecting.
-7. If a model file is unavailable, the photo remains in inventory and **Retry
-   model load** can retry. Three.js parse/load failures never discard a capture.
+To run the optional mock observer in another terminal:
 
-The capture flow remains manual identity selection. It makes no AI recognition
-claim. Inventory photographs remain in memory for the tab and clear on refresh;
-the four saved GLBs are permanent and independent of those photographs.
+```sh
+python3 -m venv .venv
+.venv/bin/python -m pip install websockets
+.venv/bin/python scripts/fake_observer.py
+```
 
-## Physical metadata and the next phase
+The observer still uses `ws://localhost:8765` and the original frame and command
+formats. Kill, silence, unsilence, replan, execute and outcome displays are
+preserved. New placement, particle and tilt controls send no hardware commands.
+The legacy **Send to Arduino** button retains its existing explicit execute
+command; no automatic execution or physical confirmation workflow was added.
 
-`config/models.json` is the editable measurement source; the generated
-`assets/models/manifest.json` supplies physical metadata separately from meshes:
-dimensions, origin, mass, primitive collision shapes, relative frames, joint
-axes/pivots/limits, measurement provenance and placeholder flags. Friction is
-explicitly `null` until measured. Node extras identify model keys and joint axes.
-Visual bevels, tape, labels and can ridges are not collision geometry.
+## Demo checklist
 
-Future code can use `ModelLibrary.instantiate(modelKey)` for independent
-transforms from cached GLBs. Instances share immutable mesh/material resources;
-clone materials first if future placement needs per-instance recolouring. It
-returns `{ root, metadata, joints }` in viewer millimetres. `applyJoint` applies
-local rotations relative to each saved rest pose. The inventory's `list()` and
-`getPhoto(id)` API and `inventorychange` event remain available.
+1. Load a new tab: the workshop, grid, workbench and neutral bags appear, with
+   zero boxes and no sweeper. Observer parcel rows may appear under **Observer
+   parcels**; those are telemetry and do not spawn objects.
+2. Click **Capture Object**, permit the camera, photograph a box and choose
+   **Box**. Alternatively upload a real JPG, PNG or WebP photograph. Confirm
+   **Add to Inventory** to see the photograph dissolve into surface particles,
+   converge, and reveal the neutral-grey 3D representation.
+3. Click the **Box** card three times. It reads **Box × 3** and three independent
+   models appear on the workbench at the same horizontal position, stacked by
+   their model heights. Further clicks continue the stack without a three-box cap.
+4. Capture and select **Cylindrical Sweeper**. Click its card to place it beside
+   the stack. Further clicks select that same instance rather than duplicating it.
+5. Click the sweeper in the workshop (or select it in **Select placed object**).
+   Adjust **Manual tilt** and **Stick rotation** independently. The complete
+   can/servo/stick assembly tilts about its configured pivot; the servo output
+   rotates just the stick. These are visual setup controls, not motor commands.
+6. Capture an unfamiliar object with **Other object · approximation**. Give it a
+   name, choose Cylinder, Bottle, Mug or Cuboid and enter width/depth/height in mm.
+   Confirm it into the same inventory. Its approximate geometry gets the same
+   materialization transition and can be placed using its card.
+7. Use **Preview** to rotate/zoom an acquired object. **Reset view** resets the
+   preview camera; **Replay transition** repeats the contained effect. Keyboard
+   preview controls: arrows rotate, `+` / `-` zoom, Home resets.
+8. Use **Clear workbench**: placed objects disappear while inventory photos
+   remain. Wait for observer frames; the bench stays empty. A placement still
+   loading when Clear was pressed is canceled, so it cannot reappear later.
+9. Use **Show observer rehearsals** to opt into the legacy ghost paths and best
+   attempt overlay. It defaults off and resets off on Clear. Agents and Outcomes
+   remain available in their existing tabs.
+10. Disconnect the observer and repeat capture, preview, placement and tilt. Those
+    actions use local scene state, not observer data. Enable reduced motion in the
+    OS/browser: materialization skips directly to the opaque model, and setup
+    rotations respond immediately.
 
-Placement, stacking, MuJoCo bodies, autonomous planning and physical Arduino
-execution are deliberately outside this milestone. Hardware measurements are
-still needed before the sweeper can claim an accurate match to reality.
+## Permanent known models
 
-## Validation
+Only two categories load permanent GLBs:
+
+| Category / model key | Asset | Geometry source |
+| --- | --- | --- |
+| `box` | `assets/models/box.glb` | `config/rig.json` parcel p1: 50 × 35 × 20 mm |
+| `sweeper` | `assets/models/sweeper.glb` | `config/models.json` sweeper assembly |
+
+The three former box-specific files have been retired. Historical inventory IDs
+`box_1`, `box_2`, `box_3` and `sweeper_1` are accepted by the store as aliases of
+Box and Sweeper; all new captures use the canonical reusable identities. This
+application had no persistent inventory database to migrate. Existing real photo
+capture, upload, recapture, routing-colour edits, removal and Blob association
+continue to work. Removing an acquired asset does not remove placed instances.
+
+Blender generation is an offline authoring command:
+
+```sh
+/Applications/Blender.app/Contents/MacOS/Blender --background --factory-startup --python scripts/generate_models.py
+```
+
+If Blender is on PATH, use `blender` in place of that path. Optional paths follow
+`--`, for example `-- --config config/models.json --rig config/rig.json --output assets/models`.
+Verified using Blender 5.2. The browser never invokes Blender, performs image-to-3D
+reconstruction for known objects or generates a new Box mesh for each photo.
+
+The Box uses neutral cardboard, grey tape, a restrained label and a small bevel.
+The sweeper uses neutral metal, a graphite servo and a muted grey wooden stick.
+All final model materials are opaque. Dimensions and proportions have been kept;
+lighting uses controlled PBR environment illumination and soft workshop shadows.
+
+`viewer/assets.mjs` holds one shared `ModelLibrary` and `AssetRouter`. The library
+caches each GLB promise by model key, including concurrent requests. Preview and
+workbench share this cache. Instances clone the Object3D hierarchy and share the
+original geometry/material buffers; transforms and joint quaternions are
+independent. Failed loads can retry and never discard a captured photograph.
+
+## Unfamiliar objects
+
+Repository inspection found no pre-existing procedural reconstruction pipeline.
+`AssetRouter` now explicitly separates predefined Box/Sweeper loading from a
+user-selected primitive approximation. Unknown captures are never silently mapped
+to the saved Box. Every unfamiliar capture has a unique `unknown_###` identity,
+name, photograph and shape/dimension definition; recapture replaces only that
+asset. The approximation generator caches geometry per definition and clones it
+for preview/placement. Cylinder, lathed bottle, open mug with handle, and cuboid
+shapes are supported. Their final envelope matches the dimensions entered.
+
+This is **manual approximation**, not recognition or accurate reconstruction from
+one photograph. Collision metadata for unfamiliar objects is a conservative
+bounding box marked approximate. Mass and friction are null until measured.
+
+## Coordinates, geometry and stacking
+
+Config and scene-state records use right-handed **millimetres, Z-up**. Blender
+constructs meshes in metres; glTF exports **Y-up**, mapping `(x,y,z)` to `(x,z,-y)`.
+The existing `toThree` function in `viewer/workshop.mjs` remains the placement pose
+conversion. `ModelLibrary` scales glTF roots by 1000 and does not rotate them twice.
+Procedural approximations are already created in viewer millimetres/Y-up.
+
+Box origins are bottom-centred. For each new box:
+
+```text
+baseZ   = table.height + sum(height of every box already below it)
+centreZ = baseZ + newBox.height / 2
+```
+
+The root is placed at `baseZ`; scene metadata records the centre as `position.z`.
+With the current 40 mm workbench and 20 mm boxes, the first three centres are
+50, 70 and 90 mm in the absolute table frame (10, 30, 50 above the surface).
+Visual labels extend at most 0.015 mm above the body and are excluded from its
+collision/stacking dimensions. Placement uses asset dimensions, not photo pixels.
+
+World positions are configurable in `config/models.json` under `workbench`.
+`WorkbenchState` assigns unique `world_box_####`, `world_sweeper_####` or
+`world_unknown_####` IDs. IDs do not repeat after Clear. Its snapshot is JSON-ready:
+
+```js
+import { workbenchState } from './workbench-state.mjs';
+const sceneState = workbenchState.snapshot();
+// { mode:'visual-placement', units:'mm', axes:'Z-up', selectedId, objects:[...] }
+```
+
+Each instance records its inventory ID, model key, stack index, centre/base
+positions, dimensions, routing colour/destination, mass/friction, measurement flags,
+collision description and independent tilt/servo targets. Editing the inventory's
+routing colour later does not silently relabel already placed instances.
+`workbenchchange` DOM events report the same state. Inventory metadata and its
+observer-independent `inventorychange` event remain separate. Nothing sends
+this newly arranged scene into the old mock simulation or physical hardware yet.
+
+## Sweeper pivots and motion
+
+The hierarchy remains `sweeper → assembly_tilt → can_base_frame → servo_mount →
+servo_output → wooden_stick`. The can and case are under the whole-assembly tilt;
+the stick/horn are under the servo output. Configurable tilt pivot and axis,
+shaft pivot and axis, mount roll, rest orientation, direction and limits live in
+`config/models.json`. The default shaft is explicitly horizontal +Y in the
+simulation frame. The local glTF output axis is +Y, transformed by the mount.
+The controller reads those metadata values instead of assuming a world-vertical
+servo axis. It interpolates each setup angle toward its independent target with
+an 80 ms exponential time constant and snaps directly under reduced motion.
+
+**All hardware measurements, masses, axes, pivot positions and limits are still
+provisional.** The original rig itself marks its measurements as placeholders.
+Measure and regenerate before claiming agreement with the physical sweeper.
+`assets/models/manifest.json` keeps physical dimensions/collision primitives,
+measurement provenance and joint data separate from visual meshes.
+
+## Materialization
+
+Confirmation first preserves the real photo and identity. In the inventory's
+preview canvas, the photograph dissolves in small tiles while **1,800 grey/white
+points** drift and converge onto area-weighted samples of the actual model's mesh
+surfaces. A shader updates a progress uniform over **1,200 ms**; target points are
+computed once. The completed opaque mesh is revealed as the particles fade.
+Both saved and approximate models use this same path. It visually connects the
+photo and its representation; it does not claim photographic reconstruction.
+
+The effect stays inside that canvas and does not pause workshop or agent
+controls. Changing objects, removing a capture, hiding the tab or choosing reduced
+motion safely cancels/releases temporary textures and particle buffers. Known
+models remain cached. No animation or generation library was added.
+
+## Validation and remaining limits
 
 ```sh
 npm ci --prefix tests
@@ -167,14 +203,23 @@ npm test --prefix tests
 .venv/bin/python tests/observer_smoke.py
 ```
 
-The model tests parse every GLB with Three.js 0.170.0 and validate them with the
-Khronos glTF validator. They check dimensions, bottom origins, metre/mm scaling,
-node hierarchy, a nonvertical shaft, independent rotations, cached loading,
-independent instance transforms and retry behavior. The camera integration
-suite checks that all four confirmed identities emit the correct preview request
-and retain distinct asset keys. Camera/upload regression tests remain included.
+The suite covers capture/upload errors and races, arbitrary unfamiliar captures,
+known/unknown routing, glTF validation, monochrome opaque materials, unit/origin
+checks, cache sharing, independent instances, mixed-height stacking, rapid clicks,
+singleton sweeper placement, clear-during-load cancellation, independent joints,
+actual surface targets, reduced motion and animation cleanup. Tests use simulated
+camera/texture devices; actual WebGL and real capture were also checked in native
+Chrome.
 
-Native Chrome verification loaded all four saved assets and exercised the two
-sweeper controls. A real webcam photo was confirmed into Box 1; both the photo and
-saved Box 1 model appeared together. That temporary test capture was cleared.
-Physical measurements and other browser/device combinations need hands-on checks.
+Native checks verified an empty connected bench, a real-photo particle transition,
+three box clicks/IDs/stack, single-sweeper placement, visible 25° can tilt with 45°
+independent stick rotation, an unfamiliar Mug approximation/transition/placement,
+and clearing while observer frames continued. Tests used a separate tab; the
+original viewer's captured object was preserved.
+
+Remaining limits: manual identity selection; user-entered approximate geometry for
+unknowns; provisional hardware measurements; in-memory photos/scene; no collision,
+gravity, stability checks, arbitrary object editing or MuJoCo connection. The
+unknown placement positions are simple display slots and do not avoid overlap.
+There is no measured M2 frame-rate benchmark; particle count and work per frame
+are bounded, and the transition was visibly exercised in Chrome.

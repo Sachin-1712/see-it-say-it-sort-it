@@ -5,11 +5,11 @@
   "physicalUnits": "millimetres, grams, degrees",
   "physicalAxes": "Z-up",
   "models": {
-    "box_1": {
-      "name": "Box 1",
-      "url": "box_1.glb",
+    "box": {
+      "name": "Box",
+      "url": "box.glb",
       "type": "box",
-      "colour": "#C65B48",
+      "colour": "#969696",
       "origin": "bottom-centre",
       "dimensionsMm": {
         "width": 50,
@@ -34,73 +34,7 @@
       "placeholderMeasurements": true,
       "friction": null,
       "nodes": {
-        "root": "box_1",
-        "body": "parcel_body"
-      }
-    },
-    "box_2": {
-      "name": "Box 2",
-      "url": "box_2.glb",
-      "type": "box",
-      "colour": "#507CB1",
-      "origin": "bottom-centre",
-      "dimensionsMm": {
-        "width": 45,
-        "depth": 35,
-        "height": 22
-      },
-      "massG": 22,
-      "collision": {
-        "shape": "box",
-        "sizeMm": [
-          45,
-          35,
-          22
-        ],
-        "centerMm": [
-          0,
-          0,
-          11.0
-        ]
-      },
-      "measurementSource": "config/rig.json parcels.p2",
-      "placeholderMeasurements": true,
-      "friction": null,
-      "nodes": {
-        "root": "box_2",
-        "body": "parcel_body"
-      }
-    },
-    "box_3": {
-      "name": "Box 3",
-      "url": "box_3.glb",
-      "type": "box",
-      "colour": "#739461",
-      "origin": "bottom-centre",
-      "dimensionsMm": {
-        "width": 55,
-        "depth": 38,
-        "height": 24
-      },
-      "massG": 28,
-      "collision": {
-        "shape": "box",
-        "sizeMm": [
-          55,
-          38,
-          24
-        ],
-        "centerMm": [
-          0,
-          0,
-          12.0
-        ]
-      },
-      "measurementSource": "config/models.json fallbackDimensionsMm",
-      "placeholderMeasurements": true,
-      "friction": null,
-      "nodes": {
-        "root": "box_3",
+        "root": "box",
         "body": "parcel_body"
       }
     },
@@ -109,6 +43,11 @@
       "url": "sweeper.glb",
       "type": "sweeper",
       "origin": "can-base-centre",
+      "dimensionsMm": {
+        "width": 205.6,
+        "depth": 67.2,
+        "height": 137.0
+      },
       "placeholderMeasurements": true,
       "measurementSource": "config/models.json sweeper",
       "massG": 70,

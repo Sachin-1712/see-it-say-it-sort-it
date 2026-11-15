@@ -1,64 +1,47 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { InventoryStore, OBJECT_SLOTS } from "../viewer/inventory-store.mjs";
-
-const photograph = () => new Blob(["test image bytes"], { type: "image/jpeg" });
+const photo = (color = "red") => ({ blob: new Blob(["test photo"], { type: "image/jpeg" }), color, source: "camera" });
+const definition = { shape: "bottle", dimensionsMm: { width: 40, depth: 40, height: 80 } };
 function setup() {
-  let next = 0; const revoked = [];
-  const store = new InventoryStore({ red: "left", blue: "right" }, {
-    createObjectURL: () => `blob:test-${++next}`, revokeObjectURL: url => revoked.push(url),
-  });
-  return { store, revoked };
+  let sequence = 0; const revoked = [];
+  return { revoked, store: new InventoryStore({ red: "left", blue: "right" }, { createObjectURL: () => `blob:${++sequence}`, revokeObjectURL: url => revoked.push(url) }) };
 }
-const photo = color => ({ blob: photograph(), color, source: "camera" });
-
-test("all four fixed slots have independent records, model keys and photos", () => {
+test("known identities are reusable types; legacy Box identities map to the same asset", () => {
   const { store } = setup();
-  for (const slot of OBJECT_SLOTS) store.save(slot.id, photo("blue"));
-  assert.equal(store.list().length, 4);
-  assert.equal(store.get("box_1").destination, "right");
-  const sweeper = store.get("sweeper_1");
-  assert.equal(sweeper.modelKey, "sweeper");
-  assert.deepEqual(store.list().map(record => record.modelKey), ["box_1", "box_2", "box_3", "sweeper"]);
-  assert.equal(sweeper.color, null);
-  assert.equal(sweeper.destination, null);
-  assert.equal(sweeper.status, "captured");
-  assert.ok(Date.parse(sweeper.capturedAt));
-  assert.equal(new Set(OBJECT_SLOTS.map(slot => store.getPhoto(slot.id).url)).size, 4);
-  assert.doesNotThrow(() => JSON.stringify(store.list()));
-  assert.equal(JSON.stringify(store.list()).includes("blob:"), false);
+  store.save("box_1", photo()); store.save("box_2", photo("blue")); store.save("sweeper_1", photo());
+  assert.equal(store.list().length, 2); assert.equal(store.get("box").modelKey, "box");
+  assert.equal(store.get("box").destination, "right"); assert.equal(store.get("sweeper").color, null);
+  assert.deepEqual(OBJECT_SLOTS.map(slot => slot.id), ["box", "sweeper"]);
 });
-
-test("replacement and removal release URLs without modifying unrelated slots", () => {
-  const { store, revoked } = setup();
-  store.save("box_1", photo("red")); store.save("box_2", photo("blue"));
-  const other = store.get("box_2"), oldURL = store.getPhoto("box_1").url;
-  store.save("box_1", { ...photo("blue"), source: "upload" });
-  assert.deepEqual(revoked, [oldURL]);
-  assert.equal(store.list().length, 2);
-  assert.deepEqual(store.get("box_2"), other);
-  assert.equal(store.get("box_1").destination, "right");
-  store.remove("box_1");
-  assert.equal(store.get("box_1"), null); assert.equal(store.getPhoto("box_1"), null);
-  assert.deepEqual(store.get("box_2"), other);
-  store.dispose(); assert.equal(store.list().length, 0); assert.equal(revoked.length, 3);
+test("unfamiliar objects retain distinct IDs, photographs, names and approximation metadata", () => {
+  const { store } = setup();
+  for (let i = 0; i < 12; i++) store.save("other", { ...photo(), name: `Object ${i}`, definition });
+  const items = store.list(); assert.equal(items.length, 12); assert.equal(new Set(items.map(item => item.id)).size, 12);
+  assert.ok(items.every(item => item.type === "unknown" && item.definition.approximation && item.modelKey.startsWith("procedural:")));
+  assert.equal(JSON.stringify(items).includes("blob:"), false);
+  const other = store.get(items[1].id);
+  store.save(items[0].id, { ...photo(), name: "Replacement", definition: { ...definition, shape: "mug" } });
+  assert.equal(store.list().length, 12); assert.deepEqual(store.get(items[1].id), other);
 });
-
-test("colour edits use only the configured mapping and snapshots cannot mutate records", () => {
-  const { store } = setup(); store.save("box_1", photo("red"));
-  store.setColor("box_1", "green"); assert.equal(store.get("box_1").destination, null);
-  store.setColor("box_1", "blue"); assert.equal(store.get("box_1").destination, "right");
-  store.list()[0].color = "red"; store.get("box_1").destination = "left";
-  assert.equal(store.get("box_1").color, "blue"); assert.equal(store.get("box_1").destination, "right");
+test("replacement and removal release only the affected photo URLs", () => {
+  const { store, revoked } = setup(); store.save("box", photo()); store.save("sweeper", photo());
+  const original = store.getPhoto("box").url, other = store.getPhoto("sweeper").url;
+  store.save("box", photo("blue")); assert.deepEqual(revoked, [original]);
+  store.remove("box"); assert.equal(store.getPhoto("sweeper").url, other); assert.equal(store.get("box"), null);
+  store.dispose(); assert.equal(revoked.length, 3); assert.equal(store.list().length, 0);
 });
-
-test("invalid records cannot replace a valid photograph", () => {
-  const { store, revoked } = setup(); store.save("box_1", photo("red"));
-  const original = store.getPhoto("box_1").url;
-  assert.throws(() => store.save("unknown", photo("red")));
-  assert.throws(() => store.save("box_1", { ...photo("red"), blob: null }));
-  assert.throws(() => store.save("box_1", { ...photo("red"), blob: new Blob([]) }));
-  assert.throws(() => store.save("box_1", photo(null)));
-  assert.throws(() => store.save("box_1", { ...photo("red"), source: "generated" }));
-  assert.equal(store.getPhoto("box_1").url, original); assert.equal(revoked.length, 0);
+test("routing edits and snapshots leave other inventory metadata unchanged", () => {
+  const { store } = setup(); store.save("box", photo()); store.setColor("box", "green");
+  assert.equal(store.get("box").destination, null); store.setColor("box", "blue");
+  const snapshot = store.list(); snapshot[0].name = "bad";
+  assert.equal(store.get("box").name, "Box"); assert.equal(store.get("box").destination, "right");
+});
+test("invalid captures and unknown geometry never overwrite a valid photograph", () => {
+  const { store } = setup(); store.save("box", photo()); const original = store.getPhoto("box").url;
+  assert.throws(() => store.save("box", { ...photo(), blob: null }));
+  assert.throws(() => store.save("box", { ...photo(), source: "generated" }));
+  assert.throws(() => store.save("other", { ...photo(), name: "Mug", definition: { shape: "box" } }));
+  assert.throws(() => store.save("other", { ...photo(), name: "Mug", definition: { ...definition, dimensionsMm: { width: -2, depth: 40, height: 80 } } }));
+  assert.equal(store.getPhoto("box").url, original);
 });

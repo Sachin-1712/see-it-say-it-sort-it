@@ -117,11 +117,11 @@ def build_box(spec, rig, output):
     root["origin"] = "bottom centre"
     root["placeholderMeasurements"] = True
     root["dimensionsMm"] = dimensions
-    body = material("Coloured cardboard", spec["colour"])
-    tape = material("Kraft packing tape", "#BCA17A", roughness=0.85)
-    paper = material("Shipping label", "#F0EAD9")
-    ink = material("Printed markings", "#313331")
-    box("parcel_body", dimensions, (0, 0, height / 2), root, body, min(dimensions) * 0.018)
+    body = material("Grey cardboard", spec["colour"], roughness=0.88)
+    tape = material("Kraft packing tape", "#858585", roughness=0.85)
+    paper = material("Shipping label", "#BEBEBE")
+    ink = material("Printed markings", "#444444")
+    box("parcel_body", dimensions, (0, 0, height / 2), root, body, min(dimensions) * 0.008)
     # Thin surface decals do not change collision geometry or stacking height.
     decal("packing_tape", (width * 0.19, depth * 0.99), (0, 0, height + 0.005), root, tape)
     decal("shipping_label", (width * 0.31, depth * 0.35), (width * 0.26, 0, height + 0.01), root, paper)
@@ -143,11 +143,11 @@ def build_sweeper(spec, output):
     reset()
     can, servo, stick, tilt = (spec[k] for k in ("can", "servo", "stick", "assemblyTilt"))
     tilt_axis, servo_axis = axis(tilt["axisZup"]), axis(servo["axisZup"])
-    steel = material("Brushed metal can", "#B5BDC4", metal=0.8, roughness=0.32)
-    rim = material("Can rolled rims", "#D5DADD", metal=0.9, roughness=0.24)
-    plastic = material("Servo blue case", "#244B76", roughness=0.45)
-    dark = material("Servo mount and horn", "#252B32", roughness=0.6)
-    wood = material("Wooden sweeper", "#C49B65", roughness=0.85)
+    steel = material("Brushed metal can", "#A4A4A4", metal=0.8, roughness=0.32)
+    rim = material("Can rolled rims", "#BABABA", metal=0.9, roughness=0.24)
+    plastic = material("Servo graphite case", "#3D3D3D", roughness=0.45)
+    dark = material("Servo mount and horn", "#303030", roughness=0.6)
+    wood = material("Muted grey wooden sweeper", "#777777", roughness=0.85)
     # Asset origin is can-base centre. The tilt pivot may be elsewhere in that frame.
     root = empty("sweeper")
     root["modelKey"] = "sweeper"
@@ -178,9 +178,14 @@ def build_sweeper(spec, output):
     center = [stick["lengthMm"] / 2 - stick["pivotFromEndMm"], 0, 3 + stick["thicknessMm"] / 2]
     box("wooden_stick", (stick["lengthMm"], stick["widthMm"], stick["thicknessMm"]), center, output_node, wood, 0.4)
     cylinder("horn_screw", 1.5, 0.7, (0, 0, 3 + stick["thicknessMm"] + 0.35), output_node, rim, 0.1)
+    bpy.context.view_layer.update()
+    corners = [obj.matrix_world @ Vector(corner) for obj in bpy.context.scene.objects
+               if obj.type == "MESH" for corner in obj.bound_box]
+    extents = [(max(p[i] for p in corners) - min(p[i] for p in corners)) / MM for i in range(3)]
+    dimensions = dict(zip(("width", "depth", "height"), (round(value, 3) for value in extents)))
     export(output / "sweeper.glb")
     return {
-        "name": spec["name"], "url": "sweeper.glb", "type": "sweeper", "origin": "can-base-centre",
+        "name": spec["name"], "url": "sweeper.glb", "type": "sweeper", "origin": "can-base-centre", "dimensionsMm": dimensions,
         "placeholderMeasurements": True, "measurementSource": "config/models.json sweeper",
         "massG": can["massG"] + servo["massG"] + stick["massG"], "friction": spec["friction"],
         "geometry": {"can": can, "servo": servo, "stick": stick},
@@ -212,7 +217,9 @@ def main():
         manifest["models"][spec["id"]] = build_box(spec, rig, args.output)
     manifest["models"]["sweeper"] = build_sweeper(config["sweeper"], args.output)
     (args.output / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
-    print("Generated four permanent GLB assets and physical metadata in", args.output)
+    for legacy in ("box_1.glb", "box_2.glb", "box_3.glb"):
+        (args.output / legacy).unlink(missing_ok=True)
+    print("Generated reusable Box and Sweeper assets and physical metadata in", args.output)
 
 
 if __name__ == "__main__":

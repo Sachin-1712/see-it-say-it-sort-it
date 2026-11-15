@@ -1,21 +1,22 @@
 # Dry Run
 
-A DurHack parcel-sorting viewer with camera capture, an object inventory and four
-permanent Blender-generated GLB models.
+A DurHack camera-to-3D workbench: capture an object, confirm its identity, watch
+it materialize in inventory, then click to place it in the workshop.
 
 ```sh
 python3 -m http.server 8080 --bind 127.0.0.1
 ```
 
-Open <http://localhost:8080/viewer/>. Click **Capture Object** to photograph
-Box 1, Box 2, Box 3 or the Cylindrical Sweeper, or upload a photograph. Identity
-and colour are selected manually. Confirming a photo loads the matching saved
-model with rotate/zoom/reset controls. Inventory photos clear on refresh; the
-saved assets remain in the repository.
+Open <http://localhost:8080/viewer/>. The workbench starts empty. Capture **Box**
+once and click its card repeatedly to build a visual stack. Capture the
+**Cylindrical Sweeper**, place it once and adjust its tilt and stick rotation.
+Unfamiliar objects use manually chosen, explicitly approximate primitive shapes.
+All final physical models use opaque monochrome materials.
 
-See [saved model generation and preview instructions](docs/models.md) for
-Blender commands, measurements, pivots, units, physical metadata and validation.
+Photographs and scene placement stay in memory for the tab. Known GLBs are
+permanent repository assets and are loaded once, then cloned. No frontend build,
+runtime Blender or image-to-3D service is required.
 
-See [camera and inventory instructions](docs/camera-inventory.md) for webcam
-testing, optional mock observer setup, the data format and automated checks.
-The original project plan is in [docs/PRD.md](docs/PRD.md).
+See [model generation, architecture, demo and tests](docs/models.md) and
+[camera instructions](docs/camera-inventory.md). The original historical plan is
+in [docs/PRD.md](docs/PRD.md); newer scoped requirements supersede its older exclusions.

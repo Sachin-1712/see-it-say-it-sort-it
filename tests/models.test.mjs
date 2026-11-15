@@ -33,6 +33,10 @@ for (const [key, metadata] of Object.entries(manifest.models)) {
     let meshes = 0, triangles = 0;
     asset.scene.traverse(node => {
       if (!node.isMesh) return; meshes++;
+      for (const material of Array.isArray(node.material) ? node.material : [node.material]) {
+        near(material.color.r, material.color.g, 0.000001); near(material.color.g, material.color.b, 0.000001);
+        assert.equal(material.transparent, false); assert.equal(material.opacity, 1);
+      }
       triangles += (node.geometry.index?.count ?? node.geometry.attributes.position.count) / 3;
     });
     assert.ok(meshes >= 1); assert.ok(triangles < 6000, `${triangles} triangles`);
@@ -42,12 +46,12 @@ for (const [key, metadata] of Object.entries(manifest.models)) {
 }
 
 test("each inventory slot maps to a distinct permanent asset", () => {
-  assert.deepEqual(OBJECT_SLOTS.map(slot => slot.modelKey), ["box_1", "box_2", "box_3", "sweeper"]);
+  assert.deepEqual(OBJECT_SLOTS.map(slot => slot.modelKey), ["box", "sweeper"]);
   for (const slot of OBJECT_SLOTS) assert.ok(manifest.models[slot.modelKey]);
 });
 
 test("boxes preserve rig dimensions, metre/Y-up export and bottom-centre origins", async () => {
-  for (const [index, key] of ["box_1", "box_2", "box_3"].entries()) {
+  for (const [index, key] of ["box"].entries()) {
     const asset = await parse(`${key}.glb`), body = asset.scene.getObjectByName("parcel_body");
     const bounds = new THREE.Box3().setFromObject(body), size = bounds.getSize(new THREE.Vector3()), center = bounds.getCenter(new THREE.Vector3());
     const dimensions = manifest.models[key].dimensionsMm;
@@ -100,9 +104,9 @@ test("loading is cached while instances and joint transforms remain independent"
 
 test("failed model loads are retryable; unknown keys never request geometry", async () => {
   let calls = 0;
-  const library = makeLibrary({ loadAsync: async () => { calls++; if (calls === 1) throw new Error("Unavailable"); return parse("box_1.glb"); } });
-  await assert.rejects(library.instantiate("box_1"), /Unavailable/);
-  const instance = await library.instantiate("box_1"); assert.ok(instance.root); assert.equal(calls, 2);
+  const library = makeLibrary({ loadAsync: async () => { calls++; if (calls === 1) throw new Error("Unavailable"); return parse("box.glb"); } });
+  await assert.rejects(library.instantiate("box"), /Unavailable/);
+  const instance = await library.instantiate("box"); assert.ok(instance.root); assert.equal(calls, 2);
   await assert.rejects(library.instantiate("invented"), /Unknown/); assert.equal(calls, 2);
 });
 
@@ -113,7 +117,7 @@ test("the browser fetch API retains its required global receiver", async () => {
     return Promise.resolve({ ok: true, json: async () => manifest });
   };
   try {
-    const library = new ModelLibrary({ loadAsync: () => parse("box_1.glb") });
-    assert.ok((await library.instantiate("box_1")).root);
+    const library = new ModelLibrary({ loadAsync: () => parse("box.glb") });
+    assert.ok((await library.instantiate("box")).root);
   } finally { globalThis.fetch = original; }
 });

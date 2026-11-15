@@ -1,139 +1,81 @@
-# Phase 1: camera and object inventory
+# Camera and object inventory
 
-Phase 2 now adds [permanent saved models and interactive previews](models.md).
-The camera behavior below remains supported. Current model keys are `box_1`,
-`box_2`, `box_3` and `sweeper`; confirming a capture opens its saved model preview.
+The current demo is documented in [Models, inventory and interactive workbench](models.md).
+Capture remains browser-native with a real webcam or image upload. Identity is
+selected manually: **Box**, **Cylindrical Sweeper**, or **Other object · approximation**.
+The photograph never triggers regeneration of a known object's permanent asset.
 
-The viewer now captures photographs into four fixed inventory slots: Box 1,
-Box 2, Box 3 and Cylindrical Sweeper. Identity and box colour are **selected
-manually**, not recognised by AI. This is the Phase 1 scope supplied after the
-original PRD. Inventory capture is separate from the observer's physical-world
-`items`; the original scene and WebSocket protocol are unchanged.
+## Run
 
-## Run locally
-
-From the repository root, serve the entire repository (not just `viewer/`):
+Serve the repository root:
 
 ```sh
 python3 -m http.server 8080 --bind 127.0.0.1
 ```
 
-Open <http://localhost:8080/viewer/> in a current Chrome, Firefox or Safari.
-If the server is already running, refresh that page to load the changes.
-Camera access requires HTTPS or a local secure context such as localhost, as
-described in the [MediaDevices documentation](https://developer.mozilla.org/en-US/docs/Web/API/MediaDevices/getUserMedia).
-An ordinary HTTP LAN IP will not provide webcam access. Upload remains available.
+Open <http://localhost:8080/viewer/>. Camera access requires a supported browser
+on a secure context such as localhost or HTTPS, as explained in the
+[MediaDevices documentation](https://developer.mozilla.org/en-US/docs/Web/API/MediaDevices/getUserMedia).
+The mock observer is optional for capture, preview and placement.
 
-The observer is optional for capture. To run the existing fake demo in a second
-terminal:
+## Capture checklist
 
-```sh
-python3 -m venv .venv
-.venv/bin/python -m pip install websockets
-.venv/bin/python scripts/fake_observer.py
-```
+1. Click **Capture Object** and allow camera access. The browser/OS may remember
+   previous permission decisions; a new prompt is not required on every opening.
+2. Wait for **LIVE CAMERA** and centre the object. Choose a connected webcam using
+   the camera selector when several devices are present.
+3. Click **Take Picture**. The confirmation shows the actual video frame and
+   stops the stream. **Retake** reopens the camera.
+4. Choose the identity and, for Box, its routing colour. Red maps to Left Bag and
+   blue to Right Bag via `config/rig.json`. Model surfaces stay neutral grey.
+5. For Other, name the object and choose an approximate shape and measured
+   width/depth/height. The UI states this is an approximation, not reconstruction.
+6. Confirm **Add to Inventory**. The photo-to-model transition runs in the inventory
+   preview. Click the card to place an instance in the workshop.
+7. **Recapture** keeps the old photograph until confirmation; **Remove** clears
+   that inventory record only. Existing placed instances stay on the bench.
+8. Close using ✕ or Escape while previewing: the camera must stop. Hiding the tab
+   pauses live capture too; **Retry camera** resumes it.
+9. Deny permission, disconnect the camera or use an unavailable device: the error
+   should leave **Upload a photo** usable. Accepted formats: JPG, PNG, WebP, up to
+   20 MB. Corrupt uploads cannot accidentally confirm an older pending draft.
+10. Stop the observer and repeat the flow; it must remain usable. Agent controls
+    reconnect separately when the observer returns.
 
-It streams mock agents and parcel paths on `ws://localhost:8765`. It does not
-run real physics or hardware. Killed mock agents remain dead until that process
-restarts, as before this phase.
+## Storage and integration
 
-## Capture and test with the physical camera
+Each capture stores JSON metadata (`id`, `type`, `name`, `modelKey`, `color`,
+`destination`, `generation`, `status`, `capturedAt`, `source`) separately from its
+JPEG Blob and temporary URL. Images are resized to at most 1280 pixels on their
+longest edge. No base64 photos go into localStorage; no photograph is sent to the
+observer. Refreshing/closing the tab clears inventory and world placement.
 
-1. Click **Capture Object** and allow the browser's camera request. If necessary,
-   also allow the browser to use the camera in the OS privacy settings.
-2. When **LIVE CAMERA** appears, hold one physical object in frame. If several
-   cameras are connected, use the camera selector to choose the right one.
-3. Click **Take Picture**. The frozen image is the actual video frame, labelled
-   **CAMERA PHOTO**. Camera tracks are stopped at this point.
-4. Click **Retake** to reopen the live camera, or select the object's identity and
-   box colour. Red maps to Left Bag and blue to Right Bag using `config/rig.json`.
-   Other colours show an unassigned destination unless configured in the rig.
-5. Click **Add to Inventory**. Check the thumbnail, type, colour, destination and
-   “Photo captured · saved model linked” status. Repeat for all four objects; progress reaches 4 of 4.
-6. Use **Recapture** on a card to replace its photo. The existing photo stays until
-   you confirm **Replace Photo in Inventory**. Canceling leaves the card intact.
-   **Upload a photo** also works during recapture. **Remove** clears only that slot.
-   You can edit a captured box's colour directly on its card.
-7. Close the camera with **✕** or Escape while the preview is live. Verify the
-   camera recording indicator turns off. Switching away from the tab pauses the
-   camera too; use **Retry camera** to resume when you return.
-8. Deny camera access or disconnect the webcam: an error should appear while
-   **Upload a photo** remains available. Upload a real JPG, PNG or WebP photograph
-   (maximum 20 MB), confirm its identity and check that the thumbnail matches.
-9. Stop the fake observer. Repeat capture/upload; inventory stays usable. Existing
-   observer controls disable on disconnection and reconnect when it returns.
-10. With the observer running, use **Agents** and **Outcomes** to check the original
-    controls and live scene. The inventory header remains available on either tab.
-
-Browsers may remember a permission decision; a remembered grant will not show a
-new permission prompt on every capture. Permissions and device availability are
-controlled by the browser and operating system.
-
-## Data and integration for the next phase
-
-`viewer/inventory-store.mjs` owns exactly four records. A captured box looks like:
-
-```json
-{
-  "id": "box_1",
-  "type": "box",
-  "name": "Box 1",
-  "modelKey": "box_1",
-  "color": "red",
-  "destination": "left",
-  "status": "captured",
-  "capturedAt": "2026-11-14T23:00:00.000Z",
-  "source": "camera"
-}
-```
-
-The sweeper uses `id: "sweeper_1"`, `type: "sweeper"`,
-`modelKey: "sweeper"`, and null colour and destination. `source` is
-`camera` or `upload`; the timestamp records when the shot/upload was taken.
-No image data is embedded in these JSON records.
-
-The associated photograph is a JPEG Blob plus a temporary object URL, stored
-separately under the same ID. Images are scaled to a maximum dimension of 1280
-pixels. Blob URLs are revoked on replacement, removal or canceled drafts.
-Neither photographs nor metadata are written to localStorage or sent to the
-observer. This version intentionally keeps inventory **in memory for this tab**;
-refreshing or closing the page clears it. There is no persistent storage or export.
-
-Future modules can import the read-only API:
+Known IDs/model keys are `box` and `sweeper`; unfamiliar captures receive unique
+`unknown_###` IDs with `procedural:unknown_###` keys and a `definition` containing
+an explicitly approximate shape and dimensions. There is no fixed four-slot limit.
 
 ```js
-import { inventory } from "./inventory.mjs";
-const records = inventory.list(); // copies of JSON metadata
-const photo = inventory.getPhoto("box_1"); // { blob, url } or null
-document.addEventListener("inventorychange", event => {
-  console.log(event.detail.records);
-});
+import { inventory } from './inventory.mjs';
+inventory.list();         // independent metadata snapshots
+inventory.get('box');
+inventory.getPhoto('box'); // { blob, url } or null
+// document events: inventorychange, inventorypreview
 ```
 
-`modelKey` now selects the matching permanent asset described in [models.md](models.md).
-A future recogniser can suggest identity/colour in the capture confirmation step.
-Placement, stacking, simulation, new agents and Arduino integration remain future work.
+The captured inventory is separate from the observer's physical-world `items`
+array and the workbench's placed instances. `inventory-store.mjs` has no WebGL or
+WebSocket dependency. Async camera grants, image decoding and canvas encoding are
+guarded so canceled or superseded work cannot resurrect a capture or leave a
+camera stream running. Blob URLs are released on replacement/removal/cancel.
 
-## Automated checks
-
-No frontend build or npm install is required to run the app. Development tests
-use Node 22.22.2+, 24.15.0+, or 26+ and jsdom in the separate `tests/` directory:
+## Tests
 
 ```sh
 npm ci --prefix tests
 npm test --prefix tests
-.venv/bin/python tests/observer_smoke.py
 ```
 
-The Node suite checks four-slot isolation, record validation, colour mapping,
-Blob URL cleanup, real-API call wiring, video-to-canvas capture, retake, upload,
-permission errors, missing/busy cameras, device switching, disconnection,
-close/visibility cleanup and canceled async requests. It uses **simulated media
-devices and image encoding**, so it does not establish physical camera quality.
-The Python smoke test exercises the unchanged observer commands over an isolated
-WebSocket port and does not modify the running demo.
-
-The native Chrome check during implementation verified the real camera preview,
-an actual still frame, the confirmation screen, camera release after the shot,
-and the existing rendered workshop and agent panel. Capturing the team's four
-specific physical objects and testing other browsers remains a manual check.
+DOM tests use simulated cameras/encoders and do not establish physical camera
+quality. Native Chrome was also checked with an actual webcam, retained photograph,
+confirmation, particle transition, inventory and workbench placement. Other
+browser/device combinations remain manual checks.

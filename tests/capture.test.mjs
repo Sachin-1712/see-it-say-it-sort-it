@@ -17,6 +17,7 @@ async function setup(t, { getUserMedia, secure = true, decode, toBlob } = {}) {
   window.HTMLElement.prototype.scrollIntoView = () => {};
   let nextURL = 0; const urls = new Set(), revoked = [], frames = [], streams = [], requests = [];
   window.Blob = Blob;
+  window.structuredClone = structuredClone;
   window.URL.createObjectURL = () => { const url = `blob:photo-${++nextURL}`; urls.add(url); return url; };
   window.URL.revokeObjectURL = url => { urls.delete(url); revoked.push(url); };
   Object.defineProperty(window, "isSecureContext", { value: secure });
@@ -80,35 +81,36 @@ test("real API path requests video only, draws the live video frame, confirms an
   assert.equal(app.$("take-picture").disabled, false);
   await app.click("take-picture"); app.choose("capture-color", "blue");
   await app.click("add-inventory");
-  assert.equal(app.inventory.list()[0].id, "box_1"); assert.equal(app.inventory.list()[0].destination, "right");
+  assert.equal(app.inventory.list()[0].id, "box"); assert.equal(app.inventory.list()[0].destination, "right");
   assert.equal(app.$("capture-dialog").open, false);
-  assert.equal(app.$("inventory-progress").textContent, "1 of 4 objects captured");
+  assert.equal(app.$("inventory-progress").textContent, "1 object type captured · click to place");
   assert.equal(app.document.querySelectorAll(".inventory-thumb").length, 1);
 });
 
-test("four objects, explicit replacement, colour edits, removal and tab navigation work offline", async t => {
+test("one Box, one Sweeper and distinct unfamiliar captures coexist and request previews", async t => {
   const app = await setup(t, { getUserMedia: async () => { throw new DOMException("Denied", "NotAllowedError"); } });
   for (let i = 0; i < 4; i++) {
-    await app.click("capture-object"); await app.upload(); await app.click("add-inventory");
+    await app.click("capture-object");
+    if (i >= 2) { app.$("capture-object-name").value = i === 2 ? "Bottle" : "Mug"; app.choose("capture-shape", i === 2 ? "bottle" : "mug"); }
+    await app.upload(); await app.click("add-inventory");
   }
-  assert.equal(app.inventory.list().length, 4); assert.equal(app.$("inventory-progress").textContent, "4 of 4 objects captured");
-  assert.deepEqual(app.previewEvents, ["box_1", "box_2", "box_3", "sweeper_1"]);
-  assert.equal(app.inventory.previewId(), "sweeper_1");
-  assert.deepEqual(Array.from(app.inventory.list(), item => item.modelKey), ["box_1", "box_2", "box_3", "sweeper"]);
-  assert.equal(app.inventory.list().find(item => item.type === "sweeper").color, null);
-  const box2Photo = app.inventory.getPhoto("box_2").url;
-  app.document.querySelector('[data-object-id="box_1"] button').click(); await flush();
+  assert.equal(app.inventory.list().length, 4);
+  assert.deepEqual(app.previewEvents, ["box", "sweeper", "unknown_001", "unknown_002"]);
+  assert.equal(app.inventory.previewId(), "unknown_002");
+  assert.deepEqual(Array.from(app.inventory.list(), item => item.modelKey), ["box", "sweeper", "procedural:unknown_001", "procedural:unknown_002"]);
+  const otherPhoto = app.inventory.getPhoto("unknown_001").url;
+  app.document.querySelector('[data-object-id="box"] [aria-label="Recapture Box"]').click(); await flush();
   assert.equal(app.$("capture-replacement").hidden, false);
   await app.upload(); await app.click("add-inventory");
-  assert.equal(app.inventory.list().length, 4); assert.equal(app.inventory.getPhoto("box_2").url, box2Photo);
-  const color = app.document.querySelector('[data-object-id="box_2"] select');
+  assert.equal(app.inventory.list().length, 4); assert.equal(app.inventory.getPhoto("unknown_001").url, otherPhoto);
+  const color = app.document.querySelector('[data-object-id="box"] select');
   color.value = "blue"; color.dispatchEvent(new app.window.Event("change"));
-  assert.equal(app.inventory.list().find(item => item.id === "box_2").destination, "right");
-  app.document.querySelector('[data-object-id="box_1"] .remove-photo').click();
-  assert.equal(app.inventory.list().length, 3); assert.equal(app.inventory.getPhoto("box_1"), null);
+  assert.equal(app.inventory.get("box").destination, "right");
+  app.document.querySelector('[data-object-id="box"] .remove-photo').click();
+  assert.equal(app.inventory.list().length, 3); assert.equal(app.inventory.getPhoto("box"), null);
   await app.click("tab-agents"); assert.equal(app.$("view-agents").hidden, false);
   await app.click("tab-inventory"); assert.equal(app.$("view-inventory").hidden, false);
-  assert.equal(app.$("silence").disabled, true); // no observer connected in this test
+  assert.equal(app.$("silence").disabled, true);
 });
 
 test("denied, missing and busy cameras leave upload fallback usable", async t => {

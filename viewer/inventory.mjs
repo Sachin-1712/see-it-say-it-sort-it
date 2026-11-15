@@ -1,5 +1,6 @@
-import { InventoryStore, OBJECT_SLOTS } from "./inventory-store.mjs";
+import { InventoryStore, OBJECT_SLOTS, canonicalIdentity } from "./inventory-store.mjs";
 import { selectTab } from "./tabs.mjs";
+import { workbenchState } from "./workbench-state.mjs";
 
 const $ = id => document.getElementById(id);
 const cap = text => text[0].toUpperCase() + text.slice(1);
@@ -8,11 +9,11 @@ let store = new InventoryStore();
 let colours = ["red", "blue", "green", "yellow", "orange", "purple", "white", "black"];
 let stream = null, draft = null, draftURL = null, version = 0, opener = null;
 let cameraId = "", mappingAvailable = false;
-let previewId = OBJECT_SLOTS[0].id;
+let previewId = null, editingId = null;
 
-function requestPreview(id) {
+function requestPreview(id, materialize = false) {
   previewId = id;
-  document.dispatchEvent(new CustomEvent("inventorypreview", { detail: { id } }));
+  document.dispatchEvent(new CustomEvent("inventorypreview", { detail: { id, materialize } }));
   $("model-preview-panel").scrollIntoView({ block: "nearest" });
 }
 
@@ -41,78 +42,88 @@ function clearDraft() {
   $("add-inventory").disabled = true;
 }
 function updateIdentity() {
-  const slot = OBJECT_SLOTS.find(slot => slot.id === $("capture-identity").value);
-  const existing = store.get(slot.id);
-  const isBox = slot.type === "box";
-  $("capture-color-field").hidden = !isBox;
+  const identity = $("capture-identity").value;
+  const slot = OBJECT_SLOTS.find(slot => slot.id === identity) ?? { type: "unknown", name: "Other object" };
+  const existing = store.get(identity === "other" ? editingId : identity);
+  $("capture-color-field").hidden = slot.type !== "box";
+  $("capture-other-fields").hidden = slot.type !== "unknown";
+  for (const id of ["capture-object-name", "capture-width", "capture-depth", "capture-height"]) $(id).required = slot.type === "unknown";
   const destination = store.destination($("capture-color").value);
   $("capture-destination").textContent = destination ? `Destination: ${cap(destination)} Bag` :
     mappingAvailable ? "Destination: unassigned for this colour" : "Destination mapping unavailable. Reload to retry loading the rig.";
   $("capture-replacement").hidden = !existing;
-  $("capture-replacement").textContent = existing ? `This replaces ${slot.name}’s photograph when you confirm. Other slots stay as they are.` : "";
+  $("capture-replacement").textContent = existing ? `Confirming replaces ${existing.name}’s photo. Placed objects stay on the workbench.` : "";
   $("add-inventory").textContent = existing ? "Replace Photo in Inventory" : "Add to Inventory";
-  $("capture-identity-note").textContent = draft ? `${draft.source === "camera" ? "Camera photo" : "Uploaded photo"} · ${cap(slot.type)} · Ready for your confirmation` : "Take or upload a photo to continue.";
+  $("capture-identity-note").textContent = draft ? `${draft.source === "camera" ? "Camera photo" : "Uploaded photo"} · ${slot.type === "unknown" ? "Shape approximation" : slot.name} · Ready to confirm` : "Take or upload a photo to continue.";
 }
 function selectIdentity(id) {
-  $("capture-identity").value = id;
-  $("capture-color").value = store.get(id)?.color ?? "red";
+  id = canonicalIdentity(id);
+  const record = store.get(id);
+  $("capture-identity").value = record?.type === "unknown" || id === "other" ? "other" : id;
+  $("capture-color").value = record?.color ?? "red";
+  if (record?.type === "unknown") {
+    $("capture-object-name").value = record.name;
+    $("capture-shape").value = record.definition.shape;
+    for (const dimension of ["width", "depth", "height"]) $(`capture-${dimension}`).value = record.definition.dimensionsMm[dimension];
+  }
   updateIdentity();
 }
-
 function changed() {
   renderInventory();
-  // Future placement code can subscribe; photos remain separate from JSON metadata.
   document.dispatchEvent(new CustomEvent("inventorychange", { detail: { records: store.list() } }));
 }
 function renderInventory() {
-  const count = store.list().length;
-  $("inventory-progress").textContent = `${count} of 4 objects captured`;
-  $("inventory-grid").replaceChildren(...OBJECT_SLOTS.map(slot => {
-    const record = store.get(slot.id), image = store.getPhoto(slot.id);
+  const records = store.list(), count = records.length;
+  $("inventory-progress").textContent = count ? `${count} object ${count === 1 ? "type" : "types"} captured · click to place` : "No objects captured yet";
+  const slots = [...OBJECT_SLOTS, ...records.filter(record => record.type === "unknown")];
+  $("inventory-grid").replaceChildren(...slots.map(slot => {
+    const record = store.get(slot.id), image = store.getPhoto(slot.id), placed = workbenchState.count(slot.id);
     const card = document.createElement("article"); card.className = "inventory-card"; card.dataset.objectId = slot.id;
+    const place = document.createElement("button"); place.type = "button"; place.className = "inventory-place";
+    place.disabled = !!record && !workbenchState.ready;
+    place.setAttribute("aria-label", record ? `Place ${slot.name} on workbench (${placed} placed)` : `Capture ${slot.name}`);
+    place.onclick = () => record ? document.dispatchEvent(new CustomEvent("worldplace", { detail: { record: store.get(slot.id) } })) : openCapture(slot.id);
     if (image) {
       const thumb = document.createElement("img"); thumb.className = "inventory-thumb";
-      thumb.src = image.url; thumb.alt = `Captured photograph of ${slot.name}`;
-      card.append(thumb);
+      thumb.src = image.url; thumb.alt = `Captured photograph of ${slot.name}`; place.append(thumb);
     } else {
       const empty = document.createElement("div"); empty.className = "inventory-empty";
       const icon = document.createElement("span"); icon.textContent = slot.type === "box" ? "□" : "◎"; icon.setAttribute("aria-hidden", "true");
-      empty.append(icon, document.createTextNode("Not captured")); card.append(empty);
+      empty.append(icon, document.createTextNode("Capture to add")); place.append(empty);
     }
+    const title = document.createElement("strong"); title.className = "inventory-card-title";
+    title.textContent = record && placed ? `${slot.name} × ${placed}` : slot.name; place.append(title); card.append(place);
     const info = document.createElement("div"); info.className = "inventory-info";
-    const title = document.createElement("h3"); title.textContent = slot.name; info.append(title);
     const line = (text, className = "") => { const p = document.createElement("p"); p.textContent = text; p.className = className; info.append(p); };
-    line(`Type: ${cap(slot.type)}`);
     if (record?.type === "box") {
-      const label = document.createElement("label"); label.className = "inventory-color"; label.textContent = "Colour";
-      const color = document.createElement("select"); color.setAttribute("aria-label", `${slot.name} colour`); fillColours(color, record.color);
-      color.onchange = () => { store.setColor(slot.id, color.value); changed(); announce(`${slot.name} colour updated.`); $("inventory-grid").querySelector(`[data-object-id="${slot.id}"] select`).focus(); };
+      const label = document.createElement("label"); label.className = "inventory-color"; label.textContent = "Routing colour";
+      const color = document.createElement("select"); color.setAttribute("aria-label", "Box routing colour"); fillColours(color, record.color);
+      color.onchange = () => { store.setColor(slot.id, color.value); changed(); announce("Box routing colour updated."); $("inventory-grid").querySelector(`[data-object-id="${slot.id}"] select`).focus(); };
       label.append(color); info.append(label);
       line(record.destination ? `Destination: ${cap(record.destination)} Bag` : "Destination: unassigned");
     }
     if (record) {
-      line("Photo captured · saved model linked", "capture-ready");
-      line(record.source === "camera" ? "Captured with camera" : "Uploaded photograph");
+      line(record.type === "unknown" ? `${cap(record.definition.shape)} approximation` : "Ready to place", "capture-ready");
+      line(record.source === "camera" ? "Camera photo" : "Uploaded photograph");
+      const actions = document.createElement("div"); actions.className = "inventory-card-actions";
+      for (const [text, action, className] of [
+        ["Preview", () => requestPreview(slot.id), ""],
+        ["Recapture", () => openCapture(slot.id), ""],
+        ["Remove", () => { store.remove(slot.id); changed(); announce(`${slot.name} removed from inventory. Placed objects are unchanged.`); $("capture-object").focus(); }, "remove-photo"],
+      ]) {
+        const button = document.createElement("button"); button.type = "button"; button.textContent = text; button.className = className;
+        button.setAttribute("aria-label", `${text} ${slot.name}`); button.onclick = action; actions.append(button);
+      }
+      info.append(actions);
     } else line("Waiting for a photograph");
-    const actions = document.createElement("div"); actions.className = "inventory-card-actions";
-    const capture = document.createElement("button"); capture.type = "button"; capture.textContent = record ? "Recapture" : "Capture";
-    capture.setAttribute("aria-label", `${record ? "Recapture" : "Capture"} ${slot.name}`);
-    capture.onclick = () => openCapture(slot.id); actions.append(capture);
-    const preview = document.createElement("button"); preview.type = "button"; preview.textContent = "View 3D";
-    preview.setAttribute("aria-label", `View ${slot.name} in 3D`);
-    preview.onclick = () => {
-      requestPreview(slot.id);
-    };
-    actions.append(preview);
-    if (record) {
-      const remove = document.createElement("button"); remove.type = "button"; remove.className = "remove-photo"; remove.textContent = "Remove";
-      remove.setAttribute("aria-label", `Remove ${slot.name}`);
-      remove.onclick = () => { store.remove(slot.id); changed(); announce(`${slot.name} removed.`); $("inventory-grid").querySelector(`[data-object-id="${slot.id}"] button`).focus(); };
-      actions.append(remove);
-    }
-    info.append(actions); card.append(info); return card;
+    card.append(info); return card;
   }));
 }
+let previousCounts = "";
+workbenchState.subscribe(() => {
+  const signature = JSON.stringify([workbenchState.ready, workbenchState.list().map(item => item.inventoryId)]);
+  if (signature !== previousCounts) { previousCounts = signature; renderInventory(); }
+});
 
 function cameraError(error) {
   const errors = {
@@ -268,7 +279,9 @@ function openCapture(id) {
   if (dialog.open) return;
   opener = document.activeElement;
   clearDraft();
-  selectIdentity(id ?? OBJECT_SLOTS.find(slot => !store.get(slot.id))?.id ?? OBJECT_SLOTS[0].id);
+  editingId = id ? canonicalIdentity(id) : null;
+  $("capture-object-name").value = "Other object";
+  selectIdentity(id ?? OBJECT_SLOTS.find(slot => !store.get(slot.id))?.id ?? "other");
   dialog.showModal();
   void startCamera();
 }
@@ -297,11 +310,15 @@ $("capture-color").onchange = updateIdentity;
 $("capture-form").onsubmit = event => {
   event.preventDefault();
   if (!draft || $("add-inventory").disabled) return;
-  const record = store.save($("capture-identity").value, { ...draft, color: $("capture-color").value });
-  changed(); selectTab("inventory");
-  announce(`${record.name} added. ${store.list().length} of 4 objects captured.`);
-  closeCapture();
-  requestPreview(record.id);
+  try {
+    const identity = $("capture-identity").value;
+    const targetId = identity === "other" && store.get(editingId)?.type === "unknown" ? editingId : identity;
+    const definition = identity === "other" ? { shape: $("capture-shape").value, dimensionsMm: Object.fromEntries(["width", "depth", "height"].map(key => [key, Number($(`capture-${key}`).value)])) } : undefined;
+    const record = store.save(targetId, { ...draft, color: $("capture-color").value, name: $("capture-object-name").value, definition });
+    changed(); selectTab("inventory");
+    announce(`${record.name} added to inventory. Click its card to place it.`);
+    closeCapture(); requestPreview(record.id, true);
+  } catch (error) { message(error.message, true); }
 };
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState !== "hidden" || !dialog.open || draft) return;
@@ -313,7 +330,7 @@ document.addEventListener("visibilitychange", () => {
 });
 window.addEventListener("pagehide", () => { version++; stopCamera(); clearDraft(); });
 
-$("capture-identity").replaceChildren(...OBJECT_SLOTS.map(slot => option(slot.id, slot.name)));
+$("capture-identity").replaceChildren(...OBJECT_SLOTS.map(slot => option(slot.id, slot.name)), option("other", "Other object · approximation"));
 fillColours($("capture-color"));
 renderInventory(); updateIdentity();
 // Independent fetch: inventory remains usable if Three.js or the observer is offline.
@@ -333,6 +350,7 @@ try {
 // Small, read-only integration surface for the next phase. Blob URLs are tab-scoped.
 export const inventory = Object.freeze({
   list: () => store.list(),
+  get: id => store.get(id),
   getPhoto: id => store.getPhoto(id),
   previewId: () => previewId,
 });

@@ -1,49 +1,61 @@
-// Inventory records describe captured assets, never observer physical-world items.
+// Acquired asset types. Placed instances belong to WorkbenchState, never this store.
 export const OBJECT_SLOTS = Object.freeze([
-  { id: "box_1", type: "box", name: "Box 1", modelKey: "box_1" },
-  { id: "box_2", type: "box", name: "Box 2", modelKey: "box_2" },
-  { id: "box_3", type: "box", name: "Box 3", modelKey: "box_3" },
-  { id: "sweeper_1", type: "sweeper", name: "Cylindrical Sweeper", modelKey: "sweeper" },
-].map(Object.freeze));
-
+  Object.freeze({ id: "box", type: "box", name: "Box", modelKey: "box" }),
+  Object.freeze({ id: "sweeper", type: "sweeper", name: "Cylindrical Sweeper", modelKey: "sweeper" }),
+]);
+export const PRIMITIVE_SHAPES = Object.freeze(["cuboid", "cylinder", "bottle", "mug"]);
+const aliases = { box_1: "box", box_2: "box", box_3: "box", sweeper_1: "sweeper", cylindrical_sweeper: "sweeper" };
+export const canonicalIdentity = id => aliases[id] ?? id;
+export function validateApproximation(input = {}) {
+  if (!PRIMITIVE_SHAPES.includes(input.shape)) throw new Error("Choose an approximate shape.");
+  const dimensionsMm = Object.fromEntries(["width", "depth", "height"].map(key => {
+    const value = Number(input.dimensionsMm?.[key]);
+    if (!Number.isFinite(value) || value < 1 || value > 2000) throw new Error("Dimensions must be between 1 and 2000 mm.");
+    return [key, value];
+  }));
+  return { shape: input.shape, dimensionsMm, approximation: true };
+}
 export class InventoryStore {
-  #records = new Map();
-  #photos = new Map();
-  constructor(colourToBag = {}, urls = URL) {
-    this.colourToBag = { ...colourToBag };
-    this.urls = urls;
-  }
-  list() { return [...this.#records.values()].map(record => ({ ...record })); }
-  get(id) { const record = this.#records.get(id); return record ? { ...record } : null; }
-  getPhoto(id) { const photo = this.#photos.get(id); return photo ? { ...photo } : null; }
+  #records = new Map(); #photos = new Map(); #next = 0;
+  constructor(colourToBag = {}, urls = URL) { this.colourToBag = { ...colourToBag }; this.urls = urls; }
+  list() { return [...this.#records.values()].map(record => structuredClone(record)); }
+  get(id) { const record = this.#records.get(canonicalIdentity(id)); return record ? structuredClone(record) : null; }
+  getPhoto(id) { const photo = this.#photos.get(canonicalIdentity(id)); return photo ? { ...photo } : null; }
   destination(color) { return this.colourToBag[color] ?? null; }
-  save(id, { blob, color = null, source, capturedAt = new Date().toISOString() }) {
-    const slot = OBJECT_SLOTS.find(slot => slot.id === id);
-    if (!slot) throw new Error("Choose one of the four object slots.");
+  save(identity, { blob, color = null, source, name, definition, capturedAt = new Date().toISOString() }) {
+    identity = canonicalIdentity(identity);
+    const known = OBJECT_SLOTS.find(slot => slot.id === identity), previousRecord = this.#records.get(identity);
+    if (!known && identity !== "other" && previousRecord?.type !== "unknown") throw new Error("Choose Box, Sweeper or Other object.");
     if (!(blob instanceof Blob) || !blob.size || !blob.type.startsWith("image/")) throw new Error("A captured photograph is required.");
     if (!["camera", "upload"].includes(source)) throw new Error("A photo source is required.");
-    if (slot.type === "box" && !color) throw new Error("Choose a colour for the box.");
     if (!Number.isFinite(Date.parse(capturedAt))) throw new Error("Invalid capture date.");
-    color = slot.type === "box" ? color : null;
-    const record = { ...slot, color, destination: color ? this.destination(color) : null,
-      status: "captured", capturedAt, source };
-    const photo = { blob, url: this.urls.createObjectURL(blob) };
-    const previous = this.#photos.get(id);
-    this.#records.set(id, record);
-    this.#photos.set(id, photo);
+    if (known?.type === "box" && !color) throw new Error("Choose a routing colour for the box.");
+    let record;
+    if (known) {
+      color = known.type === "box" ? color : null;
+      record = { ...known, color, destination: color ? this.destination(color) : null, generation: "predefined" };
+    } else {
+      const approximation = validateApproximation(definition);
+      if (!name?.trim()) throw new Error("Give this object a name.");
+      const id = identity === "other" ? `unknown_${String(++this.#next).padStart(3, "0")}` : identity;
+      record = { id, type: "unknown", name: name.trim().slice(0, 80), modelKey: `procedural:${id}`,
+        color: null, destination: null, generation: "primitive-approximation", definition: approximation };
+    }
+    record = { ...record, status: "captured", capturedAt, source };
+    const photo = { blob, url: this.urls.createObjectURL(blob) }, previous = this.#photos.get(record.id);
+    this.#records.set(record.id, record); this.#photos.set(record.id, photo);
     if (previous) this.urls.revokeObjectURL(previous.url);
-    return { ...record };
+    return structuredClone(record);
   }
   setColor(id, color) {
+    id = canonicalIdentity(id);
     const record = this.#records.get(id);
-    if (!record || record.type !== "box" || !color) return;
-    this.#records.set(id, { ...record, color, destination: this.destination(color) });
+    if (record?.type === "box" && color) this.#records.set(id, { ...record, color, destination: this.destination(color) });
   }
   remove(id) {
-    const photo = this.#photos.get(id);
-    if (photo) this.urls.revokeObjectURL(photo.url);
-    this.#photos.delete(id);
-    this.#records.delete(id);
+    id = canonicalIdentity(id);
+    const photo = this.#photos.get(id); if (photo) this.urls.revokeObjectURL(photo.url);
+    this.#photos.delete(id); this.#records.delete(id);
   }
   dispose() { for (const id of this.#records.keys()) this.remove(id); }
 }
