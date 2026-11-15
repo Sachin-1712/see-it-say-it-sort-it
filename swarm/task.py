@@ -19,6 +19,8 @@ def make_task(snapshot, version=1, settings=None):
         raise ValueError("robust_threshold must be between 0.8 and 1")
     if any(settings.get(key,0)<1 for key in ("action_validation_trials","plan_validation_trials","rollout_limit","beam_width","max_candidates","max_nodes")):
         raise ValueError("trial budgets, beam width and cache limits must be positive")
+    if settings["plan_validation_trials"] < 20:
+        raise ValueError("At least 20 full-plan validation trials are required")
     goals = {o["instanceId"]: o.get("destination") or scene.config()["rig"]["colour_to_bag"].get(o.get("color"))
              for o in snapshot["objects"] if o["type"] == "box"}
     if not goals or any(v not in scene.config()["rig"]["bags"] for v in goals.values()):

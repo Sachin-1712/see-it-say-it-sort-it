@@ -1,0 +1,12 @@
+{
+  "enabled": false,
+  "calibration_verified": false,
+  "acknowledgement_verified": false,
+  "serial_port": null,
+  "baud": 115200,
+  "direction_commands": {"increasing": null, "decreasing": null},
+  "servo_limits_deg": null,
+  "tilt_limits_deg": null,
+  "calibration_id": null,
+  "note": "UNO Q accepts L/R/S/C. Measure which command produces each simulated sweep direction; never infer it from the letter. Physical transport is locked until firmware acknowledgement and safe integration are verified."
+}

@@ -23,7 +23,7 @@ def synchronized(method):
 
 
 class Swarm:
-    def __init__(self, workers=8, seed=2026, directory=None, settings=None):
+    def __init__(self, workers=4, seed=2026, directory=None, settings=None):
         if not 1 <= workers <= 8:
             raise ValueError("workers must be from 1 to 8")
         self.lock=threading.RLock()
@@ -41,6 +41,9 @@ class Swarm:
         self.task = None
         self.version = 0
         self.best = None
+        self.saved_bundle = None
+        self.live_best_score = 0
+        self.stopped = True
         self.source = None
         self.verification_trials=0
         self.killed = set()
@@ -53,7 +56,7 @@ class Swarm:
         self.receiver = Receiver()
 
     @synchronized
-    def start(self, snapshot=None, *, source="workbench"):
+    def start(self, snapshot=None, *, source="workbench", run=True):
         version=self.version+1
         task = make_task(snapshot or golden_snapshot(), version, self.settings)
         if source == "golden":
@@ -69,7 +72,15 @@ class Swarm:
         self.lifecycle_events=[]
         self.silenced = False
         self.dry_run_plan, self.dry_run_step = None, 0
+        self.saved_bundle = None
+        self.live_best_score = 0
+        self.awaiting_outcome = False
+        self.physical_step = 0
+        self.stopped = not run
         self.started = time.monotonic()
+        if not run:
+            self.add_event(dict(type="demo_loaded"))
+            return task
         ids = [f"a{i + 1}" for i in range(self.settings["workers"])]
         reservations = []
         peers = {}
@@ -113,7 +124,7 @@ class Swarm:
             process.kill()
             process.join(timeout=.3)
             self.killed.add(key)
-            self.add_event(dict(type="process_killed", agent=key, pid=process.pid))
+            self.add_event(dict(type="process_killed", agent=key, pid=process.pid, role=self.reports.get(key,{}).get("role"), active_before=sum(p.is_alive() for p in self.processes.values())+1, total_trials=sum(r.get("tries",0) for r in self.reports.values()), had_best=bool(self.best), best_score=evidence_score(self.best[1]) if self.best else 0))
             return True
         return False
 
@@ -150,9 +161,10 @@ class Swarm:
                 for event in report.get("events", []):
                     self.add_event(event)
                 best = report.get("best")
-                if best and evidence_score(best) >= self.settings["robust_threshold"]:
+                if best and len(best.get("evidence",{})) >= max(20,self.settings["plan_validation_trials"]) and evidence_score(best) >= self.settings["robust_threshold"]:
                     if self.best is None or evidence_score(best) > evidence_score(self.best[1]):
                         self.best = (key, copy.deepcopy(best))
+                        self.live_best_score = evidence_score(best)
             except (ValueError, KeyError, TypeError):
                 continue
 
@@ -168,7 +180,7 @@ class Swarm:
             disconnected=live and now-r.get("heartbeat",now)>self.settings["failure_timeout_s"]
             agents.append(dict(id=key, pid=process.pid, alive=live, silenced=r.get("silenced", self.silenced),
                 role=r.get("role", roles[key]), tries=r.get("tries", 0), attempts=r.get("attempts",r.get("tries",0)), precheck_rejections=r.get("precheck_rejections",0), robust=r.get("robust", 0),
-                successes=r.get("successes",0), status=("Disconnected" if disconnected else r.get("status", "Starting")) if live else "Dead", heartbeat=r.get("heartbeat"),
+                successes=r.get("successes",0), status=("Disconnected" if disconnected else r.get("status", "Starting")) if live else ("Stopped" if self.stopped and key not in self.killed else "Dead"), heartbeat=r.get("heartbeat"),
                 task=r.get("active_job"), latest=r.get("latest"), role_trials=r.get("role_trials", {}),
                 checkpoint_id=r.get("checkpoint_id"), peer_tx=r.get("peer_tx",0), peer_rx=r.get("peer_rx",0),
                 reconciliations=r.get("reconciliations",0), plan_trials=r.get("plan_trials",0)))
@@ -186,10 +198,10 @@ class Swarm:
             action = plan["actions"][0]
             best = dict(agent=key, robust=evidence_score(plan), goal=dict(parcel=action["target"], bin=self.task["goals"][action["target"]]),
                         action=dict(arm=0, start=action["sweep_start_deg"], end=action["sweep_end_deg"], speed=action["speed_deg_s"]),
-                        plan=plan, validated=True, task_id=self.task["task_id"], scene_version=self.version, physical_eligible=False)
+                        plan=plan, validated=True, attribution="previously_validated" if self.saved_bundle else "live", label=self.saved_bundle["label"] if self.saved_bundle else "VALIDATED IN THIS LIVE RUN", saved_at=self.saved_bundle["timestamp"] if self.saved_bundle else None, task_id=self.task["task_id"], scene_version=self.version, physical_eligible=False)
         alive = [a for a in agents if a["alive"]]
         exhausted = bool(agents) and all(not a["alive"] or self.reports.get(a["id"], {}).get("exhausted") for a in agents)
-        phase = "idle" if not self.task else "ready" if best else "failed" if exhausted or (agents and not alive) else "searching"
+        phase = "idle" if not self.task else "ready" if best else "stopped" if self.stopped else "failed" if exhausted or (agents and not alive) else "searching"
         items = []
         if self.task:
             for o in self.task["snapshot"]["objects"]:
@@ -198,7 +210,7 @@ class Swarm:
                                       bin=self.task["goals"][o["instanceId"]], status="ready" if best else "planning"))
         self.frame_seq+=1
         return dict(protocol="gekko-swarm-v1", stream_id=self.stream_id, frame_seq=self.frame_seq, phase=phase, items=items, arm=dict(angle=0), agents=agents, ghosts=ghosts,
-                    best=best, result=None, task=self.task, source=self.source, events=self.events[-40:],
+                    best=best, result=None, task=self.task, source=self.source, events=self.events[-40:], recovery=self.recovery_state(agents), live_search_stopped=self.stopped,
                     metrics=dict(trials=sum(a["tries"] for a in agents), precheck_rejections=sum(a["precheck_rejections"] for a in agents), successes=sum(a["successes"] for a in agents), plan_trials=sum(a["plan_trials"] for a in agents),
                                  verification_trials=self.verification_trials, active=len(alive), elapsed_s=round(time.monotonic()-self.started,2) if self.task else 0),
                     failure="Budget exhausted without a validated plan" if phase=="failed" else None,
@@ -207,8 +219,8 @@ class Swarm:
     def execution_state(self):
         steps = len(self.best[1]["actions"]) if self.best else 0
         step = self.dry_run_step if self.best and self.dry_run_plan == self.best[1].get("id") else 0
-        return dict(enabled=False, dry_run=True, next_step=step + 1 if step < steps else None, steps=steps,
-                    reason="Dry run: Send logs the servo commands; nothing reaches hardware. UNO Q execution deferred by operator")
+        return dict(enabled=False, dry_run=True, awaiting_outcome=getattr(self,"awaiting_outcome",False), physical_next_step=(getattr(self,"physical_step",0)+1 if getattr(self,"physical_step",0)<steps else None), next_step=step + 1 if step < steps else None, steps=steps,
+                    reason="Dry run: Send logs the servo commands; nothing reaches hardware. Physical L/R calibration and acknowledgement are unverified")
 
     @staticmethod
     def servo_commands(action, arm=0):
@@ -246,19 +258,96 @@ class Swarm:
               f"set tilt {record['tilt_deg']}° by hand, then {' ; '.join(record['commands'])} (not transmitted)", flush=True)
         return record
 
+    def recovery_state(self, agents):
+        recoveries=[]
+        for death in [e for e in self.lifecycle_events if e['type']=='process_killed']:
+            victim=death['agent']
+            events=[e for e in self.lifecycle_events if e.get('failed_agent')==victim and e['timestamp']>=death['timestamp']]
+            takeover=next((e for e in reversed(events) if e['type']=='task_takeover'),None)
+            resumed=next((e for e in events if e['type']=='work_resumed' and takeover and e.get('agent')==takeover['agent'] and e.get('checkpoint_id')==takeover['checkpoint_id'] and e['timestamp']>=takeover['timestamp']),None)
+            successor=next((a for a in agents if takeover and a['id']==takeover['agent']),None)
+            current=sum(a['tries'] for a in agents)
+            recoveries.append(dict(dead=victim, previous_role=death.get('role'), active_before=death.get('active_before'),
+                successor=takeover['agent'] if takeover else None, role=takeover.get('role') if takeover else None,
+                checkpoint_id=takeover.get('checkpoint_id') if takeover else None,
+                recovered_progress=takeover.get('recovered_progress') if takeover else None,
+                recovered_trials=takeover.get('recovered_trials') if takeover else None,
+                new_trials=max(0,successor['tries']-takeover.get('successor_trials',successor['tries'])) if successor else 0,
+                resumed=bool(resumed), continuing_trials=max(0,current-death.get('total_trials',current)),
+                improving=self.live_best_score>death.get('best_score',0), silenced=any(a['silenced'] for a in agents if a['alive']),
+                successor_alive=bool(successor and successor['alive']),
+                timeline=[dict(stage='Terminated',timestamp=death['timestamp'])]+[
+                    dict(stage={'heartbeat_timeout':'Heartbeat lost','task_takeover':'Checkpoint recovered','work_resumed':'Work resumed'}[e['type']], timestamp=e['timestamp'])
+                    for e in events if e['type'] in ('heartbeat_timeout','task_takeover','work_resumed')][:12]))
+        return recoveries
+
+    @synchronized
+    def stop_live(self):
+        self.poll()
+        processes=dict(self.processes)
+        self.stop()
+        self.processes=processes  # retain final PID, roles and trials for presentation
+        self.stopped=True
+        self.add_event(dict(type='live_search_stopped'))
+
+    @synchronized
+    def load_saved(self, path=None):
+        from .saved_plan import load, DEFAULT_PATH
+        from .hardware import configuration
+        if not self.task:raise ValueError('Load a matching scene first')
+        if not self.stopped:raise ValueError('Stop Live Search before loading a previously validated plan')
+        bundle=load(path or DEFAULT_PATH,self.task,configuration())
+        self.awaiting_outcome=False
+        self.physical_step=0
+        self.physical_failed=False
+        self.saved_bundle=bundle
+        self.best=('offline',bundle['plan'])
+        self.dry_run_plan,self.dry_run_step=None,0
+        self.add_event(dict(type='previously_validated_plan_loaded',plan_id=bundle['plan']['id'],saved_at=bundle['timestamp']))
+        return bundle
+
     @synchronized
     def replay(self):
-        if not self.task or not self.best:raise ValueError("No current validated plan")
-        from .task import scene_from, advance
-        from sim.api import rollout
-        scene=scene_from(self.task);results=[]
-        for action in self.best[1]["actions"]:
-            result=rollout(scene,action);self.verification_trials+=1;results.append(result)
-            if not result["success"]:raise ValueError("Nominal replay failed: "+str(result["reason"]))
-            scene=advance(scene,result)
-        if results[-1]["bag_assignments"]!=self.task["goals"]:raise ValueError("Final replay did not collect every box")
-        self.add_event(dict(type="plan_replayed",steps=len(results),plan_id=self.best[1]["id"]))
-        return dict(type="plan_replay",task_id=self.task["task_id"],scene_version=self.version,results=results)
+        if not self.task or not self.best:raise ValueError('No current validated plan')
+        plan=self.best[1]
+        results=plan['results']
+        if any(not r.get('trajectories') for r in results):
+            raise ValueError('Full replay tracks unavailable; load an offline validated bundle')
+        self.add_event(dict(type='plan_replayed',steps=len(results),plan_id=plan['id']))
+        return dict(type='plan_replay',task_id=self.task['task_id'],scene_version=self.version,results=results,
+                    attribution='previously_validated' if self.saved_bundle else 'live',
+                    label=self.saved_bundle['label'] if self.saved_bundle else 'VALIDATED IN THIS LIVE RUN')
+
+    @synchronized
+    def prepare_step(self, plan_id, tilt_confirmed=False, scene_confirmed=False):
+        from .hardware import configuration, prepare
+        if not self.saved_bundle or not self.best or self.best[1]['id']!=plan_id:
+            raise ValueError('Load a matching previously validated plan first')
+        # Recheck files and identity at every action, including calibration changes.
+        from .saved_plan import identity
+        if time.time()-self.saved_bundle["created_at"]>86400:raise ValueError("Saved plan is stale; regenerate offline")
+        if self.saved_bundle['hashes']!=identity(self.task,configuration()):
+            raise ValueError('Scene or calibration changed; reload compatible plan')
+        if tilt_confirmed is not True or scene_confirmed is not True:
+            raise ValueError('Confirm the manual tilt and actual physical scene before each action')
+        if getattr(self,'physical_failed',False):raise ValueError('Reset physical scene and reload the plan after an unknown/failed outcome')
+        if getattr(self,'awaiting_outcome',False):raise ValueError('Confirm actual box outcome before advancing')
+        if self.physical_step>=len(self.best[1]['actions']):raise ValueError('All steps prepared')
+        action=self.best[1]['actions'][self.physical_step]
+        prepared=prepare(action,configuration())
+        self.awaiting_outcome=True
+        return dict(type='confirmed_step',step=self.physical_step+1,target=action['target'],
+                    bin=self.task['goals'][action['target']],**prepared)
+
+    @synchronized
+    def confirm_outcome(self, success):
+        if not getattr(self,'awaiting_outcome',False):raise ValueError('No pending step')
+        self.awaiting_outcome=False
+        if success is not True:
+            self.physical_failed=True
+            raise ValueError('Box outcome failed or unknown; reset the scene and reload the plan')
+        self.physical_step+=1
+        return dict(type='outcome_confirmed',next_step=self.physical_step+1)
 
     @synchronized
     def invalidate(self):
@@ -266,6 +355,9 @@ class Swarm:
         self.version+=1
         self.task=None
         self.best=None
+        self.saved_bundle=None
+        self.awaiting_outcome=False
+        self.stopped=True
         self.reports={}
         self.add_event(dict(type="scene_invalidated",scene_version=self.version))
 

@@ -1,0 +1,92 @@
+{
+  "platform": "macOS-27.0-arm64-arm-64bit-Mach-O",
+  "python": "3.13.14",
+  "engine": "MuJoCo 3.17.0",
+  "golden_physics_changed": false,
+  "runs": [
+    {
+      "stage": "baseline 9c86d61",
+      "workers": 4,
+      "seed": 2026,
+      "success": true,
+      "elapsed_s": 35.02815649996046,
+      "metrics": {
+        "trials": 936,
+        "precheck_rejections": 1,
+        "successes": 549,
+        "plan_trials": 40,
+        "verification_trials": 0,
+        "active": 4,
+        "elapsed_s": 35.42
+      },
+      "robustness": 0.8,
+      "full_plan_trials": 20,
+      "note": "A single-box profile also ran during the first portion of this baseline; timings are observations, not controlled statistical estimates."
+    },
+    {
+      "stage": "optimized shortlist/contact iteration",
+      "workers": 4,
+      "seed": 2026,
+      "success": true,
+      "elapsed_s": 18.585995125002228,
+      "metrics": {
+        "trials": 863,
+        "precheck_rejections": 0,
+        "successes": 547,
+        "plan_trials": 21,
+        "verification_trials": 0,
+        "active": 4,
+        "elapsed_s": 18.61
+      },
+      "robustness": 0.85,
+      "full_plan_trials": 20,
+      "note": "Existing tests ran concurrently; this precedes retained-sample copying optimization."
+    },
+    {
+      "stage": "final isolated search",
+      "workers": 4,
+      "seed": 2026,
+      "success": true,
+      "elapsed_s": 24.767903625033796,
+      "metrics": {
+        "trials": 1094,
+        "precheck_rejections": 0,
+        "successes": 686,
+        "plan_trials": 40,
+        "verification_trials": 0,
+        "active": 4,
+        "elapsed_s": 24.79
+      },
+      "robustness": 0.85,
+      "full_plan_trials": 20,
+      "note": "No other search/test suite was running; ordinary desktop/browser activity remained."
+    }
+  ],
+  "offline_preparation": {
+    "elapsed_s": 19.221887499908917,
+    "robustness": 0.8,
+    "full_plan_trials": 20,
+    "timestamp": "2026-11-15T08:28:19.650025+00:00",
+    "path": ".gekko/validated-three-box.json"
+  },
+  "profile": {
+    "enabled_with": "GEKKO_PROFILE=1",
+    "elapsed_s": 26.888999416027218,
+    "worker_cumulative_seconds": {
+      "compilation": 0.649,
+      "candidate_generation": 0.971,
+      "checkpoint_copy": 0.557,
+      "checkpoint_disk_write": 1.253,
+      "mujoco_step1": 18.307,
+      "mujoco_step2": 24.322
+    },
+    "note": "Aggregated worker cumulative times from cProfile, before the final retained-sample copying optimization. Nested times overlap; profiler adds overhead."
+  },
+  "verification": {
+    "python_tests": 23,
+    "javascript_tests": 51,
+    "websocket": "load demo -> hash-checked saved load -> stored 3-step replay -> confirmed dry run -> failed outcome guard passed",
+    "visual": "Chrome: real A3 process death, 4 to 3 active, A4 validation takeover, checkpoint ID, resumed trials and stopped-agent history observed"
+  },
+  "limitation": "Single seed, limited sample size and varying desktop load; 10\u201320 seconds is a target, not guaranteed. Physical serial execution is disabled pending calibration and acknowledgement verification."
+}

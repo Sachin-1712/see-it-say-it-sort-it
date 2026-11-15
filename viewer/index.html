@@ -136,6 +136,7 @@
   }
 </style>
 <link rel="stylesheet" href="./inventory.css">
+<link rel="stylesheet" href="./demo.css">
 <script>
   // The import map is written before any module loads, so this choice applies to every import.
   { const base = window.GEKKO_OFFLINE ? "./vendor/three/" : "https://cdn.jsdelivr.net/npm/three@0.170.0/";
@@ -202,8 +203,26 @@
       <div class="view" id="view-agents" role="tabpanel" aria-labelledby="tab-agents" hidden><div id="swarm-status" role="status">No simulation data</div>
         <button id="swarm-start-tab" type="button" class="primary" hidden>▶ Start agents on my workbench</button>
         <label for="swarm-isolate">Show agent</label><select id="swarm-isolate"><option value="">All agents</option></select>
+        <div class="demo-controls">
+          <button id="swarm-stop" type="button">Stop Live Search</button>
+          <button id="swarm-saved" type="button">Load Previously Validated Plan</button>
+          <button id="swarm-replay" type="button" disabled>Replay Three-Box Solution</button>
+        </div>
+        <div id="recovery-banner" role="status" hidden></div>
+        <div id="recovery-timeline" aria-label="Recovery timeline"></div>
+        <div id="saved-attribution" role="status" hidden></div>
         <div id="rows"></div><div id="swarm-activity" aria-label="Agent activity"></div>
-        <div id="swarm-plan-details"></div></div>
+        <div id="swarm-plan-details"></div>
+        <div class="physical-controls">
+          <strong>UNO Q · PHYSICAL EXECUTION DISABLED</strong>
+          <p>Simulation replay does not describe the physical box state. Calibration, L/R mapping and firmware acknowledgement remain unverified.</p>
+          <button id="physical-step" type="button" disabled>Execute One Confirmed Step · disabled</button>
+          <button id="physical-dry" type="button" disabled>Dry Run One Confirmed Step</button>
+          <button id="physical-outcome" type="button" disabled>Confirm Actual Box Outcome</button>
+          <button id="physical-failed" type="button" disabled>Outcome failed / unknown</button>
+          <button id="physical-stop" type="button">Stop · disconnect servo power</button>
+          <p id="physical-status" role="status">No serial connection. For an immediate physical stop, disconnect servo power. Close servo_keys.py and Serial Monitor before any future serial connection.</p>
+        </div></div>
       <div class="view" id="view-outcomes" role="tabpanel" aria-labelledby="tab-outcomes" hidden>
         <div class="metric"><span class="k">Attempts tested</span><span class="v mono" id="m-attempts">0</span></div>
         <div class="metric"><span class="k">Successful pushes found</span><span class="v mono" id="m-success">0</span></div>

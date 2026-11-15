@@ -41,3 +41,6 @@ runtime Blender or image-to-3D service is required.
 See [model generation, architecture, demo and tests](docs/models.md) and
 [camera instructions](docs/camera-inventory.md). The original historical plan is
 in [docs/PRD.md](docs/PRD.md); newer scoped requirements supersede its older exclusions.
+
+For the four-agent hackathon flow, offline validated replay, measured timings and
+disabled-by-default UNO Q preparation, see [docs/demo.md](docs/demo.md).

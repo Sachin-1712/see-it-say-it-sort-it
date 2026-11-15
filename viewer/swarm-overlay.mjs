@@ -32,7 +32,7 @@ export class SwarmOverlay {
     const id=frame.task ? `${frame.task.task_id}:${frame.task.scene_version}` : null;
     if(id!==this.task) {this.clear();this.task=id;}
     for(const status of frame.agents ?? []) {
-      const agent=this.agents.get(status.id); if(agent){agent.dead=!status.alive;agent.paused=status.status==="Idle" || status.status==="Disconnected";}
+      const agent=this.agents.get(status.id); if(agent){if(!status.alive && !agent.dead){agent.frozenTime=agent.playhead;agent.pending=null;}agent.dead=!status.alive;agent.paused=status.status==="Idle" || status.status==="Disconnected";}
     }
     const live=new Set((frame.agents??[]).filter(a=>a.alive).map(a=>a.id));
     for(const trial of frame.ghosts ?? []) {
@@ -83,7 +83,8 @@ export class SwarmOverlay {
       const path=agent.track;if(!path?.length)continue;
       const duration=path.at(-1)[0], historical=agent.dead || agent.paused || this.connected===false;
       agent.group.traverse(object=>{if(object.material){object.userData.baseOpacity??=object.material.opacity;object.material.opacity=historical?.12:object.userData.baseOpacity;object.material.transparent=true;}});
-      const t=historical?duration:(now-agent.started)%(duration+.5);
+      const t=historical?(agent.frozenTime??duration):(now-agent.started)%(duration+.5);
+      agent.playhead=t;
       let i=0;while(i+1<path.length && path[i+1][0]<t)i++;
       const a=path[i],b=path[Math.min(i+1,path.length-1)],f=b===a?0:THREE.MathUtils.clamp((t-a[0])/(b[0]-a[0]),0,1);
       pose(a.map((v,k)=>v+(b[k]-v)*f),agent.box);

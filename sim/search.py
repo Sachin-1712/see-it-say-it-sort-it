@@ -21,30 +21,35 @@ def candidate_actions(scene, target_id):
     if not rows:
         return
 
-    # Try all contact heights, starting in the middle of the reachable band.
+    # Spread the early budget over the reachable height band and speed range.
+    # Dense sub-degree neighbors are deferred until coarse geometry was tested.
     midpoint = (rows[0][0] + rows[-1][0]) / 2
     rows.sort(key=lambda row: abs(row[0] - midpoint))
     settings = cfg["sim"]
     low, high = cfg["models"]["sweeper"]["servo"]["limitsDeg"]
+    tilt_low, tilt_high = cfg["models"]["sweeper"]["assemblyTilt"]["limitsDeg"]
+    margin = cfg["scoring"]["robustness"]["tilt_deg"]
+    safe = [r for r in rows if tilt_low + margin <= r[0] <= tilt_high - margin]
+    coarse = []
+    for row in safe or rows:
+        if all(abs(row[0] - prior[0]) >= 2 for prior in coarse):
+            coarse.append(row)
     forward = side == "left"
-    offsets = settings["demo_angle_offsets_deg"]
-    start_offsets = sorted(offsets, reverse=True)
-    speeds = settings["demo_speeds_deg_s"]
-    if sum(item["type"] == "box" for item in items) == 1:
-        # Leave room for the manual tilt error and seek a full, brisk sweep.
-        tilt_low, tilt_high = cfg["models"]["sweeper"]["assemblyTilt"]["limitsDeg"]
-        margin = cfg["scoring"]["robustness"]["tilt_deg"]
-        rows.sort(key=lambda row: not tilt_low + margin <= row[0] <= tilt_high - margin)
-        speeds = sorted(speeds, key=lambda speed: abs(speed - settings["single_box_search_speed_deg_s"]))
-    for end_offset in offsets:
-        for start_offset in start_offsets:
-            for speed in speeds:
-                for tilt, approach in rows:
-                    start = max(low, approach - start_offset) if forward else min(high, approach + start_offset)
-                    end = high - end_offset if forward else low + end_offset
-                    if (start < end) == forward and start != end:
-                        yield dict(target=target_id, tilt_deg=tilt, sweep_start_deg=start,
-                                   sweep_end_deg=end, speed_deg_s=speed)
+    speeds = sorted(settings["demo_speeds_deg_s"],
+                    key=lambda speed: abs(speed - settings["single_box_search_speed_deg_s"]))
+    seen = set()
+    for band in (coarse, rows):
+        for end_offset in settings["demo_angle_offsets_deg"]:
+            for start_offset in sorted(settings["demo_angle_offsets_deg"], reverse=True):
+                for speed in speeds:
+                    for tilt, approach in band:
+                        start = max(low, approach - start_offset) if forward else min(high, approach + start_offset)
+                        end = high - end_offset if forward else low + end_offset
+                        key = (tilt, start, end, speed)
+                        if key not in seen and (start < end) == forward and start != end:
+                            seen.add(key)
+                            yield dict(target=target_id, tilt_deg=tilt, sweep_start_deg=start,
+                                       sweep_end_deg=end, speed_deg_s=speed)
 
 
 def search_candidates(scene, target_id, budget):

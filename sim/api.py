@@ -76,9 +76,11 @@ def pose(position_m, rotation):
 
 
 def contact_pairs(data, labels):
-    for contact in data.contact:
-        a, b = labels[contact.geom1], labels[contact.geom2]
-        yield tuple(sorted((a, b))), contact.dist
+    # MuJoCo exposes contact fields as arrays; avoid a Python wrapper per contact.
+    contacts = data.contact
+    for first, second, distance in zip(contacts.geom1, contacts.geom2, contacts.dist):
+        a, b = labels[first], labels[second]
+        yield ((a, b) if a < b else (b, a)), distance
 
 
 def parameter_for(params, key, item_id, default):

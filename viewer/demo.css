@@ -1,0 +1,13 @@
+.demo-controls,.physical-controls {display:flex;flex-wrap:wrap;gap:10px;padding:12px 0;}
+.physical-controls {border-top:1px solid #666;margin-top:16px;}
+.physical-controls p,.physical-controls strong {width:100%;margin:0;}
+#recovery-banner,#saved-attribution {padding:16px;margin:12px 0;background:#f5c518;color:#171717;font-weight:700;font-size:18px;line-height:1.5;border:2px solid #f5c518;}
+#recovery-timeline {display:flex;flex-wrap:wrap;gap:10px;font-size:14px;line-height:1.6;}
+#recovery-timeline span {border-bottom:2px solid #f5c518;}
+.takeover-link {color:#f5c518;display:block;}
+.agent.dead {opacity:1;background:#303030;color:#aaa;}
+.agent.dead .dot {background:#777!important;}
+.agent.dead .deadlabel {color:#eee;font-size:16px;font-weight:700;text-transform:uppercase;}
+.agent.taking-over {border:2px solid #f5c518;}
+.agent .agent-detail {line-height:1.6;}
+@media (prefers-reduced-motion:reduce) {.agent .flash {animation:none;}}

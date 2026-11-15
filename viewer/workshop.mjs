@@ -1,3 +1,4 @@
+import {resultLabel, recoveryText} from "./demo-state.mjs";
 import { SwarmFrames } from "./swarm-state.mjs";
 import { SwarmOverlay } from "./swarm-overlay.mjs";
 import { workbenchState } from "./workbench-state.mjs";
@@ -500,14 +501,16 @@ function renderAgents(agents = []) {
     }
     el.classList.toggle("dead", !a.alive);
     const chip = el.querySelector(".role");
-    chip.hidden = !a.alive;
+    chip.hidden = false;
     el.querySelector(".deadlabel").hidden = a.alive;
+    el.querySelector(".deadlabel").textContent = a.status === "Stopped" ? "Stopped" : "DEAD";
     if (a.alive) {
       if (r.role !== null && r.role !== a.role) {       // role changed: flash the chip
         chip.classList.remove("flash"); void chip.offsetWidth; chip.classList.add("flash");
       }
       chip.textContent = cap(a.role);
     }
+    if(!a.alive)chip.textContent=`was ${a.role}`;
     r.role = a.role;
     const mute = el.querySelector(".mute");
     if (a.alive && a.silenced && !mute) el.querySelector(".rolecell").insertAdjacentHTML("beforeend", MUTE_SVG);
@@ -605,8 +608,8 @@ function renderSend(f) {
     const ex = f.execution ?? {}, next = ex.next_step;
     const ready = connected() && !!f.best && robust >= EXECUTE_MIN && ex.dry_run && next != null;
     b.disabled = !ready; b.classList.toggle("armed", ready);
-    b.textContent = ready ? `Send to Arduino · dry run (step ${next} of ${ex.steps})` :
-                    f.best && ex.steps && next == null ? "All steps sent · dry run" : "Waiting for a validated plan";
+    b.textContent = ready ? `Log simulated G/P step ${next} of ${ex.steps} · no hardware` :
+                    f.best && ex.steps && next == null ? "All simulated steps logged" : "Waiting for a validated plan";
     return;
   }
   b.disabled = !armed;
@@ -641,18 +644,38 @@ function renderSwarmFrame(f) {
   renderTop(f);renderAgents(f.agents);renderItems(f.items, f);renderSend(f);lastFrame=f;
   $("swarm-demo").disabled=!connected(); updateStartAgents(f);
   const metrics=f.metrics??{};
+  const recovery=f.recovery?.at(-1);
+  const banner=$("recovery-banner");banner.hidden=!recovery;
+  banner.textContent=recoveryText(recovery,f.live_search_stopped);
+  const timeline=$("recovery-timeline");
+  timeline.replaceChildren(...(recovery?.timeline??[]).map(e=>Object.assign(document.createElement("span"),{textContent:`${e.stage} · ${new Date(e.timestamp*1000).toLocaleTimeString()}`})));
+  const link=recovery?.successor?`${recovery.dead}:${recovery.successor}:${recovery.checkpoint_id}`:null;
+  if(link){const changed=timeline.dataset.link!==link;timeline.dataset.link=link;
+    const arrow=Object.assign(document.createElement("strong"),{className:"takeover-link",textContent:`${recovery.dead.toUpperCase()} → ${recovery.successor.toUpperCase()}`});timeline.append(arrow);
+    if(changed && !matchMedia('(prefers-reduced-motion: reduce)').matches)arrow.animate([{opacity:.3,transform:'translateX(-12px)'},{opacity:1,transform:'translateX(0)'}],{duration:250,easing:'cubic-bezier(0.23, 1, 0.32, 1)'});
+  }
+  for(const a of f.agents??[])agentRows.get(a.id)?.el.classList.toggle('taking-over',a.id===recovery?.successor && a.alive);
+  const saved=f.best?.attribution==='previously_validated';
+  $("saved-attribution").hidden=!saved;$("saved-attribution").textContent=saved?`${resultLabel(f.best)} · saved ${f.best.saved_at} · simulated replay only`:'';
+  $("swarm-stop").disabled=!connected()||!f.task||f.live_search_stopped;
+  $("swarm-saved").disabled=!connected()||!f.task||!f.live_search_stopped;
+  $("swarm-replay").disabled=!connected()||!f.best;
+  $("physical-dry").disabled=!connected()||!saved||f.execution?.awaiting_outcome||!f.execution?.physical_next_step;
+  $("physical-outcome").disabled=!connected()||!f.execution?.awaiting_outcome;
+  $("physical-failed").disabled=!connected()||!f.execution?.awaiting_outcome;
+
   $("swarm-status").textContent=f.task?`${metrics.active??0} real processes · ${metrics.trials??0} MuJoCo trials · ${metrics.plan_trials??0} plan trials · scene ${f.task.scene_version} · ${f.task.task_id} · ${metrics.elapsed_s}s${f.agents.some(a=>a.silenced)?" · PEER NETWORK OFF: local checkpoints":""}${f.failure?` · ${f.failure}`:""}`:"No simulation running · place the sweeper and boxes, then press ▶ Start agents (or Load Three-Box Demo).";
   syncAgentSelect(f.agents??[]);
   $("m-attempts").textContent=(metrics.trials??0).toLocaleString();$("m-success").textContent=(metrics.successes??0).toLocaleString();$("m-best").textContent=pct(f.best?.robust);
   const feed=$("swarm-activity"),activity=(f.agents??[]).filter(a=>a.alive&&a.latest).map(a=>({agent:a.id,timestamp:a.latest.timestamp,type:a.latest.role,detail:`${a.latest.action.target} · tilt ${a.latest.action.tilt_deg}° · trial #${a.latest.trial_id.split(":").at(-1)} · score ${a.latest.score}`}));
   feed.replaceChildren(...[...(f.events??[]),...activity].sort((a,b)=>b.timestamp-a.timestamp).slice(0,20).map(event=>Object.assign(document.createElement("div"),{textContent:`${new Date(event.timestamp*1000).toLocaleTimeString()} · ${(event.agent??"swarm").toUpperCase()} · ${event.type.replaceAll("_"," ")}${event.detail?` · ${event.detail}`:""}${event.role?` → ${event.role}`:""}${event.failed_agent?` ${event.failed_agent.toUpperCase()}`:""}${event.checkpoint_id?` · ${event.checkpoint_id} (${event.recovered_trials??"shared"} trials)`:""}`})));
-  const panel=$("swarm-plan-details"),planKey=f.best?`${f.best.plan.id}:${f.best.robust}`:`none:${f.failure??""}`;
+  const panel=$("swarm-plan-details"),planKey=f.best?`${f.best.plan.id}:${f.best.robust}:${f.best.attribution}`:`none:${f.failure??""}`;
   if(panel.dataset.planKey!==planKey){panel.dataset.planKey=planKey;panel.replaceChildren();
   if(f.best?.plan){
-    panel.appendChild(Object.assign(document.createElement("strong"),{textContent:`Validated complete simulation plan · ${pct(f.best.robust)} (${Object.keys(f.best.plan.evidence).length} independent trials)`}));
+    panel.appendChild(Object.assign(document.createElement("strong"),{textContent:`${resultLabel(f.best)} · ${pct(f.best.robust)} (${Object.keys(f.best.plan.evidence).length} independent trials)`}));
     const list=document.createElement("ol");
     for(const step of f.best.plan.actions)list.appendChild(Object.assign(document.createElement("li"),{textContent:`${objectLabel(step.target,f)}: manual tilt ${step.tilt_deg}° → ${step.direction.toUpperCase()} · predicted ${f.task.goals[step.target]} bag. Simulation angles/timing are uncalibrated.`}));
-    const replay=Object.assign(document.createElement("button"),{type:"button",textContent:"Preview validated sequence"});replay.onclick=()=>send({cmd:"replay_plan"});
+    const replay=Object.assign(document.createElement("button"),{type:"button",textContent:"Replay Three-Box Solution"});replay.onclick=()=>send({cmd:"replay_plan"});
     const back=Object.assign(document.createElement("button"),{type:"button",textContent:"Back to agent trials"});back.onclick=()=>swarmOverlay.stopSequence();
     panel.append(replay,back);
     panel.append(list,Object.assign(document.createElement("p"),{textContent:"Simulation prediction only. UNO Q execution is disabled."}));
@@ -669,9 +692,14 @@ function renderSwarmFrame(f) {
 }
 function renderFrame(f) {
   if(f.type === "plan_replay"){
-    if(lastFrame?.task?.task_id===f.task_id && lastFrame.task.scene_version===f.scene_version){swarmOverlay.playSequence(f.results,lastFrame.task);$("world-message").textContent="Validated sequence replay · yellow outlines are simulated; solid workbench objects stay unchanged.";}
+    if(lastFrame?.task?.task_id===f.task_id && lastFrame.task.scene_version===f.scene_version){swarmOverlay.playSequence(f.results,lastFrame.task);$("world-message").textContent=`${f.label} · yellow outlines: stored MuJoCo simulation. Solid objects: workbench setup, not physical state.`;}
     return;
   }
+  if(f.type==='confirmed_step'){
+    $("physical-status").textContent=`DRY RUN step ${f.step}: ${f.target} → ${f.bin}; tilt ${f.tilt_deg}°. ${f.command??'No calibrated L/R mapping'}. NOT SENT · NOT ACKNOWLEDGED. ${f.reason}`;
+    $("physical-outcome").disabled=false;return;
+  }
+  if(f.type==='outcome_confirmed'){$("physical-status").textContent=`Human reported outcome recorded. Next step ${f.next_step}. No physical command was sent.`;$("physical-outcome").disabled=true;return;}
   if(f.type === "error"){$("swarm-status").textContent=f.reason;return;}
   if(f.type === "dry_run_command"){
     const text=`Dry run step ${f.step} of ${f.steps}: ${f.target} → ${f.bin} bag. Set tilt ${f.tilt_deg}° by hand, then ${f.commands.join(" · ")} (logged, not sent to hardware).`;
@@ -714,6 +742,17 @@ $("send").onclick = () => {
   if (ok) send({ cmd: "execute" });
 };
 $("swarm-demo").onclick=()=>send({cmd:"load_demo"});
+$("swarm-stop").onclick=()=>send({cmd:'stop_live'});
+$("swarm-saved").onclick=()=>send({cmd:'load_saved'});
+$("swarm-replay").onclick=()=>send({cmd:'replay_plan'});
+$("physical-stop").onclick=()=>{send({cmd:'hardware_stop'});$("physical-status").textContent='STOP: disconnect servo power physically. No serial transport is active.';};
+$("physical-dry").onclick=()=>{
+ const step=lastFrame?.best?.plan?.actions?.[(lastFrame.execution?.physical_next_step??1)-1];if(!step)return;
+ const confirmed=confirm(`DRY RUN ONLY — no command will be transmitted.\nSet tilt manually to ${step.tilt_deg}°. Confirm the actual box scene matches this plan, and the previous boxes have the expected outcomes.\nPrepare ${step.target} → ${lastFrame.task.goals[step.target]}?`);
+ if(confirmed)send({cmd:'prepare_step',plan_id:lastFrame.best.plan.id,tilt_confirmed:true,scene_confirmed:true});
+};
+$("physical-failed").onclick=()=>send({cmd:"confirm_outcome",success:false});
+$("physical-outcome").onclick=()=>{if(confirm('Confirm you have observed the actual box in its expected bin. This is a human report, not hardware acknowledgement.'))send({cmd:'confirm_outcome',success:true});};
 // "Start agents": plan whatever is placed on the bench (the sweeper plus at least one box).
 function benchReady() {
   const objects = workbenchState.snapshot().objects;
@@ -725,10 +764,11 @@ function updateStartAgents(f = lastFrame) {
               !benchReady() ? "Place the sweeper and at least one box first" : "Plan the placed objects with independent MuJoCo agents";
   for (const id of ["swarm-plan", "swarm-start-tab"]) { $(id).disabled = !ready; $(id).title = why; }
   // In the Agents tab, offer it while nothing is running for this workbench.
-  $("swarm-start-tab").hidden = !!(f?.task && f.phase !== "failed");
+  $("swarm-start-tab").hidden = !!(f?.task && !f.live_search_stopped && f.phase !== "failed");
 }
 $("swarm-start-tab").onclick = () => $("swarm-plan").click();
 $("swarm-plan").onclick=()=>{
+  if(lastFrame?.source==="golden" && lastFrame.live_search_stopped){send({cmd:"start_agents"});selectTab("agents");return;}
   const unassigned=workbenchState.snapshot().objects.filter(o=>o.type==="box"&&!o.destination);
   if(unassigned.length){$("world-message").textContent=`${unassigned.length} placed box${unassigned.length>1?"es have":" has"} no bag (${[...new Set(unassigned.map(o=>o.color??"no colour"))].join(", ")}). Only red → left and blue → right can be sorted. Change the routing colour in Inventory, then Clear workbench and place again.`;return;}
   loadedSwarmTask="workbench";send({cmd:"plan_workbench",snapshot:workbenchState.snapshot()});selectTab("agents");$("observer-overlay").checked=true;};

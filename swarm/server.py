@@ -1,4 +1,4 @@
-"""Real worker observer: python -m swarm.server --workers 6 --demo."""
+"""Real worker observer: python -m swarm.server --workers 4 --demo."""
 import os
 for option in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"):
     os.environ.setdefault(option, "1")
@@ -27,11 +27,25 @@ async def run(args):
                     message=json.loads(raw)
                     cmd=message.get("cmd")
                     if cmd == "die":
-                        swarm.kill(message.get("id"))
+                        if not swarm.kill(message.get("id")):raise ValueError("Agent process was already stopped")
+                        await ws.send(json.dumps(swarm.frame(),allow_nan=False))
                     elif cmd in ("silence", "unsilence"):
                         swarm.silence(cmd == "silence")
                     elif cmd == "load_demo":
-                        await asyncio.to_thread(swarm.start, source="golden")
+                        await asyncio.to_thread(swarm.start, source="golden", run=False)
+                    elif cmd == "start_agents":
+                        if not swarm.task:raise ValueError('Load a scene first')
+                        await asyncio.to_thread(swarm.start, swarm.task['snapshot'], source=swarm.source)
+                    elif cmd == "stop_live":
+                        await asyncio.to_thread(swarm.stop_live)
+                    elif cmd == "load_saved":
+                        await asyncio.to_thread(swarm.load_saved)
+                    elif cmd == "prepare_step":
+                        await ws.send(json.dumps(await asyncio.to_thread(swarm.prepare_step,message.get('plan_id'),message.get('tilt_confirmed'),message.get('scene_confirmed'))))
+                    elif cmd == "confirm_outcome":
+                        await ws.send(json.dumps(await asyncio.to_thread(swarm.confirm_outcome,message.get('success'))))
+                    elif cmd == "hardware_stop":
+                        await ws.send(json.dumps(dict(type='error',reason='No hardware transport is active. Disconnect servo power physically for an immediate physical stop.')))
                     elif cmd == "plan_workbench":
                         await asyncio.to_thread(swarm.start, message.get("snapshot"))
                     elif cmd == "replay_plan":
@@ -72,10 +86,10 @@ async def run(args):
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--workers",type=int,default=6)
+    parser.add_argument("--workers",type=int,default=4)
     parser.add_argument("--seed",type=int,default=2026)
     parser.add_argument("--rollouts",type=int,default=2500)
-    parser.add_argument("--timeout",type=float,default=600)
+    parser.add_argument("--timeout",type=float,default=400)
     parser.add_argument("--port",type=int,default=8765)
     parser.add_argument("--directory")
     parser.add_argument("--demo",action="store_true")

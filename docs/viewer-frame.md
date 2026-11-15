@@ -65,3 +65,30 @@ The static viewer uses scene versions, stream sequence numbers and trial
 identities to reject stale/duplicate telemetry. A new physical workbench state
 invalidates the active planning task. Scene frames on 8766 (manual physics
 preview) and camera/inventory storage remain separate. See [swarm.md](swarm.md).
+
+## Hackathon demo additions (stage-fixes)
+
+The `gekko-swarm-v1` frame now also carries `live_search_stopped` and `recovery[]`.
+Each recovery includes the terminated agent, previous role, active count before
+termination, confirmed successor/role/checkpoint, recovered trials/progress,
+new trials on the successor, resumed status, additional trials since death,
+whether a better validated plan appeared, silence/successor status and a timestamped
+backend-derived timeline. New worker events are `work_resumed`; takeover events
+also include `successor_trials`. No client timer asserts takeover.
+
+`best.attribution` is `live` or `previously_validated`; `best.label` and `saved_at`
+make provenance explicit. `plan_replay` returns stored MuJoCo results plus the same
+attribution/label, and never runs a new search or physics rollout.
+
+Commands: `load_demo` loads a stopped golden scene; `start_agents` launches fresh
+workers for that scene; `stop_live` stops the workers and retains history;
+`load_saved` loads the local compatible bundle only when stopped; `prepare_step`
+requires `plan_id`, `tilt_confirmed:true`, `scene_confirmed:true`; `confirm_outcome`
+requires `success:true` to advance the separate confirmed-step index.
+`hardware_stop` reports the disabled transport and physical-power stop instruction.
+No real serial transport is enabled. `execution.physical_next_step` and
+`awaiting_outcome` are independent of the legacy simulated G/P dry-run index.
+
+`confirmed_step` reports the calibrated L/R mapping (or null when unverified),
+manual tilt, step/target/destination, `transmitted:false`, `acknowledged:false` and
+the hardware blocker. Configuration is in `config/uno-q.json`.
