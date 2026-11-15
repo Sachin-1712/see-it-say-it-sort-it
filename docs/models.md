@@ -244,29 +244,33 @@ x × y × z because it stands on its 10 mm edge with 3 mm along the shaft.
 ## Lying-can sweeper and the sideways sort
 
 The can (diameter 50, length 90, placeholder) lies on its side along y, behind the stack
-on the bench centreline, its front end 15 mm behind the stack, resting on its rims. The
-servo sits on a 6.4 mm riser on top of the can near its front end, shaft straight up, so
-at tilt 0 the stick's underside is 10 mm above a 3-box stack. Servo 0° points the stick
-right (+x), 90° forward over the stack, 180° left. Manual tilt turns the assembly about
-an x axis through the can's front-bottom edge: positive tilt lifts the back of the can
-and lowers the stick tip. The limits are 0° to 35°; negative tilt would push the back
-into the bench. The GLB was baked upright with a horizontal shaft; `model-fit.mjs` turns
-the can, rescales its rims and ribs, turns the bracket into the riser, re-parents
-`servo_mount` to `assembly_tilt` and sets the shaft vertical at load time.
+on the bench centreline, resting on its rims. Its front end is 50 mm behind the stack, so
+its back end overhangs the bench's back edge by 10 mm and the servo stays clear of the top
+box at full tilt. The servo sits on a 6.4 mm riser near the can's front end, shaft up; at
+tilt 0 the stick's underside is 10 mm above a 3-box stack. Servo 0° points the stick right
+(+x), 90° forward, 180° left. Tilt turns the assembly about an x axis through the can's
+front-bottom edge, which stays on the bench while positive tilt lifts the back and lowers
+the tip. The limits are 0° to 32.5°: negative tilt would push the back into the bench,
+and beyond 32.5° the 145 mm stick, pointing forward, would go below the bench top (at
+32.5° its lowest point is 1.4 mm above it).
 
-Reach (kinematic, `tests/fit.test.mjs`, zero penetration of the bench and of any box
-other than the one pushed; contact within 1 mm):
+Reach (kinematic, `tests/fit.test.mjs`; zero penetration of the bench and of any box other
+than the one pushed; contact within 1 mm):
 
-- Top box: works for tilt 11.5° to 32°. At 31.5°, red goes left with first contact on
-  the right face at servo 0° and the sweep to 176°; blue goes right with contact at 179°
-  and the sweep to 4°. The contact point passes each bench edge by 10.0 mm.
-- Middle box: not reachable. The stick first reaches its side face at tilt 29.5°, but
-  tipping about the front edge also throws the servo forward over the stack, so every
-  such pose cuts through the top box.
-- Bottom box: not reachable. No tilt within limits brings the stick to its side face.
+- Top box: works for tilt 9.5° to 19°. At 19°, red goes left with first contact on the
+  right face at servo 29.5° and the sweep to 168.5°; blue goes right with contact at
+  148.5° and the sweep to 11.5°. The contact point passes each bench edge by 11.2 mm.
+  The 140 mm stick reached only 9.7 mm after the move back, so the stick is 145 mm.
+- Middle box: not reachable. Its side face is first reached at 18.5°, but every such
+  pose cuts through the top box.
+- Bottom box: not reachable. Its side face is first reached at 32.5°, but every such pose
+  cuts through the middle box.
 
-The stick's swing plane stays 86.5 mm from the pivot line, so at the stack's back face,
-15 mm in front of the pivot, it can never come lower than about 85 mm above the bench.
-Analytic trials found the middle box reachable only with the stack moved forward into
-the scan zone, a 95 mm gap and a 160 mm stick, and the bottom box in none of them.
-The kinematic check assumes the pushed box slides straight sideways.
+Lengthening the stick does not help the middle or bottom box: a longer stick lowers the
+tilt limit (forward tip into the bench) by more than it adds reach (analytic trials up to
+180 mm). The stick's swing plane stays a fixed distance from the pivot line, so with the
+servo behind the stack centreline it has to cross the boxes above to reach a lower one.
+
+In debug mode (D) any measured part that intersects another object is outlined in red
+(oriented boxes, 0.5 mm contact allowance; bags and zones are left out), and the console
+table lists what each part intersects.

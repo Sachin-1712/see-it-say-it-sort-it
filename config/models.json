@@ -45,10 +45,10 @@
       ],
       "limitsDeg": [
         0,
-        35
+        32.5
       ],
       "measured": false,
-      "_note": "x axis through the can's front-bottom edge (the end facing the boxes, where its rim touches the bench). Positive tilt lifts the back of the can and lowers the stick tip. The lower limit is 0: any negative tilt would push the back of the can into the bench."
+      "_note": "x axis through the can's front-bottom edge (the end facing the boxes, where its rim touches the bench). Positive tilt lifts the back of the can and lowers the stick tip; the front-bottom edge stays on the bench. Limits: 0 (any negative tilt would push the back into the bench) to 32.5 (beyond that the 145 mm stick's tip, pointing forward, would go below the bench top)."
     },
     "servo": {
       "pivotMm": [
@@ -79,24 +79,24 @@
       "_note": "On top of the lying can near its front end, shaft straight up. The shaft centre is at z 82 so the stick's underside (shaft + 3 mm horn) is 85 above the bench: 10 mm above a 3-box stack (75) at tilt 0. The 23 mm case sits on a 6.4 mm riser on the can's top line (z 50.6): 50.6 + 6.4 + 23 + 2 = 82. Case centre 9 mm behind the can's front end. Servo 0 = stick to the right (+x), 90 = forward (-y), 180 = left (-x)."
     },
     "stick": {
-      "lengthMm": 140,
+      "lengthMm": 145,
       "widthMm": 10,
       "thicknessMm": 3,
       "pivotFromEndMm": 5,
       "massG": 2,
       "measured": false,
-      "_note": "Lengthened from 120 to 140 mm so the sweep carries the top box's contact point about 10 mm past both bench edges (135 mm is the bare minimum, about 4 mm). Lies flat: 10 mm wide horizontally, 3 mm thick vertically. Hung on the horn 5 mm from one end."
+      "_note": "Lengthened from 140 to 145 mm: with the can moved back the 140 mm stick carried the top box only 9.7 mm past the edges. Lies flat: 10 mm wide horizontally, 3 mm thick vertically. Hung on the horn 5 mm from one end."
     },
     "friction": null
   },
   "workbench": {
-    "sweeperGapToStackMm": 15,
+    "sweeperGapToStackMm": 50,
     "otherPositionMm": {
       "x": 40,
       "y": 245
     },
     "otherSpacingMm": 170,
     "otherSlots": 2,
-    "note": "The box stack sits at the centre of rig.json zones.pick. The sweeper sits behind it on the same x, its can's front end sweeperGapToStackMm behind the stack's back face. Visual placement only: no collision or stability simulation."
+    "note": "The box stack sits at the centre of rig.json zones.pick. The sweeper sits behind it on the same x, its can's front end sweeperGapToStackMm (50) behind the stack's back face, so the can's back end overhangs the bench's back edge by 10 mm and the servo stays clear of the top box at full tilt. Visual placement only: no collision or stability simulation."
   }
 }

@@ -93,12 +93,13 @@ export class Workbench {
     const parts = [];
     for (const item of this.items ?? []) {
       const root = this.instances.get(item.instanceId)?.root; if (!root) continue;
-      if (item.type === "box") parts.push({ name: `Box ${item.stackIndex + 1}`, object: root.getObjectByName("parcel_body") });
-      else if (item.type === "sweeper") for (const [name, node] of [["Can", "metal_can"], ["Servo case", "servo_case"], ["Stick", "wooden_stick"]])
-        parts.push({ name, object: root.getObjectByName(node) });
-      else parts.push({ name: item.name, object: root });
+      // group: parts in the same group are one rigid assembly and are not checked against each other.
+      if (item.type === "box") parts.push({ name: `Box ${item.stackIndex + 1}`, object: root.getObjectByName("parcel_body"), group: item.instanceId });
+      else if (item.type === "sweeper") for (const [name, node] of [["Can", "metal_can"], ["Servo riser", "servo_mount_bracket"], ["Servo case", "servo_case"], ["Stick", "wooden_stick"]])
+        parts.push({ name, object: root.getObjectByName(node), group: item.instanceId });
+      else parts.push({ name: item.name, object: root, group: item.instanceId });
     }
-    return parts.filter(part => part.object);
+    return parts.filter(part => part.object?.visible !== false && part.object);
   }
   bounds() {
     const bounds = new THREE.Box3();

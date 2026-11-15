@@ -45,7 +45,7 @@
       "type": "sweeper",
       "origin": "bench top under the can centre",
       "dimensionsMm": {
-        "width": 160.6,
+        "width": 165.6,
         "depth": 90,
         "height": 88.7
       },
@@ -100,13 +100,13 @@
           "_note": "On top of the lying can near its front end, shaft straight up. The shaft centre is at z 82 so the stick's underside (shaft + 3 mm horn) is 85 above the bench: 10 mm above a 3-box stack (75) at tilt 0. The 23 mm case sits on a 6.4 mm riser on the can's top line (z 50.6): 50.6 + 6.4 + 23 + 2 = 82. Case centre 9 mm behind the can's front end. Servo 0 = stick to the right (+x), 90 = forward (-y), 180 = left (-x)."
         },
         "stick": {
-          "lengthMm": 140,
+          "lengthMm": 145,
           "widthMm": 10,
           "thicknessMm": 3,
           "pivotFromEndMm": 5,
           "massG": 2,
           "measured": false,
-          "_note": "Lengthened from 120 to 140 mm so the sweep carries the top box's contact point about 10 mm past both bench edges (135 mm is the bare minimum, about 4 mm). Lies flat: 10 mm wide horizontally, 3 mm thick vertically. Hung on the horn 5 mm from one end."
+          "_note": "Lengthened from 140 to 145 mm: with the can moved back the 140 mm stick carried the top box only 9.7 mm past the edges. Lies flat: 10 mm wide horizontally, 3 mm thick vertically. Hung on the horn 5 mm from one end."
         }
       },
       "collision": {
@@ -164,13 +164,13 @@
             "node": "wooden_stick",
             "shape": "box",
             "sizeMm": [
-              140,
+              145,
               10,
               3
             ],
             "frame": "servo_output local",
             "centerMm": [
-              65,
+              67.5,
               0,
               4.5
             ]
@@ -197,7 +197,7 @@
           ],
           "limitsDeg": [
             0,
-            35
+            32.5
           ],
           "restDeg": 0,
           "direction": 1

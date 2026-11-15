@@ -3,6 +3,7 @@ import { toThree, fromThree } from "./frame.mjs";
 import { Workbench } from "./workbench.mjs";
 import { sweeperPositionFromConfig } from "./workbench-state.mjs";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
+import { OBB } from "three/addons/math/OBB.js";
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { Line2 } from "three/addons/lines/Line2.js";
@@ -634,6 +635,27 @@ document.addEventListener("workbenchclear", () => { $("observer-overlay").checke
 const DEBUG = { on: new URLSearchParams(location.search).has("debug"), group: new THREE.Group(), labels: [], attached: [] };
 DEBUG.group.visible = false; scene.add(DEBUG.group);
 const debugInk = new THREE.LineBasicMaterial({ color: C.accent, depthTest: false, transparent: true });
+const debugRed = new THREE.LineBasicMaterial({ color: 0xFF3B30, depthTest: false, transparent: true });
+// Intersections between solid meshes of different objects (stick into a box, can into the
+// bench). Oriented boxes, shrunk by 0.5 mm so resting contact (box on box, can on bench)
+// does not count. Bags and zones are hollow or flat and are left out.
+const CONTACT_MM = 0.5;
+function obbOf(mesh) {
+  mesh.geometry.computeBoundingBox();
+  const obb = new OBB().fromBox3(mesh.geometry.boundingBox).applyMatrix4(mesh.matrixWorld);
+  obb.halfSize.subScalar(CONTACT_MM).max(new THREE.Vector3());
+  return obb;
+}
+function collisions(targets) {
+  const solids = targets.filter(t => t.object.isMesh && t.group), hits = new Map(solids.map(t => [t.name, []]));
+  for (const t of solids) t.object.updateWorldMatrix(true, false);
+  const obbs = solids.map(t => obbOf(t.object));
+  for (let i = 0; i < solids.length; i++) for (let j = i + 1; j < solids.length; j++) {
+    if (solids[i].group === solids[j].group || !obbs[i].intersectsOBB(obbs[j])) continue;
+    hits.get(solids[i].name).push(solids[j].name); hits.get(solids[j].name).push(solids[i].name);
+  }
+  return hits;
+}
 const fmt = v => (Math.round(v * 10) / 10).toString();
 const AXES = [new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, 1)];
 function measure(object) {
@@ -656,11 +678,11 @@ function measure(object) {
   return { size: tableAxes(box.getSize(new THREE.Vector3())), centre: fromThree(box.getCenter(new THREE.Vector3()).toArray()), minZ: box.min.y, top: box.max.y };
 }
 function debugTargets() {
-  const list = [["Bench top", tableMesh], ["Bench support", supportMesh]];
-  for (const [side, g] of Object.entries(bagGroups)) list.push([`${cap(side)} bag`, g]);
-  for (const [name, g] of Object.entries(zoneGroups)) list.push([`${cap(name)} zone`, g]);
-  for (const part of workbench?.debugParts() ?? []) list.push([part.name, part.object]);
-  return list.filter(([, object]) => object).map(([name, object]) => ({ name, object }));
+  const list = [["Bench top", tableMesh, "bench"], ["Bench support", supportMesh, "bench"]];
+  for (const [side, g] of Object.entries(bagGroups)) list.push([`${cap(side)} bag`, g, null]);
+  for (const [name, g] of Object.entries(zoneGroups)) list.push([`${cap(name)} zone`, g, null]);
+  for (const part of workbench?.debugParts() ?? []) list.push([part.name, part.object, part.group]);
+  return list.filter(([, object]) => object).map(([name, object, group]) => ({ name, object, group }));
 }
 function textSprite(text) {
   const px = 44, c = document.createElement("canvas"), ctx = c.getContext("2d");
@@ -676,7 +698,7 @@ function textSprite(text) {
 function clearDebug() {
   for (const helper of DEBUG.attached) { helper.parent?.remove(helper); helper.geometry.dispose(); }
   for (const child of [...DEBUG.group.children]) { DEBUG.group.remove(child); child.geometry?.dispose(); child.material?.map?.dispose(); if (child.material !== debugInk) child.material?.dispose?.(); }
-  DEBUG.attached = []; DEBUG.labels = [];
+  DEBUG.attached = []; DEBUG.labels = []; DEBUG.parts = [];
 }
 function scaleBar() {                    // 100 mm along +x near the bench's front-left corner, ticks every 10 mm
   const g = new THREE.Group(), z = table.height + 0.6, x0 = 15, y0 = 14;
@@ -692,17 +714,19 @@ function scaleBar() {                    // 100 mm along +x near the bench's fro
 }
 function refreshDebug() {
   clearDebug();
-  const rows = [];
-  for (const { name, object } of debugTargets()) {
+  const rows = [], targets = debugTargets(), hits = collisions(targets);
+  DEBUG.targets = targets;
+  for (const { name, object, group } of targets) {
     const m = measure(object);
     rows.push({ object: name, "w x mm": +fmt(m.size.x), "d y mm": +fmt(m.size.y), "h z mm": +fmt(m.size.z),
-      "centre x": +fmt(m.centre.x), "centre y": +fmt(m.centre.y), "centre z": +fmt(m.centre.z), "bottom z": +fmt(m.minZ), measured: false });
+      "centre x": +fmt(m.centre.x), "centre y": +fmt(m.centre.y), "centre z": +fmt(m.centre.z), "bottom z": +fmt(m.minZ),
+      intersects: hits.get(name)?.join(", ") || "", measured: false });
     if (!DEBUG.on) continue;
     if (object.isMesh) {                  // oriented box that follows the mesh (tilt, servo)
       const local = object.geometry.boundingBox, size = local.getSize(new THREE.Vector3());
       const helper = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(size.x, size.y, size.z)), debugInk);
       helper.position.copy(local.getCenter(new THREE.Vector3())); helper.renderOrder = 20; helper.raycast = () => {};
-      object.add(helper); DEBUG.attached.push(helper);
+      object.add(helper); DEBUG.attached.push(helper); DEBUG.parts.push({ name, helper });
     } else {
       const helper = new THREE.Box3Helper(new THREE.Box3().setFromObject(object), C.accent);
       helper.material.depthTest = false; helper.material.transparent = true; helper.renderOrder = 20; DEBUG.group.add(helper);
@@ -716,6 +740,12 @@ function refreshDebug() {
   updateDebugLabels();
   console.table(rows);
   return rows;
+}
+// Red outline on every part that currently intersects another object (sliders stay visual-only).
+function updateDebugCollisions() {
+  if (!DEBUG.targets) return;
+  const hits = collisions(DEBUG.targets);
+  for (const { name, helper } of DEBUG.parts ?? []) helper.material = hits.get(name)?.length ? debugRed : debugInk;
 }
 function updateDebugLabels() {
   // Each label starts just above its object and moves up until its on-screen
@@ -751,7 +781,7 @@ renderer.setAnimationLoop(() => {
   workbench.update(now - previousTime); previousTime = now;
   updateGhosts(now);
   updateBest(now, lastFrame?.phase);
-  if (DEBUG.on) updateDebugLabels();
+  if (DEBUG.on) { updateDebugLabels(); updateDebugCollisions(); }
   if (controls.enabled) controls.update();
   renderer.clear();
   renderer.render(scene, camera);

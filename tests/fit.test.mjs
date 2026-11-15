@@ -7,6 +7,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { OBB } from "three/addons/math/OBB.js";
 import { ModelLibrary, applyJoint } from "../viewer/model-assets.mjs";
 import { fitToConfig } from "../viewer/model-fit.mjs";
 import { WorkbenchState, sweeperPositionFromConfig } from "../viewer/workbench-state.mjs";
@@ -78,7 +79,7 @@ test("fitted GLB parts match the config sizes, with the can lying along y and th
 
 test("servo 0/90/180 point right/forward/left; positive tilt about the front-bottom edge lifts the back and lowers the tip", async () => {
   const { root, joints, metadata } = await fitted("sweeper"), stick = root.getObjectByName("wooden_stick");
-  assert.deepEqual(metadata.joints.tilt.limitsDeg, [0, 35]); assert.deepEqual(metadata.joints.servo.limitsDeg, [0, 180]);
+  assert.deepEqual(metadata.joints.tilt.limitsDeg, models.sweeper.assemblyTilt.limitsDeg); assert.equal(metadata.joints.tilt.limitsDeg[0], 0); assert.deepEqual(metadata.joints.servo.limitsDeg, [0, 180]);
   const shaft = () => fromThree(joints.servo.node.getWorldPosition(new THREE.Vector3()).toArray());
   const heading = s => { applyJoint(joints.servo, s); root.updateMatrixWorld(true); const t = tipOf(stick), o = shaft(); return [t.x - o.x, t.y - o.y]; };
   const [rx, ry] = heading(0), [fx, fy] = heading(90), [lx, ly] = heading(180);
@@ -97,7 +98,7 @@ test("servo 0/90/180 point right/forward/left; positive tilt about the front-bot
   assert.equal(applyJoint(joints.tilt, -90), 0);
 });
 
-test("the can sits behind the stack on the centreline, on the bench, 15 mm behind it; boxes rest exactly", async () => {
+test("the can sits behind the stack on the centreline, on the bench, at the configured gap; boxes rest exactly", async () => {
   const { boxes, sweeper } = await buildScene();
   const bodies = boxes.map(box => tableBox(box.root.getObjectByName("parcel_body")));
   near(bodies[0].min.z, rig.table.height);
@@ -107,23 +108,54 @@ test("the can sits behind the stack on the centreline, on the bench, 15 mm behin
   near((can.min.x + can.max.x) / 2, rig.table.width / 2);
   near(can.min.y - bodies[2].max.y, models.workbench.sweeperGapToStackMm);
   near(Math.min(tableBox(sweeper.root.getObjectByName("bottom_rim")).min.z, tableBox(sweeper.root.getObjectByName("top_rim")).min.z), rig.table.height, 1e-4);
-  assert.ok(can.max.y <= rig.table.depth + 1e-6, "can stays on the bench");
-  // Zero penetration: over the whole tilt range no vertex of the can, its rims or the servo goes below the bench top.
-  const { root, joints } = sweeper, v = new THREE.Vector3();
-  for (let tilt = 0; tilt <= 35; tilt += 0.5) {
-    applyJoint(joints.tilt, tilt); root.updateMatrixWorld(true);
-    for (const name of ["metal_can", "bottom_rim", "top_rim", "servo_case", "servo_mount_bracket"]) {
-      const mesh = root.getObjectByName(name), pos = mesh.geometry.attributes.position;
-      for (let i = 0; i < pos.count; i++) assert.ok(fromThree(v.fromBufferAttribute(pos, i).applyMatrix4(mesh.matrixWorld).toArray()).z >= rig.table.height - 1e-6,
-        `${name} goes below the bench top at tilt ${tilt}`);
-    }
-  }
-  applyJoint(joints.tilt, 0); root.updateMatrixWorld(true);
+  assert.ok(can.max.y - rig.table.depth <= 10 + 1e-6, `can overhangs the back edge by ${(can.max.y - rig.table.depth).toFixed(1)} mm`);
+  assert.ok(can.min.y < rig.table.depth, "can's front end is on the bench");
   for (const [side, bag] of Object.entries(rig.bags)) {
     const inner = side === "left" ? bag.x + bag.width / 2 : bag.x - bag.width / 2;
     near(inner, side === "left" ? 0 : rig.table.width);                     // bins just below the bench edges
     near(bag.height, rig.table.height);                                       // rims level with the bench top
   }
+});
+
+// Zero penetration over the whole tilt range: no part of the can, riser, servo or stick ever
+// goes below the bench top (stick at every servo angle too), and the can, riser and servo
+// never enter a box. The stick entering a box depends on the servo angle; the viewer's
+// debug mode outlines those poses in red.
+test("no tilt within limits puts the can, servo or stick into the bench, or the can or servo into a box", async () => {
+  const { sweeper, boxes } = await buildScene(), { root, joints } = sweeper, v = new THREE.Vector3();
+  const boxBounds = boxes.map(box => new THREE.Box3().setFromObject(box.root.getObjectByName("parcel_body")).expandByScalar(-0.5));
+  const lowest = names => {
+    let z = Infinity;
+    for (const name of names) {
+      const mesh = root.getObjectByName(name), pos = mesh.geometry.attributes.position;
+      for (let i = 0; i < pos.count; i++) z = Math.min(z, fromThree(v.fromBufferAttribute(pos, i).applyMatrix4(mesh.matrixWorld).toArray()).z);
+    }
+    return z;
+  };
+  const body = ["metal_can", "bottom_rim", "top_rim", "servo_mount_bracket", "servo_case"];
+  const [tMin, tMax] = models.sweeper.assemblyTilt.limitsDeg;
+  let stickLow = Infinity, stickLowAt = null;
+  for (let tilt = tMin; tilt <= tMax + 1e-9; tilt += 0.5) {
+    applyJoint(joints.tilt, tilt); applyJoint(joints.servo, 90); root.updateMatrixWorld(true);
+    assert.ok(lowest(body) >= rig.table.height - 1e-6, `can or servo below the bench top at tilt ${tilt}`);
+    for (const name of body) {
+      const mesh = root.getObjectByName(name); mesh.geometry.computeBoundingBox();
+      const obb = new OBB().fromBox3(mesh.geometry.boundingBox).applyMatrix4(mesh.matrixWorld);
+      assert.ok(!boxBounds.some(b => obb.intersectsBox3(b)), `${name} enters a box at tilt ${tilt}`);
+    }
+    for (let servo = 0; servo <= 180; servo += 2) {
+      applyJoint(joints.servo, servo); root.updateMatrixWorld(true);
+      const z = lowest(["wooden_stick"]); if (z < stickLow) { stickLow = z; stickLowAt = { tilt, servo }; }
+    }
+  }
+  console.log(`CLEARANCE: lowest stick point ${(stickLow - rig.table.height).toFixed(2)} mm above the bench top (tilt ${stickLowAt.tilt}°, servo ${stickLowAt.servo}°)`);
+  assert.ok(stickLow >= rig.table.height - 1e-6, `stick goes ${(rig.table.height - stickLow).toFixed(2)} mm below the bench top at tilt ${stickLowAt.tilt}, servo ${stickLowAt.servo}`);
+  // The front-bottom edge stays on the bench while the back lifts.
+  applyJoint(joints.tilt, tMax); root.updateMatrixWorld(true);
+  const can = tableBox(root.getObjectByName("metal_can")), rims = ["bottom_rim", "top_rim"].map(n => tableBox(root.getObjectByName(n)));
+  near(Math.min(...rims.map(r => r.min.z)), rig.table.height, 1e-3);
+  assert.ok(can.max.z > rig.table.height + 2 * models.sweeper.can.radiusMm + 20, "back of the can is lifted at full tilt");
+  applyJoint(joints.tilt, 0); applyJoint(joints.servo, 0); root.updateMatrixWorld(true);
 });
 
 test("manifest collision primitives and joints match config", async () => {
@@ -149,7 +181,8 @@ async function sweepReport() {
   const bodies = boxes.map(box => tableBox(box.root.getObjectByName("parcel_body")));
   stick.geometry.computeBoundingBox();
   const g = stick.geometry.boundingBox, samples = [];
-  for (let x = g.min.x; x <= g.max.x + 1e-9; x += 0.002) for (const z of [g.min.z, 0, g.max.z]) for (const y of [g.min.y, g.max.y]) samples.push(new THREE.Vector3(x, y, z));
+  const xs = []; for (let x = g.min.x; x < g.max.x; x += 0.002) xs.push(x); xs.push(g.max.x);       // always include the tip
+  for (const x of xs) for (const z of [g.min.z, 0, g.max.z]) for (const y of [g.min.y, g.max.y]) samples.push(new THREE.Vector3(x, y, z));
   const W = rig.table.width, tol = 1;
   const strictlyIn = (p, b) => p.x > b.min.x + tol && p.x < b.max.x - tol && p.y > b.min.y + tol && p.y < b.max.y - tol && p.z > b.min.z + tol && p.z < b.max.z - tol;
   const [tMin, tMax] = models.sweeper.assemblyTilt.limitsDeg, [sMin, sMax] = models.sweeper.servo.limitsDeg;
@@ -210,5 +243,5 @@ test("sideways sort per box: tilt to line up, servo angles into each bag, margin
   }
   // The top box must stay sortable both ways; middle and bottom are reported as found.
   assert.ok(report.top.best, "the top box can no longer be swept into both bags");
-  assert.ok(report.top.best.left.margin > 0 && report.top.best.right.margin > 0);
+  assert.ok(report.top.best.left.margin >= 10 && report.top.best.right.margin >= 10, "top box must clear both edges by at least 10 mm");
 });
