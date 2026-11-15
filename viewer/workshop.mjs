@@ -29,6 +29,7 @@ const modelConfig = await (await fetch("../config/models.json")).json();
 let workbench = null;
 const zones = rig.zones ?? {};
 const bags = rig.bags ?? {};
+const parcelSize = id => rig.parcels?.find(p => p.id === id) ?? rig.parcels?.[0] ?? { width: 50, depth: 35, height: 20 };
 await Promise.race([document.fonts.load("700 48px Inter"), new Promise(r => setTimeout(r, 1500))]).catch(() => {});
 
 const TAG = { red: "#D9473A", blue: "#3D74D9", green: "#2FAE66", yellow: "#E8C547", orange: "#E8862F",

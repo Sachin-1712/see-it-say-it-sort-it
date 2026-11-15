@@ -266,7 +266,11 @@ angle`) is no longer implemented anywhere, because the arm is no longer drawn.
   silence, kill, unsilence, execute, results, replan).
 - No test loads `viewer/workshop.mjs`, so the bug below is not caught.
 
-**Bug found: `parcelSize is not defined`**
+**Bug found: `parcelSize is not defined`** (fixed after this file was first
+written: `parcelSize` is restored in `workshop.mjs` with its original
+definition, reading `rig.parcels`. Checked against a fresh fake observer: no
+errors, and the page reaches `ready`, 95%, Send to Arduino enabled. The
+description below is of the bug as found on main.)
 
 - `viewer/workshop.mjs:324` calls `parcelSize(parcelId)`. The function was in
   the old inline script and was dropped when parcels were removed. Nothing
@@ -314,7 +318,7 @@ angle`) is no longer implemented anywhere, because the arm is no longer drawn.
 | 6.9: ghost attempts per agent | Hidden behind a checkbox that is off by default |
 | 6.9: fixed three-quarter camera | Orbit controls are on by default |
 | 6.9: right panel tabs are Agents and Outcomes | A third tab, Inventory, is first and selected by default |
-| 6.9: Send to Arduino enabled at robust 0.8 or more | Never enables, because of the `parcelSize` bug |
+| 6.9: Send to Arduino enabled at robust 0.8 or more | On main it never enables, because of the `parcelSize` bug. Fixed on this branch |
 | 6.8 and milestone 6: fixed overhead camera reads colour, centre, rotation and zone | The webcam takes a still photo. Identity and colour are picked by hand. No position is read |
 | Section 4: arm axis vertical, stick under 10 cm | `models.json` sweeper: horizontal shaft, 180 mm stick |
 | Section 4: parcels and arm only | A metal can is part of the arm assembly. The PRD does not mention one |
