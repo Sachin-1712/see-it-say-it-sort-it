@@ -65,3 +65,57 @@ The static viewer uses scene versions, stream sequence numbers and trial
 identities to reject stale/duplicate telemetry. A new physical workbench state
 invalidates the active planning task. Scene frames on 8766 (manual physics
 preview) and camera/inventory storage remain separate. See [swarm.md](swarm.md).
+
+## Hackathon demo additions (stage-fixes)
+
+The `gekko-swarm-v1` frame now also carries `live_search_stopped` and `recovery[]`.
+Each recovery includes the terminated agent, previous role, active count before
+termination, confirmed successor/role/checkpoint, recovered trials/progress,
+new trials on the successor, resumed status, additional trials since death,
+whether a better validated plan appeared, silence/successor status and a timestamped
+backend-derived timeline. New worker events are `work_resumed`; takeover events
+also include `successor_trials`. No client timer asserts takeover.
+
+`best.attribution` is `live` or `previously_validated`; `best.label` and `saved_at`
+make provenance explicit. `plan_replay` returns stored MuJoCo results plus the same
+attribution/label, and never runs a new search or physics rollout.
+
+Commands: `load_demo` loads a stopped golden scene; `start_agents` launches fresh
+workers for that scene; `stop_live` stops the workers and retains history;
+`load_saved` loads the local compatible bundle only when stopped; `prepare_step`
+requires `plan_id`, `tilt_confirmed:true`, `scene_confirmed:true`; `confirm_outcome`
+requires `success:true` to advance the separate confirmed-step index.
+`hardware_stop` reports the disabled transport and physical-power stop instruction.
+No real serial transport is enabled. `execution.physical_next_step` and
+`awaiting_outcome` are independent of the legacy simulated G/P dry-run index.
+
+`confirmed_step` reports the calibrated L/R mapping (or null when unverified),
+manual tilt, step/target/destination, `transmitted:false`, `acknowledged:false` and
+the hardware blocker. Configuration is in `config/uno-q.json`.
+
+## Automatic saved-plan playback
+
+Frames additionally carry `hardware_playback` with mode/status, connection, arming,
+step/box/destination/command/manual tilt, acknowledgement, running state and the
+remaining three-second countdown. `hardware_connect` uses the configured USB device;
+`hardware_arm` requires `armed:true`; `hardware_start` selects `mode:"hardware"`
+or `"dry_run"`; `hardware_stop` cancels and sends S if connected. `hardware_key`
+accepts L/R/S/C via the same serial owner, requires operator arming for movement,
+and refuses sweeps during playback. Stop remains available. No per-step confirmation
+is needed for this playback path; verified tilt and motion calibration are required
+for real sweeps. DONE means acknowledged servo motion, never measured box sorting.
+
+
+`hardware_start` additionally supports `mode:"servo_demo", manual_tilt:true` for
+the operator-authorized endpoint demonstration. It uses saved-plan direction order
+and DONE + 3-second gaps, but does not assert tilt or box sorting verification.
+`hardware_playback.servo_demo_ready` is independent of strict `automatic_ready`.
+The active mode is `servo_demo`, with `tilt_verified:false`, `sorting_verified:false`
+and final status `servo_demo_completed`. Unknown initial servo position is centred
+once at Start; a position loss later aborts instead of auto-homing/restarting.
+
+Compact UI commands: `hardware_send` (`armed:true, manual_tilt:true`) connects if
+needed, arms and starts the endpoint demo in one action. `hardware_manual_arm`
+(`confirmed:true`) connects if needed and arms manual L/C/R controls only. The
+operator-added fourth L is a labelled extra demo command; it does not modify the
+validated three-action plan. Repeated endpoint commands are reported as holds.

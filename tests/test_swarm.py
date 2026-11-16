@@ -82,6 +82,10 @@ def test_four_real_processes_kill_recovery_silence_and_observer_independence(tmp
         frame=wait_for(swarm,lambda f:any(e['type']=='task_takeover' and e.get('failed_agent')==victim for e in f['events']),timeout=12)
         event=next(e for e in frame['events'] if e['type']=='task_takeover' and e.get('failed_agent')==victim)
         assert event['checkpoint_id'] and event['recovered_trials']>0
+        frame=wait_for(swarm,lambda f:any(e['type']=='work_resumed' and e.get('failed_agent')==victim for e in f['events']),timeout=8)
+        recovery=frame['recovery'][-1]
+        assert recovery['dead']==victim and recovery['active_before']==4
+        assert recovery['checkpoint_id'] and recovery['resumed'] and recovery['new_trials']>0
         wait_for(swarm,lambda f:any(a['tries']>before[a['id']]+2 for a in f['agents'] if a['alive']))
         swarm.silence(True)
         frame=wait_for(swarm,lambda f:all(a['silenced'] for a in f['agents'] if a['alive']))

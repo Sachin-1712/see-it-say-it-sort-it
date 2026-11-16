@@ -27,12 +27,15 @@ def assignment(ids):
 
 
 def trim_result(result):
-    result = copy.deepcopy(result)
-    result["trajectories"] = {key:path for key,path in result.get("trajectories",{}).items() if key in ("stick",result["target"]["id"])}
-    for key, path in result["trajectories"].items():
+    compact = {k:v for k,v in result.items() if k not in ('trajectories','servo_trajectory')}
+    compact['trajectories'] = {}
+    # Copy only the retained samples, rather than copying thousands then discarding them.
+    for key, path in result.get('trajectories', {}).items():
         stride=max(6,math.ceil(len(path)/40))
-        result["trajectories"][key] = path[::stride] + ([path[-1]] if path and path[-1] not in path[::stride] else [])
-    result.pop("servo_trajectory", None)
+        sampled=path[::stride]
+        if path and (not sampled or sampled[-1] != path[-1]):sampled.append(path[-1])
+        compact['trajectories'][key]=sampled
+    result = copy.deepcopy(compact)
     return result
 
 
@@ -98,7 +101,14 @@ class Planner:
     def pool(self, node):
         if node["id"] not in self.pools:
             remaining = self.remaining(node)
-            # Test every available target; the beam naturally favors top-down when lower pushes destabilize others.
+            # An overlapping higher box blocks removal of its support. Other stacks remain eligible.
+            def exposed(obj):
+                return not any(other["position"]["z"] > obj["position"]["z"] and
+                    all(abs(other["position"][axis] - obj["position"][axis]) <
+                        (other["dimensionsMm"][size] + obj["dimensionsMm"][size]) / 2
+                        for axis, size in (("x", "width"), ("y", "depth")))
+                    for other in remaining if other is not obj)
+            remaining = [obj for obj in remaining if exposed(obj)]
             remaining.sort(key=lambda obj: -obj["position"]["z"])
             per_target = max(1, self.settings["candidate_limit_per_state"] // max(1, len(remaining)))
             actions = []
@@ -106,11 +116,9 @@ class Planner:
                 for action in islice(candidate_actions(self.state_scene(node), target["instanceId"]), per_target):
                     action["direction"] = "left" if action["sweep_end_deg"] > action["sweep_start_deg"] else "right"
                     actions.append(action)
-            # Preserve the useful geometric ordering while giving workers independent local search orders.
-            for offset in range(0, len(actions), 20):
-                block = actions[offset:offset + 20]
-                self.rng.shuffle(block)
-                actions[offset:offset + 20] = block
+            # Independent workers partition the diverse shortlist, retaining fallback coverage.
+            offset = (int(self.id[1:]) - 1) % self.settings["workers"]
+            actions = actions[offset::self.settings["workers"]] + [a for i,a in enumerate(actions) if i % self.settings["workers"] != offset]
             self.pools[node["id"]] = actions
         return self.pools[node["id"]]
 
@@ -143,7 +151,7 @@ class Planner:
         nodes = [n for n in self.nodes.values() if self.remaining(n)]
         # Deeper states get priority; periodically revisit shallower alternatives.
         nodes.sort(key=lambda n: (-n["depth"], n["id"]))
-        if self.progress % 4 == 0:
+        if self.progress % 16 == 0:
             nodes.reverse()
         for node in nodes:
             pool = self.pool(node)
@@ -333,6 +341,8 @@ class Planner:
                     success,reason=False,"Previously collected parcel left its assigned bin"
                 self.plan_trials += 1
                 self.evidence(plan, success, reason)
+                record = plan["evidence"][f"{self.id}:{self.attempts}:{self.plan_trials}"]
+                record.update(physics_params=realized_params, full_plan=True, timestamp=time.time())
                 self.audit(dict(type="plan_validation", agent=self.id, plan_id=plan["id"], success=success, reason=reason, trial=self.plan_trials, physics_params=realized_params))
         self.prune()
         self.progress += 1

@@ -20,6 +20,15 @@ def atomic_json(path, value):
 
 
 def run_worker(agent_id, task, peers, telemetry_address, control, directory, seed):
+    if os.environ.get('GEKKO_PROFILE') == '1':
+        import cProfile
+        profile=cProfile.Profile()
+        try:return profile.runcall(_run_worker,agent_id,task,peers,telemetry_address,control,directory,seed)
+        finally:profile.dump_stats(str(Path(directory)/f'{agent_id}.prof'))
+    return _run_worker(agent_id,task,peers,telemetry_address,control,directory,seed)
+
+
+def _run_worker(agent_id, task, peers, telemetry_address, control, directory, seed):
     directory = Path(directory) / agent_id
     directory.mkdir(parents=True, exist_ok=True)
     audit_file = (directory / "events.jsonl").open("a", buffering=1)
@@ -227,6 +236,7 @@ def run_worker(agent_id, task, peers, telemetry_address, control, directory, see
     started = last_checkpoint = time.monotonic()
     cycle = 0
     recovery_role = None
+    pending_resume = None
     while not state["stop"]:
         while not incoming.empty():
             message = incoming.get_nowait()
@@ -236,7 +246,8 @@ def run_worker(agent_id, task, peers, telemetry_address, control, directory, see
                     state["taking_over_until"]=time.monotonic()+2
                     recovery_role = cp.get("assigned_role",cp.get("role", "explorer"))
                     event("task_takeover", failed_agent=message["failed_agent"], role=recovery_role,
-                          checkpoint_id=cp["checkpoint_id"], recovered_trials=cp["trials"], recovered_progress=cp["progress"])
+                          checkpoint_id=cp["checkpoint_id"], recovered_trials=cp["trials"], recovered_progress=cp["progress"], successor_trials=planner.trials)
+                    pending_resume=dict(failed_agent=message["failed_agent"],checkpoint_id=cp["checkpoint_id"],before_trials=planner.trials)
             elif not state["silenced"] and planner.merge(cp):
                 state["reconciliations"] += 1
                 if state["reconciliations"] == 1 or (state["reconciliations"] % 16 == 0 and cp.get("plans")):
@@ -277,6 +288,9 @@ def run_worker(agent_id, task, peers, telemetry_address, control, directory, see
             state["checkpoint"] = {**state["checkpoint"], "active_job":copy.deepcopy(job),
                                    "role":planner.role, "assigned_role":preferred, "trials":planner.trials, "progress":planner.progress}
             planner.perform(job)
+            if pending_resume and planner.trials > pending_resume["before_trials"]:
+                event("work_resumed", **pending_resume, new_trials=planner.trials-pending_resume["before_trials"], role=planner.role)
+                pending_resume=None
             state["latest"] = planner.latest
             state["best"] = copy.deepcopy(planner.best)
             state["current"] = None

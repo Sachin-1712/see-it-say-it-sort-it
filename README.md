@@ -3,8 +3,8 @@
 **Winner — Best Project for Sustainability, RS track** · DurHack 2026
 
 A swarm of independent agents rehearses every parcel sort in a MuJoCo physics simulation
-before a real servo arm moves. Kill half the agents mid-search and the survivors still
-find a plan.
+before a real servo arm on an Arduino UNO Q moves. Kill agents mid-search and the
+survivors still find a plan.
 
 ![Gekko planning a three-box sort: six agents testing sweeps in MuJoCo](docs/screenshots/gekko-planning.png)
 
@@ -19,17 +19,19 @@ stick on it. Each push is planned and tested in simulation before anything moves
    is: a box, the sweeper or something else. It turns into a 3D model in the inventory.
 2. **Place it.** Click inventory cards to build the scene on the workbench. Each box's
    colour decides its bag.
-3. **Plan it.** Press **▶ Start agents**. Six separate OS processes search for sweeps in
+3. **Plan it.** Press **▶ Start agents**. Separate OS processes search for sweeps in
    MuJoCo and test the best ones under random changes in friction, mass and position.
    They share results peer to peer, with no coordinator.
-4. **Break it.** Kill agents or cut all their communication. The rest notice the missing
-   heartbeats, pick up the dead agents' saved progress and keep going.
+4. **Break it.** Kill an agent. The others notice its missing heartbeats, take over its
+   saved progress and keep going. The viewer shows each takeover as it happens.
 5. **Say it.** When a full plan passes 80% of its randomised trials, **Say it** reads the
    sort order aloud.
-6. **Sort it.** **Send to Arduino** turns each step into servo commands after a person
-   confirms it. In this version that is a dry run: commands are logged, not sent.
+6. **Sort it.** **Arm & Send to Arduino** sends the plan's left and right sweeps to the
+   real servo on the UNO Q. A person sets the stick's tilt by hand.
 
 ## Results
+
+### Fault tolerance
 
 Measured by `scripts/swarm_reliability.py` on a MacBook, starting fresh processes for
 every run. Full data in [`docs/swarm-reliability.json`](docs/swarm-reliability.json).
@@ -48,17 +50,24 @@ every run. Full data in [`docs/swarm-reliability.json`](docs/swarm-reliability.j
 **8 of 8 scenarios passed.** Each winning three-step plan was replayed against the fixed
 test scene and every box ended in its assigned bag.
 
+### Speed
+
+After profiling, four agents find a validated three-box plan in about 19–25 s, down from
+35 s. The physics, test scene and 80% threshold did not change. See
+[`docs/demo-benchmark.json`](docs/demo-benchmark.json).
+
 ---
 
 ## Quick start
 
-**Requirements:** Python 3.12, Node.js 20+ (tests only) and a browser with WebGL.
+**Requirements:** Python 3.12 or newer, Node.js 20+ (tests only) and a browser with WebGL.
+An Arduino UNO Q is optional.
 
 ```bash
 git clone https://github.com/Sachin-1712/see-it-say-it-sort-it.git
 cd see-it-say-it-sort-it
-python3.12 -m venv .venv312
-.venv312/bin/python -m pip install -r requirements-sim.txt
+python3 -m venv .venv
+.venv/bin/python -m pip install -r requirements-sim.txt
 ```
 
 Run each of these in its own terminal, from the repository root:
@@ -68,11 +77,11 @@ python3 -m http.server 8080 --bind 127.0.0.1
 ```
 
 ```bash
-.venv312/bin/python -m swarm.server --workers 6 --demo
+.venv/bin/python -m swarm.server
 ```
 
 ```bash
-.venv312/bin/python -m sim.server
+.venv/bin/python -m sim.server
 ```
 
 Open **<http://localhost:8080/viewer/>**.
@@ -80,11 +89,23 @@ Open **<http://localhost:8080/viewer/>**.
 | Process | Address | Purpose |
 |---|---|---|
 | Static file server | `http://localhost:8080` | Serves the viewer. There is no build step. |
-| Swarm server | `ws://localhost:8765` | Starts the agents and streams their progress to the viewer |
+| Swarm server | `ws://localhost:8765` | Starts the agents, streams their progress and talks to the UNO Q |
 | Physics server | `ws://localhost:8766` | Runs single sweeps you make by hand on the workbench |
 
-`--demo` starts planning the three-box demo as soon as the server launches. A validated
-plan usually takes about a minute. Without the flag, click **Load Three-Box Demo**.
+The swarm server starts 4 agents by default. Use `--workers N` to change that, or `--demo`
+to start planning the three-box demo as soon as it launches.
+
+### Saved plan (optional)
+
+To replay or send a plan without waiting for a live search, validate one ahead of time:
+
+```bash
+.venv/bin/python -m scripts.prepare_demo --workers 4 --timeout 180
+```
+
+This runs the real agents and saves the plan to `.gekko/validated-three-box.json` only
+if it passes the 80% threshold. Saved plans expire after 24 hours, and the viewer marks
+them as **previously validated**, never as the live run.
 
 ### Viewer options
 
@@ -102,13 +123,12 @@ plan usually takes about a minute. Without the flag, click **Load Three-Box Demo
 2. Press **▶ Start agents**. Outlined "ghost" boxes show each agent's simulated attempts;
    the solid scene does not change.
 3. Open the **Agents** tab. Each row shows a real OS process ID, its current role and how
-   many trials it has run. Press **Kill** on any agent.
-4. Press **Silence all** to cut communication between agents. Each one carries on alone.
-   **Unsilence** lets them merge what they found.
-5. When the plan is validated, press **Preview validated sequence** to replay the actual
-   MuJoCo trajectories. Press **Say it** to hear the plan.
-6. Press **Send to Arduino**. Confirm a step to see its servo commands. They are logged
-   and not transmitted.
+   many trials it has run. Press **Kill** on any agent and watch the recovery timeline
+   show the heartbeat timeout, the takeover and the resumed work.
+4. Press **Stop Live Search**, then **Load Saved Plan**. Use **Preview** or **Play
+   sorting** to replay the stored MuJoCo trajectories, and **Say it** to hear the plan.
+5. With the UNO Q connected, press **Arm & Send to Arduino** to run the sweeps on the real
+   servo. **STOP** halts it. Disconnecting servo power is the immediate stop.
 
 ---
 
@@ -127,7 +147,7 @@ plan usually takes about a minute. Without the flag, click **Load Three-Box Demo
                         └─ UDP gossip: heartbeats, checkpoints ─┘
                                        │  validated plan (≥ 80% robust)
                                        ▼
-                       Send to Arduino (dry run) ──► G / P servo commands
+                 Serial bridge ──► UNO Q firmware ──► servo (L / R / C)
 ```
 
 Every agent can do all four jobs. Its role is simply what it is working on at the moment.
@@ -144,18 +164,24 @@ small checkpoint of current work. If an agent goes quiet for 5 s, its peers clai
 work and resume from that checkpoint. The supervisor only starts processes and collects
 telemetry. If it disappears, the agents keep searching.
 
+**Hardware.** One process owns the serial port and locks it, so two programs can never
+drive the servo at once. The UNO Q firmware accepts `L`, `R` and `C` (left, right and
+centre) and replies when the move has finished. The device must be armed in the viewer
+before every run.
+
 ---
 
 ## Project structure
 
 ```text
-viewer/     three.js viewer: capture, inventory, workbench, agent overlay
+viewer/     three.js viewer: capture, inventory, workbench, agent overlay, playback
 sim/        MuJoCo scene, sweep rollouts, scoring and the physics server
-swarm/      agent processes, planning, UDP messaging, supervisor and server
-config/     rig geometry, scoring, swarm settings and the three-box test scene
+swarm/      agent processes, planning, UDP messaging, saved plans and serial playback
+firmware/   UNO Q sketch for the servo
+config/     rig geometry, scoring, swarm, UNO Q settings and the three-box test scene
 assets/     GLB models for the box and the sweeper
-scripts/    benchmarks, reliability runner, model generation, plan narration
-tests/      Node (viewer) and pytest (sim and swarm) tests
+scripts/    demo preparation, benchmarks, reliability runner, keyboard servo client
+tests/      Node (viewer) and pytest (sim, swarm and playback) tests
 docs/       design notes, protocols, review and measured reports
 ```
 
@@ -166,27 +192,28 @@ npm ci --prefix tests && npm test --prefix tests
 ```
 
 ```bash
-.venv312/bin/python -m pytest -q tests/test_sim.py tests/test_swarm.py
+.venv/bin/python -m pytest -q tests
 ```
 
 ```bash
-.venv312/bin/python -m scripts.swarm_reliability --timeout 300 --output docs/swarm-reliability.json
+.venv/bin/python -m scripts.swarm_reliability --timeout 300 --output docs/swarm-reliability.json
 ```
 
 ---
 
 ## What's real, and what isn't
 
-Everything on screen is computed live. Nothing is scripted or pre-recorded.
+Everything on screen is computed live. Nothing is scripted or pre-recorded, and a saved
+plan is always labelled as one.
 
 - **Real:** separate OS processes, real MuJoCo trials, real process kills, real UDP
-  messaging, and validation against randomised physics.
+  messaging, validation against randomised physics, and a real servo on the UNO Q.
 - **Estimated:** box sizes, masses and friction in the test scene are plausible estimates,
   not measurements of the real rig. Treat the simulation as a rehearsal, not a calibrated
   digital twin.
-- **Not connected:** **Send to Arduino** is a dry run. It produces the firmware commands
-  `G 0 <start>` and `P 0 <start> <end> <speed>` and logs them to
-  `.gekko/<run>/dry-run-commands.jsonl`. Nothing is sent to hardware.
+- **Simplified on hardware:** the servo moves to fixed left and right end points in the
+  plan's order. It does not reproduce each simulated sweep's exact angles and speed.
+  The tilt is set by hand and not measured, so the real sort is not verified by a sensor.
 - **Pre-made:** the photo-to-3D step uses stored models for known objects. Unfamiliar
   objects become simple approximate shapes, and the viewer says so.
 
@@ -196,6 +223,8 @@ Everything on screen is computed live. Nothing is scripted or pre-recorded.
 
 | Document | Contents |
 |---|---|
+| [`docs/demo.md`](docs/demo.md) | Hackathon demo flow, saved plans and measured timings |
+| [`docs/hardware-playback.md`](docs/hardware-playback.md) | UNO Q setup, calibration, serial bridge and safety rules |
 | [`docs/swarm.md`](docs/swarm.md) | Swarm architecture, controls, reliability testing and limitations |
 | [`docs/sim.md`](docs/sim.md) | MuJoCo simulation and its Python API |
 | [`docs/sim-protocol.md`](docs/sim-protocol.md) | Physics server protocol |
@@ -206,7 +235,9 @@ Everything on screen is computed live. Nothing is scripted or pre-recorded.
 
 ## Built with
 
-Python · [MuJoCo](https://mujoco.org) · NumPy · websockets · [three.js](https://threejs.org) · plain ES modules (no build step) · Node test runner · pytest
+Python · [MuJoCo](https://mujoco.org) · NumPy · websockets · pyserial ·
+[three.js](https://threejs.org) · plain ES modules (no build step) · Arduino UNO Q ·
+Node test runner · pytest
 
 ## Team
 

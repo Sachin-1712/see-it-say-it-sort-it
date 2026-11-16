@@ -1,5 +1,5 @@
 {
-  "workers": 6,
+  "workers": 4,
   "seed": 2026,
   "heartbeat_s": 0.5,
   "failure_timeout_s": 5.0,
@@ -7,7 +7,7 @@
   "lease_s": 4.0,
   "rollout_limit": 2500,
   "time_limit_s": 600,
-  "candidate_limit_per_state": 600,
+  "candidate_limit_per_state": 96,
   "beam_width": 4,
   "action_validation_trials": 8,
   "plan_validation_trials": 20,

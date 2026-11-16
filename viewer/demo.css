@@ -1,0 +1,39 @@
+#items,#world-tilt-panel {display:none;}
+.demo-controls,.physical-controls {display:flex;flex-wrap:wrap;gap:10px;padding:12px 0;}
+.physical-controls {border-top:1px solid #666;margin-top:16px;}
+.physical-controls p,.physical-controls strong {width:100%;margin:0;}
+#recovery-banner {padding:16px;margin:12px 0;background:#f5c518;color:#171717;font-weight:700;font-size:18px;line-height:1.5;border:2px solid #f5c518;}
+#saved-attribution {padding:10px 12px;margin:4px 0 12px;border-left:3px solid #f5c518;background:#24272c;color:#f5c518;font-weight:600;font-size:12px;line-height:1.5;}
+.demo-controls {gap:8px;padding:8px 0;}
+.demo-controls button {flex:1;padding:7px 10px;font-size:13px;white-space:nowrap;}
+.plan-actions {display:flex;gap:8px;margin-bottom:8px;}
+.plan-actions button {flex:1;font-size:13px;}
+.plan-actions:has(>button[hidden]:only-child) {display:none;}
+#agent-filter select {width:100%;}
+#swarm-status {font-size:12px;color:#9aa0aa;margin-bottom:10px;}
+#activity-details {font-size:12px;color:#9aa0aa;margin:8px 0;}
+#activity-details summary {cursor:pointer;}
+#swarm-activity {max-height:180px;overflow:auto;padding-top:8px;line-height:1.6;}
+#recovery-timeline {display:flex;flex-wrap:wrap;gap:10px;font-size:14px;line-height:1.6;}
+#recovery-timeline span {border-bottom:2px solid #f5c518;}
+.takeover-link {color:#f5c518;display:block;}
+.agent.dead {opacity:1;background:#303030;color:#aaa;}
+.agent.dead .dot {background:#777!important;}
+.agent.dead .deadlabel {color:#eee;font-size:16px;font-weight:700;text-transform:uppercase;}
+.agent.taking-over {border:2px solid #f5c518;}
+.agent .agent-detail {line-height:1.6;}
+@media (prefers-reduced-motion:reduce) {.agent .flash {animation:none;}}
+
+#playback-step,#playback-tilt {font-size:15px;line-height:1.5;font-weight:600;}
+#playback-tilt {color:#f5c518;}
+#physical-status {font-size:14px;line-height:1.5;color:#bfc1c5;}
+#physical-status[data-error="true"] {padding:10px;border-left:3px solid #f5c518;color:#f5c518;}
+#physical-stop {background:#f5c518;color:#161616;font-size:16px;font-weight:700;min-width:96px;}
+.arduino-heading {width:100%;display:flex;justify-content:space-between;align-items:center;font-size:16px;}
+.arduino-heading strong {width:auto;}
+.arduino-heading span {font-size:12px;color:#9aa0aa;}
+.physical-controls>.primary {width:100%;min-height:44px;}
+.physical-controls .arduino-hint {font-size:12px;line-height:1.5;color:#9aa0aa;}
+.manual-controls {width:100%;border-top:1px solid #383a3e;padding-top:12px;display:grid;gap:10px;}
+.manual-directions {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;}
+.manual-directions button {min-width:0;}

@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import {toThree} from "./frame.mjs";
+import {sampleTrack,sequenceAt} from "./plan-replay.mjs";
 
 const YELLOW=0xf5c518;
 const pose = (sample, mesh) => {
@@ -25,6 +26,23 @@ export class SwarmOverlay {
     const stick=new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(d.lengthMm,d.thicknessMm,d.widthMm)),new THREE.LineBasicMaterial({color:YELLOW}));
     group.add(stick);meshes.set("stick",stick);
     this.preview={group,results,meshes,started:performance.now()/1000};
+    this.update(this.preview.started);
+  }
+  syncDryRun(frame) {
+    const playback=frame.hardware_playback;
+    if(playback?.mode!=='dry_run' || !playback.run_id)return;
+    if(['interrupted','failed'].includes(playback.status)){
+      if(this.preview?.dryRunId===playback.run_id)this.stopSequence();
+      return;
+    }
+    const result=frame.best?.plan?.results?.[(playback.replay_step??0)-1];
+    if(!frame.task || !result || (!playback.running && this.preview?.dryRunId!==playback.run_id))return;
+    const key=`${playback.run_id}:${playback.replay_step}`;
+    if(this.preview?.dryRunKey!==key){
+      this.playSequence([result],frame.task);
+      this.preview.dryRunKey=key;this.preview.dryRunId=playback.run_id;
+    }
+    this.preview.started=performance.now()/1000-playback.replay_elapsed_s;
   }
   clear() { this.stopSequence();for(const agent of this.agents.values()) this.dispose(agent); this.agents.clear(); }
   dispose(agent) { agent.group.removeFromParent(); agent.group.traverse(o=>{if(!o.isSprite)o.geometry?.dispose(); if(o.material){o.material.map?.dispose();o.material.dispose();}}); }
@@ -32,7 +50,7 @@ export class SwarmOverlay {
     const id=frame.task ? `${frame.task.task_id}:${frame.task.scene_version}` : null;
     if(id!==this.task) {this.clear();this.task=id;}
     for(const status of frame.agents ?? []) {
-      const agent=this.agents.get(status.id); if(agent){agent.dead=!status.alive;agent.paused=status.status==="Idle" || status.status==="Disconnected";}
+      const agent=this.agents.get(status.id); if(agent){if(!status.alive && !agent.dead){agent.frozenTime=agent.playhead;agent.pending=null;}agent.dead=!status.alive;agent.paused=status.status==="Idle" || status.status==="Disconnected";}
     }
     const live=new Set((frame.agents??[]).filter(a=>a.alive).map(a=>a.id));
     for(const trial of frame.ghosts ?? []) {
@@ -67,14 +85,13 @@ export class SwarmOverlay {
   update(now) {
     this.group.visible=this.visible && !this.preview;
     if(this.preview){
-      const preview=this.preview;let t=now-preview.started,index=0;
-      while(index<preview.results.length-1){const duration=preview.results[index].trajectories.stick.at(-1)[0];if(t<=duration)break;t-=duration;index++;}
+      const preview=this.preview,{index,time:t}=sequenceAt(preview.results,now-preview.started);
       const result=preview.results[index];
+      preview.step=index+1;preview.target=result.target?.id;
+      for(const [id,mesh] of preview.meshes)mesh.visible=id==='stick'||!preview.target||id===preview.target;
       for(const [id,path] of Object.entries(result.trajectories)){
         const mesh=preview.meshes.get(id);if(!mesh || !path.length)continue;
-        let i=0;while(i+1<path.length && path[i+1][0]<t)i++;
-        const a=path[i],b=path[Math.min(i+1,path.length-1)],f=b===a?0:THREE.MathUtils.clamp((t-a[0])/(b[0]-a[0]),0,1);
-        pose(a.map((v,k)=>v+(b[k]-v)*f),mesh);
+        pose(sampleTrack(path,t),mesh);
       }
     }
     for(const [id,agent] of [...this.agents]) {
@@ -83,7 +100,8 @@ export class SwarmOverlay {
       const path=agent.track;if(!path?.length)continue;
       const duration=path.at(-1)[0], historical=agent.dead || agent.paused || this.connected===false;
       agent.group.traverse(object=>{if(object.material){object.userData.baseOpacity??=object.material.opacity;object.material.opacity=historical?.12:object.userData.baseOpacity;object.material.transparent=true;}});
-      const t=historical?duration:(now-agent.started)%(duration+.5);
+      const t=historical?(agent.frozenTime??duration):(now-agent.started)%(duration+.5);
+      agent.playhead=t;
       let i=0;while(i+1<path.length && path[i+1][0]<t)i++;
       const a=path[i],b=path[Math.min(i+1,path.length-1)],f=b===a?0:THREE.MathUtils.clamp((t-a[0])/(b[0]-a[0]),0,1);
       pose(a.map((v,k)=>v+(b[k]-v)*f),agent.box);

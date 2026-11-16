@@ -44,16 +44,16 @@
   .top-right { display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
   .best { display: flex; align-items: baseline; gap: 8px; margin-right: 6px; }
   #best { font-size: 28px; font-weight: 600; line-height: 1; }
-  #silence.on { border-color: var(--accent); color: var(--accent); }
 
   /* ---- scene ------------------------------------------------------------ */
-  #scene { position: fixed; top: var(--top-h); left: 0; right: var(--col-w); bottom: 0; }
+  #scene { position: fixed; top: var(--top-h); left: 0; right: 0; bottom: 0; }
   #scene canvas { display: block; width: 100%; height: 100%; }
 
   /* ---- right column ----------------------------------------------------- */
   #side { position: fixed; top: var(--top-h); right: 0; bottom: 0; width: var(--col-w); padding: var(--gap);
           display: flex; flex-direction: column; gap: var(--gap); }
   .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+  #side > .panel { background: rgba(27, 29, 33, .95); border-color: rgba(255, 255, 255, .06); }
   #tabs-panel { flex: 0 1 auto; min-height: 0; display: flex; flex-direction: column; padding-top: 12px; }
   .tabs { display: flex; gap: 6px; margin-bottom: 8px; }
   .tab { background: none; border: 1px solid transparent; padding: 5px 12px; border-radius: 6px;
@@ -136,6 +136,7 @@
   }
 </style>
 <link rel="stylesheet" href="./inventory.css">
+<link rel="stylesheet" href="./demo.css?v=sorting-playback-1">
 <script>
   // The import map is written before any module loads, so this choice applies to every import.
   { const base = window.GEKKO_OFFLINE ? "./vendor/three/" : "https://cdn.jsdelivr.net/npm/three@0.170.0/";
@@ -151,8 +152,6 @@
   </div>
   <div class="top-right">
     <div class="best"><span class="heading">Best</span><span id="best" class="mono">–</span></div>
-    <button id="silence" disabled>Silence all</button>
-    <button id="replan" disabled>Replan</button>
   </div>
 </header>
 
@@ -201,9 +200,38 @@
       </div>
       <div class="view" id="view-agents" role="tabpanel" aria-labelledby="tab-agents" hidden><div id="swarm-status" role="status">No simulation data</div>
         <button id="swarm-start-tab" type="button" class="primary" hidden>▶ Start agents on my workbench</button>
-        <label for="swarm-isolate">Show agent</label><select id="swarm-isolate"><option value="">All agents</option></select>
-        <div id="rows"></div><div id="swarm-activity" aria-label="Agent activity"></div>
-        <div id="swarm-plan-details"></div></div>
+        <div id="agent-filter"><label class="sr-only" for="swarm-isolate">Show agent</label><select id="swarm-isolate"><option value="">All agents</option></select></div>
+        <div class="demo-controls">
+          <button id="swarm-stop" type="button">Stop Live Search</button>
+          <button id="swarm-saved" type="button">Load Saved Plan</button>
+          <button id="swarm-replay" type="button" disabled>Preview</button>
+          <button id="swarm-preview-stop" type="button" hidden>End preview</button>
+        </div>
+        <div class="plan-actions"><button id="swarm-sort" type="button" hidden title="Replay the saved MuJoCo pushes in the 3D scene; no Arduino commands">Play sorting</button></div>
+        <div id="recovery-banner" role="status" hidden></div>
+        <div id="recovery-timeline" aria-label="Recovery timeline"></div>
+        <div id="saved-attribution" role="status" hidden></div>
+        <div id="rows"></div>
+        <details id="activity-details"><summary>Activity</summary><div id="swarm-activity" aria-label="Agent activity"></div></details>
+        <div id="swarm-plan-details"></div>
+        <div class="physical-controls" aria-label="Arduino controls">
+          <div class="arduino-heading"><strong>Arduino</strong><span id="playback-connection">Disconnected</span></div>
+          <button id="servo-demo-start" class="primary" type="button" disabled>Arm &amp; Send to Arduino</button>
+          <p id="servo-demo-setup" class="arduino-hint"></p>
+          <p id="playback-step" role="status" hidden></p>
+          <p id="playback-tilt" hidden></p>
+          <p id="physical-status" role="status">Load a saved plan to send.</p>
+          <section class="manual-controls" aria-label="Manual control">
+            <button id="calibration-arm" type="button" disabled>Arm manual control</button>
+            <div class="manual-directions">
+              <button id="calibration-left" type="button" disabled>Left · L</button>
+              <button id="calibration-center" type="button" disabled>Center · C</button>
+              <button id="calibration-right" type="button" disabled>Right · R</button>
+            </div>
+          </section>
+          <button id="physical-stop" type="button">STOP</button>
+          <p class="arduino-hint">Manual tilt · box sorting unverified. Disconnect servo power for an immediate stop.</p>
+        </div></div>
       <div class="view" id="view-outcomes" role="tabpanel" aria-labelledby="tab-outcomes" hidden>
         <div class="metric"><span class="k">Attempts tested</span><span class="v mono" id="m-attempts">0</span></div>
         <div class="metric"><span class="k">Successful pushes found</span><span class="v mono" id="m-success">0</span></div>
@@ -264,8 +292,8 @@
 </dialog>
 <script type="module" src="./inventory.mjs"></script>
 <script type="module" src="./model-preview.mjs"></script>
-<script type="module" src="./workshop.mjs"></script>
+<script type="module" src="./workshop.mjs?v=stable-workbench-1"></script>
 <script type="module" src="./sim-preview.mjs"></script>
-<script type="module" src="../scripts/plan-narration.mjs"></script>
+<script type="module" src="../scripts/plan-narration.mjs?v=sorting-playback-1"></script>
 </body>
 </html>

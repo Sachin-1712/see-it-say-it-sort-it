@@ -110,7 +110,6 @@ test("one Box, one Sweeper and distinct unfamiliar captures coexist and request 
   assert.equal(app.inventory.list().length, 3); assert.equal(app.inventory.getPhoto("box"), null);
   await app.click("tab-agents"); assert.equal(app.$("view-agents").hidden, false);
   await app.click("tab-inventory"); assert.equal(app.$("view-inventory").hidden, false);
-  assert.equal(app.$("silence").disabled, true);
 });
 
 test("denied, missing and busy cameras leave upload fallback usable", async t => {

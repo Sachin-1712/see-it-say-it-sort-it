@@ -1,0 +1,54 @@
+{
+  "enabled": true,
+  "calibration_verified": true,
+  "acknowledgement_verified": true,
+  "serial_port": "/dev/cu.usbmodem42325750942",
+  "baud": 115200,
+  "direction_commands": {
+    "increasing": "L",
+    "decreasing": "R"
+  },
+  "servo_limits_deg": [
+    0,
+    180
+  ],
+  "tilt_limits_deg": null,
+  "calibration_id": "gekko-unoq-20261115-endpoints-v1",
+  "note": "This rig: operator confirmed 0\u2013180 travel, L toward RED/LEFT, R toward BLUE/RIGHT, and both endpoint sweeps stopped before acknowledgement. Device still requires explicit arming. Automatic three-box playback remains blocked without verified tilt and physical action profiles.",
+  "completion_verified": true,
+  "completion_verification_id": "operator-observed-L-R-stop-before-DONE-20261115",
+  "command_timeout_s": 5,
+  "endpoint_angles_deg": {
+    "L": 180,
+    "R": 0,
+    "C": 90
+  },
+  "tilt_verification": {
+    "mode": "none",
+    "verified": false,
+    "calibration_id": null,
+    "tolerance_deg": 1,
+    "angle_deg": null
+  },
+  "action_profiles": {},
+  "operator_calibration": {
+    "enabled": true,
+    "range_confirmed": true,
+    "servo_limits_deg": [
+      0,
+      180
+    ],
+    "observed_L_destination": "left",
+    "observed_R_destination": "right",
+    "viewpoint": "behind the sweeper",
+    "source": "Operator confirmed full 0\u2013180 travel and L toward RED/LEFT destination in chat",
+    "recorded_at": "2026-11-15T09:41:18.052836+00:00",
+    "command_timeout_s": 8,
+    "completion_observation": {
+      "source": "operator chat",
+      "recorded_at": "2026-11-15T09:51:45.165949+00:00",
+      "both_endpoint_sweeps_stopped_before_acknowledgement": true,
+      "scope": "Current endpoint ramp and servo setup only; not a verified three-box action profile or tilt calibration"
+    }
+  }
+}

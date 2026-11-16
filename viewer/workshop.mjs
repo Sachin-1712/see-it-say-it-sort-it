@@ -1,9 +1,10 @@
+import {recoveryText} from "./demo-state.mjs?v=timed-replay-1";
 import { SwarmFrames } from "./swarm-state.mjs";
-import { SwarmOverlay } from "./swarm-overlay.mjs";
+import { SwarmOverlay } from "./swarm-overlay.mjs?v=sorting-playback-1";
 import { workbenchState } from "./workbench-state.mjs";
 import { selectTab } from "./tabs.mjs";
 import { toThree, fromThree } from "./frame.mjs";
-import { Workbench } from "./workbench.mjs";
+import { Workbench } from "./workbench.mjs?v=sorting-playback-1";
 import { sweeperPositionFromConfig } from "./workbench-state.mjs";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import { OBB } from "three/addons/math/OBB.js";
@@ -22,7 +23,7 @@ const EXECUTE_MIN = 0.8;
 const C = { accent: 0xF5C518, success: 0x3DDC84, bg: 0x10131A };
 // Dark, minimal room with a little colour: blue-slate walls, a warm key light and a cool
 // rim light. The bench stays light so the boxes and sweeper read clearly against it.
-const ROOM_COLOURS = { floor: 0x161A22, floorGrid: 0x3A4253, back: 0x1E2330, side: 0x1B202B, wallGrid: 0x525C72 };
+const ROOM_COLOURS = { floor: 0x161A22, floorGrid: 0x3A4253, back: 0x1E2330, wallGrid: 0x525C72 };
 
 // Pose in the z-up table frame -> three.js Vector3 and yaw. The axis swap itself is
 // toThree in frame.mjs, the one conversion function.
@@ -121,10 +122,10 @@ function addLights(target, withShadow) {
 addLights(scene, true);
 
 
-// ---- workshop room: floor plus back and right walls, white gridlines at 60% ----
+// ---- workshop room: continuous floor and back wall, open on the right --------
 const sceneMaxX = Math.max(table.width, ...Object.values(bags).map(b => b.x + b.width / 2));
 const sceneMaxY = Math.max(table.depth, ...Object.values(bags).map(b => b.y + b.depth / 2));
-const ROOM = { left: -800, right: sceneMaxX + 80, front: -700, back: sceneMaxY + 70, height: 520, step: 40 };
+const ROOM = { left: -800, right: sceneMaxX + span * 10, front: -700, back: sceneMaxY + 70, height: 520, step: 40 };
 function grid(w, h, step, color, opacity = 0.9) {   // in the local XY plane from (0,0) to (w,h)
   const pts = [];
   for (let x = 0; x <= w + 1e-6; x += step) pts.push(x, 0, 0, x, h, 0);
@@ -153,15 +154,6 @@ function grid(w, h, step, color, opacity = 0.9) {   // in the local XY plane fro
   bg.position.copy(scenePose({ x: ROOM.left, y: ROOM.back - 0.3 }).pos);
   scene.add(bg);
 
-  const right = new THREE.Mesh(new THREE.PlaneGeometry(fd, ROOM.height), matte(ROOM_COLOURS.side));
-  right.rotation.y = -Math.PI / 2;                       // faces left (towards the camera)
-  right.position.copy(scenePose({ x: ROOM.right, y: ROOM.front + fd / 2, z: ROOM.height / 2 }).pos);
-  right.receiveShadow = true;
-  scene.add(right);
-  const rg = grid(fd, ROOM.height, ROOM.step, ROOM_COLOURS.wallGrid);
-  rg.rotation.y = -Math.PI / 2;                          // local +X -> table -y
-  rg.position.copy(scenePose({ x: ROOM.right - 0.3, y: ROOM.back }).pos);
-  scene.add(rg);
 }
 
 // ---- bench: a slab (table.thickness) on a support, top at table.height ---------
@@ -175,22 +167,6 @@ if (table.height - slabT > 0) {
   supportMesh = block(table.width - 2 * inset, table.depth - 2 * inset, supportH, matte(0x3A404D));
   place(supportMesh, { x: table.width / 2, y: table.depth / 2, z: supportH / 2 });
   scene.add(supportMesh);
-}
-
-// ---- zones: thin outlines flat on the table, no labels, no fill --------------
-const TOP = table.height + 0.25;
-const zoneGroups = {};
-for (const [name, z] of Object.entries(zones)) {
-  const t = 1.2, ink = new THREE.MeshBasicMaterial({ color: 0x4C4C4C });
-  const group = new THREE.Group(); zoneGroups[name] = group; scene.add(group);
-  // Lines sit just inside the zone edge, so the outline's outer size is exactly the zone size.
-  for (const [w, d, dx, dy] of [[z.width, t, 0, z.depth / 2 - t / 2], [z.width, t, 0, -z.depth / 2 + t / 2],
-                                [t, z.depth, z.width / 2 - t / 2, 0], [t, z.depth, -z.width / 2 + t / 2, 0]]) {
-    const s = new THREE.Mesh(new THREE.PlaneGeometry(w, d), ink);
-    s.rotation.x = -Math.PI / 2;
-    s.position.copy(scenePose({ x: z.x + dx, y: z.y + dy, z: TOP }).pos);
-    group.add(s);
-  }
 }
 
 // ---- bags: open-top bins; the rim is the colour of the parcels each accepts,
@@ -397,22 +373,21 @@ const tablePoints = [], environmentPoints = [];
   for (const b of Object.values(bags))
     for (const sx of [-1, 1]) for (const sy of [-1, 1]) for (const z of [0, b.height])
       add(environmentPoints, b.x + sx * b.width / 2, b.y + sy * b.depth / 2, z);
-
+  // Reserve fixed headroom for the rig and stack, including before they are placed.
+  for(const x of [0,table.width])for(const y of [0,table.depth])add(environmentPoints,x,y,table.height+span*.45);
 }
 
 function fitCamera() {
   const w = host.clientWidth, h = host.clientHeight;
   if (!w || !h) return;
   const allPoints = [...environmentPoints];
-  const bounds = workbench?.bounds();
-  if (bounds && !bounds.isEmpty()) for (const x of [bounds.min.x, bounds.max.x]) for (const y of [bounds.min.y, bounds.max.y]) for (const z of [bounds.min.z, bounds.max.z]) allPoints.push(new THREE.Vector3(x,y,z));
   camera.aspect = w / h;
   camera.updateProjectionMatrix();
   const fwd = VIEW_DIR.clone().negate();
   const right = new THREE.Vector3().crossVectors(fwd, new THREE.Vector3(0, 1, 0)).normalize();
   const up = new THREE.Vector3().crossVectors(right, fwd);
   const fy = (h / 2) / Math.tan(camera.fov * DEG / 2);           // focal length in px
-  const target = new THREE.Box3().setFromPoints(allPoints).getCenter(new THREE.Vector3());
+  const target = centre.clone(); // Keep the tabletop centre at the screen centre.
 
   const extent = (pts, d) => {
     const eye = target.clone().addScaledVector(VIEW_DIR, d);
@@ -427,16 +402,12 @@ function fitCamera() {
   const ok = d => {
     const t = extent(tablePoints, d), a = extent(allPoints, d);
     return t.x1 - t.x0 <= TABLE_SHARE * w &&
-           a.x1 - a.x0 <= (1 - 2 * EDGE) * w && a.y1 - a.y0 <= (1 - 2 * EDGE) * h;
+           Math.max(Math.abs(a.x0),Math.abs(a.x1)) <= (.5-EDGE)*w &&
+           Math.max(Math.abs(a.y0),Math.abs(a.y1)) <= (.5-EDGE)*h;
   };
-  let d = 0;
-  for (let pass = 0; pass < 3; pass++) {
-    let lo = 50, hi = 60000;
-    for (let i = 0; i < 40; i++) { const mid = (lo + hi) / 2; ok(mid) ? (hi = mid) : (lo = mid); }
-    d = hi;
-    const a = extent(allPoints, d);                                  // centre the content
-    target.addScaledVector(right, ((a.x0 + a.x1) / 2) * d / fy).addScaledVector(up, ((a.y0 + a.y1) / 2) * d / fy);
-  }
+  let lo = 50, hi = 60000;
+  for (let i = 0; i < 40; i++) { const mid = (lo + hi) / 2; ok(mid) ? (hi = mid) : (lo = mid); }
+  const d=hi;
   camera.position.copy(target).addScaledVector(VIEW_DIR, d);
   camera.lookAt(target);
   controls.target.copy(target);
@@ -500,14 +471,16 @@ function renderAgents(agents = []) {
     }
     el.classList.toggle("dead", !a.alive);
     const chip = el.querySelector(".role");
-    chip.hidden = !a.alive;
+    chip.hidden = false;
     el.querySelector(".deadlabel").hidden = a.alive;
+    el.querySelector(".deadlabel").textContent = a.status === "Stopped" ? "Stopped" : "DEAD";
     if (a.alive) {
       if (r.role !== null && r.role !== a.role) {       // role changed: flash the chip
         chip.classList.remove("flash"); void chip.offsetWidth; chip.classList.add("flash");
       }
       chip.textContent = cap(a.role);
     }
+    if(!a.alive)chip.textContent=`was ${a.role}`;
     r.role = a.role;
     const mute = el.querySelector(".mute");
     if (a.alive && a.silenced && !mute) el.querySelector(".rolecell").insertAdjacentHTML("beforeend", MUTE_SVG);
@@ -590,25 +563,14 @@ function renderTop(f) {
   ph.textContent = f ? f.phase : "offline";
   ph.className = f?.phase ?? "";
   $("best").textContent = pct(f?.best?.robust);
-  const silenced = (f?.agents ?? []).some(a => a.alive && a.silenced);
-  $("silence").classList.toggle("on", silenced);
-  $("silence").textContent = silenced ? "Unsilence" : "Silence all";
-  $("silence").disabled = $("replan").disabled = !connected();
 }
 
 function renderSend(f) {
   const b = $("send");
   const robust = f?.best?.robust ?? 0;
   const armed = connected() && robust >= EXECUTE_MIN && ["searching", "ready"].includes(f?.phase);
-  if (f?.protocol === "gekko-swarm-v1") {
-    // Human-confirmed Send, dry run: the server logs the servo commands; nothing reaches hardware.
-    const ex = f.execution ?? {}, next = ex.next_step;
-    const ready = connected() && !!f.best && robust >= EXECUTE_MIN && ex.dry_run && next != null;
-    b.disabled = !ready; b.classList.toggle("armed", ready);
-    b.textContent = ready ? `Send to Arduino · dry run (step ${next} of ${ex.steps})` :
-                    f.best && ex.steps && next == null ? "All steps sent · dry run" : "Waiting for a validated plan";
-    return;
-  }
+  if (f?.protocol === "gekko-swarm-v1") { b.hidden=true;return; }
+  b.hidden=false;
   b.disabled = !armed;
   b.classList.toggle("armed", armed);
   b.textContent = f?.phase === "executing" ? "Pushing..." : armed ? "Send to Arduino" :
@@ -641,25 +603,59 @@ function renderSwarmFrame(f) {
   renderTop(f);renderAgents(f.agents);renderItems(f.items, f);renderSend(f);lastFrame=f;
   $("swarm-demo").disabled=!connected(); updateStartAgents(f);
   const metrics=f.metrics??{};
+  const recovery=f.recovery?.at(-1);
+  const banner=$("recovery-banner");banner.hidden=!recovery;
+  banner.textContent=recoveryText(recovery,f.live_search_stopped);
+  const timeline=$("recovery-timeline");
+  timeline.replaceChildren(...(recovery?.timeline??[]).map(e=>Object.assign(document.createElement("span"),{textContent:`${e.stage} · ${new Date(e.timestamp*1000).toLocaleTimeString()}`})));
+  const link=recovery?.successor?`${recovery.dead}:${recovery.successor}:${recovery.checkpoint_id}`:null;
+  if(link){const changed=timeline.dataset.link!==link;timeline.dataset.link=link;
+    const arrow=Object.assign(document.createElement("strong"),{className:"takeover-link",textContent:`${recovery.dead.toUpperCase()} → ${recovery.successor.toUpperCase()}`});timeline.append(arrow);
+    if(changed && !matchMedia('(prefers-reduced-motion: reduce)').matches)arrow.animate([{opacity:.3,transform:'translateX(-12px)'},{opacity:1,transform:'translateX(0)'}],{duration:250,easing:'cubic-bezier(0.23, 1, 0.32, 1)'});
+  }
+  for(const a of f.agents??[])agentRows.get(a.id)?.el.classList.toggle('taking-over',a.id===recovery?.successor && a.alive);
+  const saved=f.best?.attribution==='previously_validated';
+  $("saved-attribution").hidden=!f.best;
+  $("saved-attribution").textContent=f.best?`${saved?'PREVIOUSLY VALIDATED PLAN':'VALIDATED LIVE'} · ${pct(f.best.robust)} · ${Object.keys(f.best.plan.evidence).length} trials`:'';
+  $("saved-attribution").title=saved?`Saved ${f.best.saved_at}. Previously validated in simulation; not this live run.`:'';
+  $("swarm-status").hidden=saved;
+  $("agent-filter").hidden=saved;
+  $("swarm-stop").hidden=!!f.live_search_stopped;
+  if(workbench?.savedPlayback && (!saved || workbench.savedPlayback.plan.id!==f.best.plan.id || workbench.savedPlayback.task.scene_version!==f.task.scene_version))workbench.stopSavedPlan();
+  $("swarm-preview-stop").hidden=!swarmOverlay.preview&&!workbench?.savedPlayback;
+  $("swarm-stop").disabled=!connected()||!f.task||f.live_search_stopped;
+  $("swarm-saved").disabled=!connected()||!f.task||!f.live_search_stopped;
+  $("swarm-replay").disabled=!connected()||!f.best;
+  const hw=f.hardware_playback??{connection:'Disconnected',message:'Physical execution disabled by default'};
+  $("swarm-sort").hidden=!saved;
+  $("swarm-sort").disabled=!connected()||hw.running||loadingSwarmScene||!workbench?.instances.size;
+  if(hw.running)workbench?.stopSavedPlan();
+  const firstDemoStep=f.best?.plan?.actions?.[0];
+  $("servo-demo-setup").textContent=firstDemoStep?`Start tilt ${firstDemoStep.tilt_deg}° · 3s between commands`:'Load a saved plan to send.';
+  $("servo-demo-start").disabled=!connected()||!saved||hw.running;
+  $("servo-demo-start").textContent=hw.running&&hw.mode==='servo_demo'?'Sending…':'Arm & Send to Arduino';
+  $("calibration-arm").disabled=!connected()||hw.running||hw.calibration_armed;
+  $("calibration-arm").textContent=hw.calibration_armed?'Manual control armed':'Arm manual control';
+  for(const id of ['calibration-center','calibration-left','calibration-right'])$(id).disabled=!connected()||hw.running||!hw.calibration_armed;
+  $("physical-status").dataset.error=String(hw.status==='failed');
+  $("playback-connection").textContent=hw.connection.startsWith('Connected')?'Connected':hw.status==='connecting'?'Connecting…':'Disconnected';
+  $("playback-step").hidden=!hw.running||!hw.step;
+  $("playback-step").textContent=hw.step?`Step ${hw.step}/${hw.steps} · ${hw.box??hw.target??'Servo'} → ${(hw.destination??'').toUpperCase()}`:'';
+  $("playback-tilt").hidden=!hw.running||hw.tilt_deg==null;
+  $("playback-tilt").textContent=hw.tilt_deg!=null?`Manual tilt ${hw.tilt_deg}° · command ${hw.command??'—'}`:'';
+  $("physical-status").textContent=hw.status==='interval'?`Next command in ${hw.remaining_s}…`:hw.status==='servo_demo_completed'?'Done · all servo commands acknowledged.':hw.status==='calibration_review'?`${hw.command} acknowledged · check the real arm.`:hw.status==='calibration_ready'?'Manual control ready.':hw.status==='starting'?'Preparing servo…':['sweeping','calibration_moving'].includes(hw.status)?`Sending ${hw.command} · waiting for DONE…`:hw.status==='holding_endpoint'?`${hw.command} · holding endpoint; waiting for DONE…`:hw.status==='connected'?'Ready.':hw.message;
   $("swarm-status").textContent=f.task?`${metrics.active??0} real processes · ${metrics.trials??0} MuJoCo trials · ${metrics.plan_trials??0} plan trials · scene ${f.task.scene_version} · ${f.task.task_id} · ${metrics.elapsed_s}s${f.agents.some(a=>a.silenced)?" · PEER NETWORK OFF: local checkpoints":""}${f.failure?` · ${f.failure}`:""}`:"No simulation running · place the sweeper and boxes, then press ▶ Start agents (or Load Three-Box Demo).";
   syncAgentSelect(f.agents??[]);
   $("m-attempts").textContent=(metrics.trials??0).toLocaleString();$("m-success").textContent=(metrics.successes??0).toLocaleString();$("m-best").textContent=pct(f.best?.robust);
   const feed=$("swarm-activity"),activity=(f.agents??[]).filter(a=>a.alive&&a.latest).map(a=>({agent:a.id,timestamp:a.latest.timestamp,type:a.latest.role,detail:`${a.latest.action.target} · tilt ${a.latest.action.tilt_deg}° · trial #${a.latest.trial_id.split(":").at(-1)} · score ${a.latest.score}`}));
   feed.replaceChildren(...[...(f.events??[]),...activity].sort((a,b)=>b.timestamp-a.timestamp).slice(0,20).map(event=>Object.assign(document.createElement("div"),{textContent:`${new Date(event.timestamp*1000).toLocaleTimeString()} · ${(event.agent??"swarm").toUpperCase()} · ${event.type.replaceAll("_"," ")}${event.detail?` · ${event.detail}`:""}${event.role?` → ${event.role}`:""}${event.failed_agent?` ${event.failed_agent.toUpperCase()}`:""}${event.checkpoint_id?` · ${event.checkpoint_id} (${event.recovered_trials??"shared"} trials)`:""}`})));
-  const panel=$("swarm-plan-details"),planKey=f.best?`${f.best.plan.id}:${f.best.robust}`:`none:${f.failure??""}`;
-  if(panel.dataset.planKey!==planKey){panel.dataset.planKey=planKey;panel.replaceChildren();
-  if(f.best?.plan){
-    panel.appendChild(Object.assign(document.createElement("strong"),{textContent:`Validated complete simulation plan · ${pct(f.best.robust)} (${Object.keys(f.best.plan.evidence).length} independent trials)`}));
-    const list=document.createElement("ol");
-    for(const step of f.best.plan.actions)list.appendChild(Object.assign(document.createElement("li"),{textContent:`${objectLabel(step.target,f)}: manual tilt ${step.tilt_deg}° → ${step.direction.toUpperCase()} · predicted ${f.task.goals[step.target]} bag. Simulation angles/timing are uncalibrated.`}));
-    const replay=Object.assign(document.createElement("button"),{type:"button",textContent:"Preview validated sequence"});replay.onclick=()=>send({cmd:"replay_plan"});
-    const back=Object.assign(document.createElement("button"),{type:"button",textContent:"Back to agent trials"});back.onclick=()=>swarmOverlay.stopSequence();
-    panel.append(replay,back);
-    panel.append(list,Object.assign(document.createElement("p"),{textContent:"Simulation prediction only. UNO Q execution is disabled."}));
-  }else panel.textContent=f.failure??"No complete validated plan yet.";
-  }
+  $("swarm-plan-details").hidden=!f.failure;
+  $("swarm-plan-details").textContent=f.failure??'';
+  const routes=JSON.stringify((f.best?.plan?.actions??[]).map(action=>({name:objectLabel(action.target,f),bin:f.task.goals[action.target]})));
+  if($("swarm-plan-details").dataset.routes!==routes)$("swarm-plan-details").dataset.routes=routes;
   swarmOverlay.visible=$("observer-overlay").checked;
   swarmOverlay.ingest(f);
+  swarmOverlay.syncDryRun(f);
   if(f.source === "golden" && f.task && loadedSwarmTask!==`${f.task.task_id}:${f.task.scene_version}` && workbench){
     loadedSwarmTask=`${f.task.task_id}:${f.task.scene_version}`;
     loadingSwarmScene=true;
@@ -669,10 +665,11 @@ function renderSwarmFrame(f) {
 }
 function renderFrame(f) {
   if(f.type === "plan_replay"){
-    if(lastFrame?.task?.task_id===f.task_id && lastFrame.task.scene_version===f.scene_version){swarmOverlay.playSequence(f.results,lastFrame.task);$("world-message").textContent="Validated sequence replay · yellow outlines are simulated; solid workbench objects stay unchanged.";}
+    if(workbench?.savedPlayback)return;
+    if(lastFrame?.task?.task_id===f.task_id && lastFrame.task.scene_version===f.scene_version){swarmOverlay.playSequence(f.results,lastFrame.task);$("world-message").textContent=`${f.label} · yellow outlines: stored MuJoCo simulation. Solid objects: workbench setup, not physical state.`;}
     return;
   }
-  if(f.type === "error"){$("swarm-status").textContent=f.reason;return;}
+  if(f.type === "error"){$("swarm-status").textContent=f.reason;$("physical-status").textContent=f.reason;return;}
   if(f.type === "dry_run_command"){
     const text=`Dry run step ${f.step} of ${f.steps}: ${f.target} → ${f.bin} bag. Set tilt ${f.tilt_deg}° by hand, then ${f.commands.join(" · ")} (logged, not sent to hardware).`;
     $("swarm-status").textContent=text; $("world-message").textContent=text; return;
@@ -698,22 +695,34 @@ function renderFrame(f) {
   lastFrame = f;
 }
 
-$("silence").onclick = () => {
-  const silenced = (lastFrame?.agents ?? []).some(a => a.alive && a.silenced);
-  send({ cmd: silenced ? "unsilence" : "silence" });
-};
-$("replan").onclick = () => send({ cmd: "replan" });
-$("send").onclick = () => {
-  const f = lastFrame;
-  if (f?.protocol !== "gekko-swarm-v1") { send({ cmd: "execute" }); return; }
-  const step = f.best?.plan?.actions?.[(f.execution?.next_step ?? 1) - 1];
-  if (!step) return;
-  const name = objectLabel(step.target, f);
-  const ok = confirm(`Send step ${f.execution.next_step} of ${f.execution.steps}: ${name} → ${f.task?.goals?.[step.target] ?? "?"} bag?\n\n` +
-    `Set the tilt to ${step.tilt_deg}° by hand first.\nDRY RUN: the servo commands are logged on the server, not sent to the Arduino.`);
-  if (ok) send({ cmd: "execute" });
-};
+$("send").onclick = () => send({cmd:"execute"});
 $("swarm-demo").onclick=()=>send({cmd:"load_demo"});
+$("swarm-stop").onclick=()=>send({cmd:'stop_live'});
+$("swarm-saved").onclick=()=>send({cmd:'load_saved'});
+$("swarm-replay").onclick=()=>{workbench?.stopSavedPlan();send({cmd:'replay_plan'});};
+$("swarm-preview-stop").onclick=()=>{swarmOverlay.stopSequence();workbench?.stopSavedPlan();$("swarm-preview-stop").hidden=true;$("world-message").textContent='Simulation preview stopped.';};
+$("swarm-sort").onclick=()=>{
+  try{
+    if(lastFrame?.best?.attribution!=='previously_validated'||lastFrame.hardware_playback?.running)throw new Error('Load a saved plan and stop hardware playback first.');
+    swarmOverlay.stopSequence();
+    workbench.playSavedPlan(lastFrame.best.plan,lastFrame.task);
+    $("swarm-preview-stop").hidden=false;
+  }catch(error){$("world-message").textContent=error.message;}
+};
+$("calibration-arm").onclick=()=>{
+  $("physical-status").textContent='Arming manual control…';
+  send({cmd:'hardware_manual_arm',confirmed:true});
+};
+$("calibration-center").onclick=()=>send({cmd:'hardware_calibration_move',key:'C'});
+$("calibration-left").onclick=()=>send({cmd:'hardware_calibration_move',key:'L'});
+$("calibration-right").onclick=()=>send({cmd:'hardware_calibration_move',key:'R'});
+$("servo-demo-start").onclick=()=>{
+  workbench?.stopSavedPlan();swarmOverlay.stopSequence();
+  $("physical-status").textContent='Connecting, arming and sending…';
+  $("servo-demo-start").disabled=true;
+  send({cmd:'hardware_send',armed:true,manual_tilt:true});
+};
+$("physical-stop").onclick=()=>{send({cmd:'hardware_stop'});$("physical-status").textContent='Stopping…';};
 // "Start agents": plan whatever is placed on the bench (the sweeper plus at least one box).
 function benchReady() {
   const objects = workbenchState.snapshot().objects;
@@ -725,10 +734,11 @@ function updateStartAgents(f = lastFrame) {
               !benchReady() ? "Place the sweeper and at least one box first" : "Plan the placed objects with independent MuJoCo agents";
   for (const id of ["swarm-plan", "swarm-start-tab"]) { $(id).disabled = !ready; $(id).title = why; }
   // In the Agents tab, offer it while nothing is running for this workbench.
-  $("swarm-start-tab").hidden = !!(f?.task && f.phase !== "failed");
+  $("swarm-start-tab").hidden = f?.best?.attribution==='previously_validated' || !!(f?.task && !f.live_search_stopped && f.phase !== "failed");
 }
 $("swarm-start-tab").onclick = () => $("swarm-plan").click();
 $("swarm-plan").onclick=()=>{
+  if(lastFrame?.source==="golden" && lastFrame.live_search_stopped){send({cmd:"start_agents"});selectTab("agents");return;}
   const unassigned=workbenchState.snapshot().objects.filter(o=>o.type==="box"&&!o.destination);
   if(unassigned.length){$("world-message").textContent=`${unassigned.length} placed box${unassigned.length>1?"es have":" has"} no bag (${[...new Set(unassigned.map(o=>o.color??"no colour"))].join(", ")}). Only red → left and blue → right can be sorted. Change the routing colour in Inventory, then Clear workbench and place again.`;return;}
   loadedSwarmTask="workbench";send({cmd:"plan_workbench",snapshot:workbenchState.snapshot()});selectTab("agents");$("observer-overlay").checked=true;};
@@ -761,7 +771,8 @@ connect();
 workbench = new Workbench({ scene, camera, canvas: renderer.domElement, toThree: scenePose, tagColour, table,
   setup: { ...modelConfig.workbench, stackPositionMm: zones.pick ? { x: zones.pick.x, y: zones.pick.y } : null,
     sweeperPositionMm: sweeperPositionFromConfig(rig, modelConfig) },
-  onBoundsChanged: () => { fitCamera(); refreshDebug(); } });
+  onBoundsChanged: () => { refreshDebug(); } });
+$("world-reset-view").onclick=()=>{fitCamera();refreshDebug();};
 lastWorldSignature=worldSignature(workbenchState.snapshot());
 document.addEventListener("workbenchchange",event=>{
   updateStartAgents();
@@ -824,7 +835,6 @@ function measure(object) {
 function debugTargets() {
   const list = [["Bench top", tableMesh, "bench"], ["Bench support", supportMesh, "bench"]];
   for (const [side, g] of Object.entries(bagGroups)) list.push([`${cap(side)} bag`, g, null]);
-  for (const [name, g] of Object.entries(zoneGroups)) list.push([`${cap(name)} zone`, g, null]);
   for (const part of workbench?.debugParts() ?? []) list.push([part.name, part.object, part.group]);
   return list.filter(([, object]) => object).map(([name, object, group]) => ({ name, object, group }));
 }
@@ -924,6 +934,14 @@ renderer.setAnimationLoop(() => {
   const now = performance.now() / 1000;
   swarmOverlay.update(now);
   workbench.update(now - previousTime); previousTime = now;
+  if(workbench.savedPlayback)swarmOverlay.group.visible=false;
+  if(swarmOverlay.preview?.target){
+    const preview=swarmOverlay.preview,key=`${preview.started}:${preview.step}`;
+    if(preview.labelKey!==key){
+      preview.labelKey=key;
+      $("world-message").textContent=`Preview ${preview.step}/${preview.results.length} · ${objectLabel(preview.target)} → ${(lastFrame?.task?.goals?.[preview.target]??'').toUpperCase()} · stored simulation`;
+    }
+  }
   updateGhosts(now);
   updateBest(now, lastFrame?.phase);
   if (DEBUG.on) { updateDebugLabels(); updateDebugCollisions(); }
