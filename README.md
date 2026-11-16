@@ -1,4 +1,4 @@
-# Gekko — See it. Say it. Sort it.
+# Gekko — See it. Say it. Sorted.
 
 **Winner — Best Project for Sustainability, RS track** · DurHack 2026
 
