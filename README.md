@@ -29,6 +29,11 @@ stick on it. Each push is planned and tested in simulation before anything moves
 6. **Sort it.** **Arm & Send to Arduino** sends the plan's left and right sweeps to the
    real servo on the UNO Q. A person sets the stick's tilt by hand.
 
+![Six agents test sweeps in MuJoCo; agent a1 is killed and a2 takes over its work](docs/screenshots/gekko-demo.gif)
+
+*Live recording: yellow outlines are each agent's simulated pushes. Agent a1 is killed
+partway through; the others detect it, take over its saved work and keep searching.*
+
 ## Results
 
 ### Fault tolerance
