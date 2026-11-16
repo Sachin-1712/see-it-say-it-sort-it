@@ -1,43 +1,218 @@
-# GEKKO
+# Gekko — See it. Say it. Sort it.
 
-Real decentralized MuJoCo planning. Three terminals from the repository root:
+**Winner — Best Project for Sustainability, RS track** · DurHack 2026
 
-```sh
-python3 -m http.server 8080 --bind 127.0.0.1                   # viewer files
-.venv312/bin/python -m swarm.server --workers 6 --demo         # agents on ws://localhost:8765
-.venv312/bin/python -m sim.server                              # manual sweeps on ws://localhost:8766
+A swarm of independent agents rehearses every parcel sort in a MuJoCo physics simulation
+before a real servo arm moves. Kill half the agents mid-search and the survivors still
+find a plan.
+
+![Gekko planning a three-box sort: six agents testing sweeps in MuJoCo](docs/screenshots/gekko-planning.png)
+
+---
+
+## What it does
+
+Gekko sorts small parcels into a left or right bag by colour, using one servo with a
+stick on it. Each push is planned and tested in simulation before anything moves.
+
+1. **See it.** Photograph an object with the webcam, or upload a photo. Confirm what it
+   is: a box, the sweeper or something else. It turns into a 3D model in the inventory.
+2. **Place it.** Click inventory cards to build the scene on the workbench. Each box's
+   colour decides its bag.
+3. **Plan it.** Press **▶ Start agents**. Six separate OS processes search for sweeps in
+   MuJoCo and test the best ones under random changes in friction, mass and position.
+   They share results peer to peer, with no coordinator.
+4. **Break it.** Kill agents or cut all their communication. The rest notice the missing
+   heartbeats, pick up the dead agents' saved progress and keep going.
+5. **Say it.** When a full plan passes 80% of its randomised trials, **Say it** reads the
+   sort order aloud.
+6. **Sort it.** **Send to Arduino** turns each step into servo commands after a person
+   confirms it. In this version that is a dry run: commands are logged, not sent.
+
+## Results
+
+Measured by `scripts/swarm_reliability.py` on a MacBook, starting fresh processes for
+every run. Full data in [`docs/swarm-reliability.json`](docs/swarm-reliability.json).
+
+| Scenario | Agents | Validated plan | Time | MuJoCo trials |
+|---|:-:|:-:|--:|--:|
+| Normal run (seed 11) | 4 | ✅ | 54 s | 1,148 |
+| Normal run (seed 29) | 4 | ✅ | 33 s | 776 |
+| Kill the sequencer | 8 | ✅ | 94 s | 3,130 |
+| Kill an explorer | 4 | ✅ | 47 s | 711 |
+| Kill the only validator | 4 | ✅ | 67 s | 1,194 |
+| Kill half the swarm | 8 | ✅ | 40 s | 1,110 |
+| One survivor | 4 | ✅ | 129 s | 1,144 |
+| One agent from the start | 1 | ✅ | 179 s | 1,473 |
+
+**8 of 8 scenarios passed.** Each winning three-step plan was replayed against the fixed
+test scene and every box ended in its assigned bag.
+
+---
+
+## Quick start
+
+**Requirements:** Python 3.12, Node.js 20+ (tests only) and a browser with WebGL.
+
+```bash
+git clone https://github.com/Sachin-1712/see-it-say-it-sort-it.git
+cd see-it-say-it-sort-it
+python3.12 -m venv .venv312
+.venv312/bin/python -m pip install -r requirements-sim.txt
 ```
 
-Open `http://localhost:8080/viewer/`. `--demo` starts planning the three-box demo at
-launch (about a minute to a validated plan); otherwise click **Load Three-Box Demo**.
-**Send to Arduino** is a human-confirmed dry run: it logs the servo commands
-(`G 0 <start>`, `P 0 <start> <end> <speed>`) and sends nothing to hardware.
-Viewer options: `?observer=ws://host:port` and `?physics=ws://host:port` change the
-server addresses; `?offline=1` uses the vendored three.js in `viewer/vendor/three`
-and system fonts (also automatic when the browser reports no network). See [docs/swarm.md](docs/swarm.md) for setup,
-architecture, controls, reliability reports and physical limitations.
-UNO Q execution is disabled at the operator's request. The old fake observer
-is a legacy development tool, not the real planning backend.
+Run each of these in its own terminal, from the repository root:
 
-# Gekko
-
-A DurHack camera-to-3D workbench: capture an object, confirm its identity, watch
-it materialize in inventory, then click to place it in the workshop.
-
-```sh
+```bash
 python3 -m http.server 8080 --bind 127.0.0.1
 ```
 
-Open <http://localhost:8080/viewer/>. The workbench starts empty. Capture **Box**
-once and click its card repeatedly to build a visual stack. Capture the
-**Cylindrical Sweeper**, place it once and adjust its tilt and stick rotation.
-Unfamiliar objects use manually chosen, explicitly approximate primitive shapes.
-All final physical models use opaque monochrome materials.
+```bash
+.venv312/bin/python -m swarm.server --workers 6 --demo
+```
 
-Photographs and scene placement stay in memory for the tab. Known GLBs are
-permanent repository assets and are loaded once, then cloned. No frontend build,
-runtime Blender or image-to-3D service is required.
+```bash
+.venv312/bin/python -m sim.server
+```
 
-See [model generation, architecture, demo and tests](docs/models.md) and
-[camera instructions](docs/camera-inventory.md). The original historical plan is
-in [docs/PRD.md](docs/PRD.md); newer scoped requirements supersede its older exclusions.
+Open **<http://localhost:8080/viewer/>**.
+
+| Process | Address | Purpose |
+|---|---|---|
+| Static file server | `http://localhost:8080` | Serves the viewer. There is no build step. |
+| Swarm server | `ws://localhost:8765` | Starts the agents and streams their progress to the viewer |
+| Physics server | `ws://localhost:8766` | Runs single sweeps you make by hand on the workbench |
+
+`--demo` starts planning the three-box demo as soon as the server launches. A validated
+plan usually takes about a minute. Without the flag, click **Load Three-Box Demo**.
+
+### Viewer options
+
+| Query parameter | Effect |
+|---|---|
+| `?observer=ws://host:port` | Connect to a swarm server at another address |
+| `?physics=ws://host:port` | Connect to a physics server at another address |
+| `?offline=1` | Use the bundled copy of three.js and system fonts. This turns on automatically when the browser has no network. |
+
+---
+
+## Demo walkthrough
+
+1. Click **Load Three-Box Demo**, or capture and place your own boxes and the sweeper.
+2. Press **▶ Start agents**. Outlined "ghost" boxes show each agent's simulated attempts;
+   the solid scene does not change.
+3. Open the **Agents** tab. Each row shows a real OS process ID, its current role and how
+   many trials it has run. Press **Kill** on any agent.
+4. Press **Silence all** to cut communication between agents. Each one carries on alone.
+   **Unsilence** lets them merge what they found.
+5. When the plan is validated, press **Preview validated sequence** to replay the actual
+   MuJoCo trajectories. Press **Say it** to hear the plan.
+6. Press **Send to Arduino**. Confirm a step to see its servo commands. They are logged
+   and not transmitted.
+
+---
+
+## How it works
+
+```text
+ Webcam / photo ──► Inventory ──► Workbench (three.js)
+                                       │  scene snapshot
+                                       ▼
+                    ┌────────── Swarm server :8765 ──────────┐
+                    │  starts processes, forwards telemetry  │
+                    └───┬────────┬────────┬────────┬─────────┘
+                        ▼        ▼        ▼        ▼
+                      agent    agent    agent    agent      each one has its own
+                        ▲        ▲        ▲        ▲        MuJoCo copy and seed
+                        └─ UDP gossip: heartbeats, checkpoints ─┘
+                                       │  validated plan (≥ 80% robust)
+                                       ▼
+                       Send to Arduino (dry run) ──► G / P servo commands
+```
+
+Every agent can do all four jobs. Its role is simply what it is working on at the moment.
+
+| Role | What it does |
+|---|---|
+| **Explorer** | Tries candidate sweeps in a random order, filtered by geometry |
+| **Optimizer** | Adjusts the best sweeps so far, focusing on steps that failed |
+| **Validator** | Re-runs a candidate under randomised friction (±20%), mass (±15%), position (±3 mm) and tilt (±1°) |
+| **Sequencer** | Chains sweeps into a full plan and checks every box ends up in its bag |
+
+**Fault tolerance.** Agents send a heartbeat every 500 ms, and each heartbeat carries a
+small checkpoint of current work. If an agent goes quiet for 5 s, its peers claim its
+work and resume from that checkpoint. The supervisor only starts processes and collects
+telemetry. If it disappears, the agents keep searching.
+
+---
+
+## Project structure
+
+```text
+viewer/     three.js viewer: capture, inventory, workbench, agent overlay
+sim/        MuJoCo scene, sweep rollouts, scoring and the physics server
+swarm/      agent processes, planning, UDP messaging, supervisor and server
+config/     rig geometry, scoring, swarm settings and the three-box test scene
+assets/     GLB models for the box and the sweeper
+scripts/    benchmarks, reliability runner, model generation, plan narration
+tests/      Node (viewer) and pytest (sim and swarm) tests
+docs/       design notes, protocols, review and measured reports
+```
+
+## Tests
+
+```bash
+npm ci --prefix tests && npm test --prefix tests
+```
+
+```bash
+.venv312/bin/python -m pytest -q tests/test_sim.py tests/test_swarm.py
+```
+
+```bash
+.venv312/bin/python -m scripts.swarm_reliability --timeout 300 --output docs/swarm-reliability.json
+```
+
+---
+
+## What's real, and what isn't
+
+Everything on screen is computed live. Nothing is scripted or pre-recorded.
+
+- **Real:** separate OS processes, real MuJoCo trials, real process kills, real UDP
+  messaging, and validation against randomised physics.
+- **Estimated:** box sizes, masses and friction in the test scene are plausible estimates,
+  not measurements of the real rig. Treat the simulation as a rehearsal, not a calibrated
+  digital twin.
+- **Not connected:** **Send to Arduino** is a dry run. It produces the firmware commands
+  `G 0 <start>` and `P 0 <start> <end> <speed>` and logs them to
+  `.gekko/<run>/dry-run-commands.jsonl`. Nothing is sent to hardware.
+- **Pre-made:** the photo-to-3D step uses stored models for known objects. Unfamiliar
+  objects become simple approximate shapes, and the viewer says so.
+
+---
+
+## Documentation
+
+| Document | Contents |
+|---|---|
+| [`docs/swarm.md`](docs/swarm.md) | Swarm architecture, controls, reliability testing and limitations |
+| [`docs/sim.md`](docs/sim.md) | MuJoCo simulation and its Python API |
+| [`docs/sim-protocol.md`](docs/sim-protocol.md) | Physics server protocol |
+| [`docs/viewer-frame.md`](docs/viewer-frame.md) | WebSocket frame format between the swarm and the viewer |
+| [`docs/models.md`](docs/models.md) | Inventory, models and the workbench |
+| [`docs/camera-inventory.md`](docs/camera-inventory.md) | Camera capture |
+| [`docs/PRD.md`](docs/PRD.md) | Original hackathon plan (later requirements replace parts of it) |
+
+## Built with
+
+Python · [MuJoCo](https://mujoco.org) · NumPy · websockets · [three.js](https://threejs.org) · plain ES modules (no build step) · Node test runner · pytest
+
+## Team
+
+Built at DurHack 2026 by **Sachin** (viewer and physics simulation) and **Joe** (agents,
+observer and firmware).
+
+## License
+
+This repository does not include a license file yet. Contact the authors before reusing it.
