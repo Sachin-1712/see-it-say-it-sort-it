@@ -1,4 +1,4 @@
-# Gekko — See it. Say it. Sorted.
+# Gekko — See it. Say it. Sort it.
 
 **Winner — Best Project for Sustainability, RS track** · DurHack 2026
 
@@ -198,24 +198,6 @@ npm ci --prefix tests && npm test --prefix tests
 ```bash
 .venv/bin/python -m scripts.swarm_reliability --timeout 300 --output docs/swarm-reliability.json
 ```
-
----
-
-## What's real, and what isn't
-
-Everything on screen is computed live. Nothing is scripted or pre-recorded, and a saved
-plan is always labelled as one.
-
-- **Real:** separate OS processes, real MuJoCo trials, real process kills, real UDP
-  messaging, validation against randomised physics, and a real servo on the UNO Q.
-- **Estimated:** box sizes, masses and friction in the test scene are plausible estimates,
-  not measurements of the real rig. Treat the simulation as a rehearsal, not a calibrated
-  digital twin.
-- **Simplified on hardware:** the servo moves to fixed left and right end points in the
-  plan's order. It does not reproduce each simulated sweep's exact angles and speed.
-  The tilt is set by hand and not measured, so the real sort is not verified by a sensor.
-- **Pre-made:** the photo-to-3D step uses stored models for known objects. Unfamiliar
-  objects become simple approximate shapes, and the viewer says so.
 
 ---
 
